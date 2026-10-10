@@ -504,6 +504,53 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       0,
     );
   });
+  it('tutor creates an own class, is auto-assigned and registers a student; guardians cannot', async () => {
+    await asUser(tutor);
+    const cls = (
+      await db.query<{ id: string }>('select tutor_create_class($1,$2,$3,$4,$5,$6) as id', [
+        org,
+        id(42),
+        'Iqra tutor class',
+        'group',
+        'online',
+        6,
+      ])
+    ).rows[0].id;
+    expect(
+      (await db.query('select staff_id from class_tutors where class_id=$1', [cls])).rows,
+    ).toEqual([{ staff_id: tutor }]);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_register_student($1,$2,$3) as id', [
+        org,
+        cls,
+        'Tutor class child',
+      ])
+    ).rows[0].id;
+    expect(
+      (await db.query('select id from enrollments where student_id=$1', [kid])).rows,
+    ).toHaveLength(1);
+    await expect(
+      db.query('select tutor_create_class($1,$2,$3,$4,$5,$6)', [
+        other,
+        id(42),
+        'X',
+        'group',
+        'online',
+        6,
+      ]),
+    ).rejects.toThrow();
+    await asUser(parent);
+    await expect(
+      db.query('select tutor_create_class($1,$2,$3,$4,$5,$6)', [
+        org,
+        id(42),
+        'Parent class',
+        'group',
+        'online',
+        6,
+      ]),
+    ).rejects.toThrow();
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

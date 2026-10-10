@@ -303,7 +303,24 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'tutor_student') {
+        else if (operation === 'tutor_class') {
+          next.classes.push({
+            id,
+            program_id: payload.program_id,
+            name: payload.class_name,
+            mode: payload.class_mode,
+            delivery: payload.class_delivery,
+            max_capacity: payload.capacity,
+            venue: payload.class_venue,
+            active: true,
+          });
+          next.class_tutors.push({
+            id: `${id}-tutor`,
+            class_id: id,
+            staff_id: activeTutor,
+            starts_on: new Date().toISOString().slice(0, 10),
+          });
+        } else if (operation === 'tutor_student') {
           next.students.push({ id, full_name: payload.student_name, status: 'active' });
           next.enrollments.push({
             id: `${id}-enrollment`,
@@ -551,12 +568,8 @@ export function App({
   const createStudent = () => {
     const classes = options('classes', 'name');
     if (!classes.length) {
-      setNotice(
-        role === 'tutor'
-          ? 'Tiada kelas ditugaskan kepada anda. Hubungi admin.'
-          : 'Cipta kelas dahulu, kemudian daftar murid ke dalam kelas itu.',
-      );
-      if (role !== 'tutor') createClass();
+      setNotice('Cipta kelas dahulu, kemudian daftar murid ke dalam kelas itu.');
+      createClass();
       return;
     }
     setDialog({
@@ -582,10 +595,11 @@ export function App({
         { name: 'phone', label: 'WhatsApp (+60…)', type: 'tel', optional: true },
       ],
     });
+  // Tutor mencipta kelas sendiri melalui RPC yang menugaskannya secara automatik.
   const createClass = () =>
     setDialog({
-      title: 'Tambah kelas',
-      operation: 'class',
+      title: role === 'tutor' ? 'Tambah kelas saya' : 'Tambah kelas',
+      operation: role === 'tutor' ? 'tutor_class' : 'class',
       fields: [
         { name: 'name', label: 'Nama kelas' },
         { name: 'program_id', label: 'Program', options: options('programs', 'name') },
@@ -608,10 +622,19 @@ export function App({
         { name: 'max_capacity', label: 'Kapasiti', type: 'number', value: '8' },
         { name: 'venue', label: 'Lokasi', optional: true },
       ],
-      transform: (v) => ({
-        ...v,
-        max_capacity: v.mode === 'one_to_one' ? 1 : Number(v.max_capacity),
-      }),
+      transform: (v) => {
+        const capacity = v.mode === 'one_to_one' ? 1 : Number(v.max_capacity);
+        return role === 'tutor'
+          ? {
+              program_id: v.program_id,
+              class_name: v.name,
+              class_mode: v.mode,
+              class_delivery: v.delivery,
+              capacity,
+              ...(v.venue ? { class_venue: v.venue } : {}),
+            }
+          : { ...v, max_capacity: capacity };
+      },
     });
   const createSession = () =>
     setDialog({
@@ -1182,10 +1205,10 @@ export function App({
           title="Kelas pembelajaran"
           subtitle="Pendaftaran, tutor dan kurikulum mengikut program"
           action={
-            academic && (
+            (academic || role === 'tutor') && (
               <button className="primary" onClick={createClass}>
                 <Plus size={16} />
-                Tambah kelas
+                {role === 'tutor' ? 'Tambah kelas saya' : 'Tambah kelas'}
               </button>
             )
           }

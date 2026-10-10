@@ -105,3 +105,26 @@ test('tutor can register a student in assigned class and retain tap-only assessm
   await page.getByRole('button', { name: 'sebutan yang tepat', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Terbit kepada ibu bapa' })).toBeEnabled();
 });
+test('tutor creates an own class and registers a student into it', async ({ page }) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).click();
+  await page.getByRole('tab', { name: 'Kelas', exact: true }).click();
+  await page.getByRole('button', { name: 'Tambah kelas saya' }).click();
+  await page.getByLabel('Nama kelas').fill('Kelas Tutor Ujian');
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ index: 1 });
+  await page.getByRole('combobox', { name: 'Jenis' }).selectOption('group');
+  await page.getByRole('combobox', { name: 'Kaedah' }).selectOption('online');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Kelas Tutor Ujian' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Murid', exact: true }).click();
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await page.getByLabel('Nama penuh', { exact: true }).fill('Murid Kelas Tutor');
+  await page
+    .getByRole('combobox', { name: 'Kelas ditugaskan' })
+    .selectOption({ label: 'Kelas Tutor Ujian' });
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByText('Murid Kelas Tutor', { exact: true })).toBeVisible();
+});

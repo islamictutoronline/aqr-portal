@@ -338,9 +338,13 @@ export function scopeDemo(
             data.class_tutors.some((t) => t.class_id === e.class_id && t.staff_id === tutor),
           )
           .map((e) => e.student_id);
-  const classIds = data.enrollments
-    .filter((e) => studentIds.includes(e.student_id))
-    .map((e) => e.class_id);
+  // Seperti RLS can_class: tutor juga melihat kelas tugasannya walaupun belum ada murid.
+  const classIds = [
+    ...data.enrollments.filter((e) => studentIds.includes(e.student_id)).map((e) => e.class_id),
+    ...(role === 'tutor'
+      ? data.class_tutors.filter((t) => t.staff_id === tutor).map((t) => t.class_id)
+      : []),
+  ];
   result.students = data.students.filter((s) => studentIds.includes(s.id));
   result.enrollments = data.enrollments.filter((e) => studentIds.includes(e.student_id));
   result.classes = data.classes.filter((c) => classIds.includes(c.id));

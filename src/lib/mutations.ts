@@ -186,6 +186,14 @@ const schemas = {
   }),
   tutor_application: z.object({ application: uuid, accept: z.boolean() }),
   tutor_student: z.object({ cid: uuid, student_name: text }),
+  tutor_class: z.object({
+    program_id: uuid,
+    class_name: text,
+    class_mode: z.enum(['group', 'one_to_one']),
+    class_delivery: z.enum(['physical', 'online']),
+    capacity: z.number().int().min(1).max(100),
+    class_venue: z.string().max(200).optional(),
+  }),
 };
 
 export async function executeMutation(
@@ -248,6 +256,7 @@ export async function executeMutation(
       report_delivery: 'record_report_delivery',
       tutor_application: 'review_tutor_application',
       tutor_student: 'tutor_register_student',
+      tutor_class: 'tutor_create_class',
       session: 'create_session',
       assessment: 'record_assessment',
       rate: 'set_rate',
