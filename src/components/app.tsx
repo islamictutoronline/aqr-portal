@@ -411,7 +411,16 @@ export function App({
           sess.starts_at = start.toISOString();
           sess.ends_at = new Date(start.getTime() + length).toISOString();
         } else if (operation === 'void_session') {
-          next.class_sessions.find((x) => x.id === payload.sid)!.status = 'cancelled';
+          const sess = next.class_sessions.find((x) => x.id === payload.sid)!;
+          const local = new Date(new Date(String(sess.starts_at)).getTime() + 8 * 3600000);
+          const slot = next.class_schedules.some(
+            (r) =>
+              r.class_id === sess.class_id &&
+              Number(r.day_of_week) === local.getUTCDay() &&
+              String(r.start_time).slice(0, 5) === local.toISOString().slice(11, 16),
+          );
+          sess.status = slot ? 'scheduled' : 'cancelled';
+          next.attendance = next.attendance.filter((a) => a.session_id !== payload.sid);
           next.generated_parent_comments
             .filter((c) => c.session_id === payload.sid)
             .forEach((c) => (c.status = 'retracted'));
@@ -466,14 +475,14 @@ export function App({
               day_of_week: slot.day,
               start_time: `${slot.time}:00`,
               duration_minutes: payload.minutes,
-              effective_from: today,
+              effective_from: payload.start_date || today,
               effective_to: payload.end_date,
             }),
           );
           // Demo: jana empat minggu sesi daripada slot mingguan.
           for (const slot of payload.slots as { day: number; time: string }[])
-            for (let d = 0; d < 28; d++) {
-              const day = new Date(Date.now() + d * 86400000);
+            for (let d = 0; d < 42; d++) {
+              const day = new Date(Date.parse(String(payload.start_date || today)) + d * 86400000);
               if (day.getDay() !== slot.day) continue;
               const start = new Date(`${day.toISOString().slice(0, 10)}T${slot.time}:00+08:00`);
               next.class_sessions.push({
@@ -813,6 +822,12 @@ export function App({
             ['20', '20 minit'],
           ],
         },
+        {
+          name: 'start_date',
+          label: 'Mula tarikh',
+          type: 'date',
+          value: `${klDate(new Date().toISOString()).slice(0, 8)}01`,
+        },
         { name: 'end_date', label: 'Sehingga tarikh', type: 'date', value: '2027-12-31' },
       ],
       extra: <WeeklySlots />,
@@ -821,6 +836,7 @@ export function App({
         program_id: v.program_id,
         minutes: Number(v.minutes),
         end_date: v.end_date,
+        start_date: v.start_date,
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],

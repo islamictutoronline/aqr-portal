@@ -787,8 +787,31 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await expect(db.query('select void_session($1,$2)', [org, sid])).rejects.toThrow();
     await asUser(tutor);
     await db.query('select void_session($1,$2)', [org, sid]);
+    // Slot berjadual dikosongkan (kekal untuk direkod semula), kehadiran dibuang.
     expect(
       (await db.query<{ status: string }>('select status from class_sessions where id=$1', [sid]))
+        .rows[0].status,
+    ).toBe('scheduled');
+    expect(
+      (await db.query('select id from attendance where session_id=$1', [sid])).rows,
+    ).toHaveLength(0);
+    // Sesi tambahan (bukan slot jadual) dibatalkan.
+    const extraCls = (
+      await db.query<{ class_id: string }>('select class_id from class_sessions where id=$1', [sid])
+    ).rows[0].class_id;
+    const extra = (
+      await db.query<{ id: string }>('select create_session($1,$2,$3,$4,$5,$6) as id', [
+        org,
+        extraCls,
+        tutor,
+        new Date(Date.now() - 2 * 86400000 + 3600000 * 3).toISOString(),
+        30,
+        '',
+      ])
+    ).rows[0].id;
+    await db.query('select void_session($1,$2)', [org, extra]);
+    expect(
+      (await db.query<{ status: string }>('select status from class_sessions where id=$1', [extra]))
         .rows[0].status,
     ).toBe('cancelled');
     expect(
@@ -889,6 +912,32 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await expect(
       db.query('select move_session($1,$2,$3)', [org, first.id, new Date().toISOString()]),
     ).rejects.toThrow();
+  });
+  it('enrolment starts on the first of the month by default and generates past slots', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Start child',
+        id(42),
+        30,
+        JSON.stringify([
+          { day: 2, time: '20:00' },
+          { day: 3, time: '19:40' },
+        ]),
+      ])
+    ).rows[0].id;
+    const first = (
+      await db.query<{ d: string }>(
+        "select to_char(min((s.starts_at at time zone 'Asia/Kuala_Lumpur')::date),'YYYY-MM-DD') d from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1",
+        [kid],
+      )
+    ).rows[0].d;
+    const monthStart = new Date().toISOString().slice(0, 8) + '01';
+    expect(first >= monthStart).toBe(true);
+    expect(
+      first <= new Date(Date.parse(monthStart) + 7 * 86400000).toISOString().slice(0, 10),
+    ).toBe(true);
   });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);

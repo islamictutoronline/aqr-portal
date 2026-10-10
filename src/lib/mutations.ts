@@ -201,6 +201,7 @@ const schemas = {
       .min(1)
       .max(7),
     end_date: z.iso.date(),
+    start_date: z.iso.date(),
   }),
   remove_student: z.object({ student_id: uuid }),
   extend_schedule: z.object({}),
