@@ -1,0 +1,10 @@
+<!-- Supabase → Authentication → Emails → Templates → Magic Link. Subjek: Kod log masuk AQR: {{ .Token }} -->
+<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;color:#233348">
+  <p style="font-size:12px;letter-spacing:1px;color:#657181">AKADEMI AL-QURAN AR-RIYADH</p>
+  <h2 style="margin:0 0 12px">Kod log masuk anda</h2>
+  <p>Masukkan kod ini dalam portal AQR:</p>
+  <p style="font-size:32px;font-weight:bold;letter-spacing:8px;background:#f8f5ee;padding:16px;text-align:center;border-radius:8px">{{ .Token }}</p>
+  <p>Atau, jika anda membuka e-mel ini dalam pelayar yang sama dengan portal, klik:
+    <a href="{{ .ConfirmationURL }}">Log masuk ke AQR</a></p>
+  <p style="font-size:12px;color:#657181">Kod tamat tempoh dalam masa 1 jam. Jika anda tidak meminta kod ini, abaikan e-mel ini. Jangan kongsi kod ini dengan sesiapa.</p>
+</div>

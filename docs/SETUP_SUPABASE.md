@@ -65,3 +65,9 @@ Jemputan dan upload bukti bayaran menggunakan fungsi `aqr-admin`. Dalam **Edge F
 | Ibu bapa/penjaga | Baca sahaja: rekod anak sendiri                                    |
 
 Kelulusan elaun dan bayaran masih memerlukan **dua orang berbeza** (contohnya pemilik dan admin). Seorang tidak boleh menyemak dan meluluskan kerjanya sendiri.
+
+## 8. E-mel: SMTP dan templat berkod
+
+E-mel lalai Supabase hanya sampai kepada ahli projek. Sediakan **Custom SMTP** (contohnya Brevo: `smtp-relay.brevo.com`, port 587, _Username_ = Login SMTP Brevo, _Password_ = kunci SMTP) di **Authentication → Emails → SMTP Settings**.
+
+Portal menggunakan aliran PKCE, jadi pautan e-mel hanya berfungsi dalam pelayar yang membuat permintaan. Oleh itu templat **Magic Link** dan **Confirm signup** mesti memaparkan kod `{{ .Token }}`. Salin kandungan `supabase/templates/magic-link.html` dan `confirm-signup.html` (tanpa baris komen pertama) ke **Authentication → Emails → Templates**. Subjek dicatat dalam komen pada baris pertama setiap fail.
