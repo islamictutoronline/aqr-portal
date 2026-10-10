@@ -264,7 +264,9 @@ test('tutor backdates a recorded class and saves attendance without assessment t
   await save.click();
   await expect(page.getByRole('status')).toContainText('memori tab');
   // Kelas baharu: hanya kehadiran, tiada tap penilaian.
-  await page.getByRole('button', { name: 'Rekod kelas sekarang' }).click();
+  await page.getByRole('button', { name: 'Tambah rekod sesi' }).first().click();
+  await expect(page.getByLabel('Tarikh kelas').last()).not.toHaveValue('');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Simpan kehadiran' })).toBeDisabled();
   await expect(page.getByText('Pilih kehadiran dahulu.')).toBeVisible();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
@@ -279,7 +281,9 @@ test('voiding the open class returns to the list; a voided class is locked', asy
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
   await page.locator('.student-picker button').first().click();
-  await page.getByRole('button', { name: 'Rekod kelas sekarang' }).click();
+  await page.getByRole('button', { name: 'Tambah rekod sesi' }).first().click();
+  await expect(page.getByLabel('Tarikh kelas').last()).not.toHaveValue('');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
   const history = page.locator('.card').filter({
@@ -288,4 +292,24 @@ test('voiding the open class returns to the list; a voided class is locked', asy
   await history.getByRole('button', { name: 'Padam' }).first().click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
+});
+test('Tambah rekod sesi sits at the top of the session screen and supports a past date', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await page.locator('.student-picker button').first().click();
+  const top = page.locator('.card').first();
+  await top.getByRole('button', { name: 'Tambah rekod sesi' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-02');
+  await dialog.getByLabel('Jam').fill('20:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByLabel('Tarikh kelas')).toHaveValue('2026-10-02');
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  await expect(page.getByRole('status')).toContainText('memori tab');
 });

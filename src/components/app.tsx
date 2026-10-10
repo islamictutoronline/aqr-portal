@@ -74,6 +74,7 @@ export type Dialog = {
   fields: Field[];
   transform?: (values: Record<string, string>) => Record<string, unknown>;
   extra?: React.ReactNode;
+  after?: (payload: Record<string, unknown>) => void;
 };
 const weekDays: [string, string][] = [
   ['1', 'Isnin'],
@@ -1042,21 +1043,44 @@ export function App({
       left: inMonth.filter((s) => s.status !== 'completed').length,
     };
   };
-  const recordNow = async (cid: unknown) => {
-    const start = new Date(Math.floor(Date.now() / 300000) * 300000).toISOString();
-    const minutes = Number(
+  // Tambah rekod sesi terus dari skrin rekod: tarikh & jam lalai sekarang, boleh backdated.
+  const addSessionFor = (cid: unknown) => {
+    const now = new Date();
+    const date = klDate(now.toISOString());
+    const time = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(now);
+    const minutes = String(
       all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
     );
-    if (
-      await mutate('session', {
+    setDialog({
+      title: 'Tambah rekod sesi',
+      operation: 'session',
+      fields: [
+        { name: 'date', label: 'Tarikh kelas', type: 'date', value: date },
+        { name: 'time', label: 'Jam', type: 'time', value: time },
+        {
+          name: 'minutes',
+          label: 'Tempoh',
+          value: minutes,
+          options: [
+            ['30', '30 minit'],
+            ['20', '20 minit'],
+          ],
+        },
+      ],
+      transform: (v) => ({
         cid,
         tid: activeTutor,
-        start_time: start,
-        minutes,
+        start_time: new Date(`${v.date}T${v.time}:00+08:00`).toISOString(),
+        minutes: Number(v.minutes),
         lesson_topic: '',
-      })
-    )
-      setPendingMove({ cid, start });
+      }),
+      after: (payload) => setPendingMove({ cid, start: String(payload.start_time) }),
+    });
   };
   function sessionHistory(current: Row) {
     const counts = classCounts(current.class_id);
@@ -1096,14 +1120,6 @@ export function App({
         <Card
           title="Kelas telah dilaksanakan"
           subtitle={`Bulan ${month}: ${counts.done} selesai · ${counts.left} sesi berbaki`}
-          action={
-            role === 'tutor' && (
-              <button className="secondary" onClick={() => void recordNow(current.class_id)}>
-                <Plus size={16} />
-                Rekod kelas sekarang
-              </button>
-            )
-          }
         >
           <Table
             headers={['Tarikh', 'Masa', 'Kehadiran', '']}
@@ -2821,6 +2837,7 @@ export function App({
               busy={busy}
               mutate={mutate}
               reschedule={rescheduleSession}
+              onAdd={role === 'tutor' ? () => addSessionFor(currentSession.class_id) : undefined}
             />
           ) : (
             <Empty text="Sesi tidak ditemui atau akses tidak dibenarkan." />
@@ -2893,7 +2910,10 @@ export function App({
                   const payload = dialog.transform
                     ? dialog.transform(values)
                     : Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''));
-                  mutate(dialog.operation, payload);
+                  const after = dialog.after;
+                  void mutate(dialog.operation, payload).then((ok) => {
+                    if (ok) after?.(payload);
+                  });
                 } catch (error) {
                   setNotice(error instanceof Error ? error.message : 'Input tidak sah');
                 }
@@ -2908,7 +2928,7 @@ export function App({
                       autoFocus={dialog.fields[0] === f}
                       name={f.name}
                       required={!f.optional}
-                      defaultValue=""
+                      defaultValue={f.value ?? ''}
                     >
                       <option value="" disabled>
                         Pilih…
@@ -2958,12 +2978,14 @@ function SessionEditor({
   busy,
   mutate,
   reschedule,
+  onAdd,
 }: {
   session: Row;
   data: Dataset;
   busy: boolean;
   mutate: (operation: string, payload: Record<string, unknown>) => Promise<boolean>;
   reschedule: (session: Row, start: string) => Promise<void>;
+  onAdd?: () => void;
 }) {
   const startIso = String(session.starts_at);
   const initialDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(
@@ -3092,6 +3114,14 @@ function SessionEditor({
       <Card
         title={String(cls?.name || 'Sesi')}
         subtitle={`${dateLabel(String(session.starts_at))} · ${timeLabel(String(session.starts_at))} · ${students.length} murid`}
+        action={
+          onAdd && (
+            <button className="primary" onClick={onAdd}>
+              <Plus size={16} />
+              Tambah rekod sesi
+            </button>
+          )
+        }
       >
         <div className="session-when">
           <label>
