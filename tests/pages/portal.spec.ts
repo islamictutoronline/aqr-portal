@@ -129,15 +129,20 @@ test('individual model: tutor registers by program, adds a program and schedules
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: 'Bahasa Arab' });
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByText('Bahasa Arab', { exact: true })).toBeVisible();
-  await page.goto('/?demo=1#/calendar');
-  await page.reload();
-  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
   if ((page.viewportSize()?.width || 0) <= 700)
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await page.getByRole('button', { name: 'Jadualkan sesi' }).click();
-  await expect(page.getByRole('combobox', { name: 'Murid' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Tutor' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
+  await page
+    .locator('.student-picker button')
+    .filter({ hasText: 'Murid Individu' })
+    .first()
+    .click();
+  await expect(page.getByLabel('Tarikh kelas')).not.toHaveValue('');
+  await page.getByLabel('Jam', { exact: true }).fill('21:30');
+  await page.getByRole('button', { name: 'Simpan tarikh & jam' }).click();
+  await expect(page.getByLabel('Jam', { exact: true })).toHaveValue('21:30');
+  await expect(page.getByText('Pencapaian unit kurikulum')).toHaveCount(0);
 });
 test('admin starts from tutors: list, then tutor profile with students and sessions', async ({
   page,

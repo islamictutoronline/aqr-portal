@@ -696,6 +696,58 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       ).rows,
     ).toHaveLength(0);
   });
+  it('tutor reschedules own unrecorded session; schedule refill does not duplicate', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Reschedule child',
+        id(42),
+        30,
+        JSON.stringify([{ day: 2, time: '19:00' }]),
+      ])
+    ).rows[0].id;
+    const first = (
+      await db.query<{ id: string; class_id: string }>(
+        "select s.id,s.class_id from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 and s.status='scheduled' order by s.starts_at limit 1",
+        [kid],
+      )
+    ).rows[0];
+    const before = (
+      await db.query('select id from class_sessions where class_id=$1', [first.class_id])
+    ).rows.length;
+    const moved = (
+      await db.query<{ id: string }>('select change_session($1,$2,$3,$4,$5) as id', [
+        org,
+        first.id,
+        'rescheduled',
+        'Ditukar oleh tutor',
+        '2026-12-30T12:30:00Z',
+      ])
+    ).rows[0].id;
+    expect(moved).not.toBe(first.id);
+    expect(
+      (
+        await db.query<{ status: string }>('select status from class_sessions where id=$1', [
+          first.id,
+        ])
+      ).rows[0].status,
+    ).toBe('rescheduled');
+    await db.query('select extend_schedule($1)', [org]);
+    expect(
+      (await db.query('select id from class_sessions where class_id=$1', [first.class_id])).rows,
+    ).toHaveLength(before + 1);
+    await asUser(unrelated);
+    await expect(
+      db.query('select change_session($1,$2,$3,$4,$5)', [
+        org,
+        moved,
+        'rescheduled',
+        'Bukan tutor ini',
+        '2026-12-31T12:30:00Z',
+      ]),
+    ).rejects.toThrow();
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

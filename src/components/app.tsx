@@ -59,7 +59,7 @@ import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
 import { ContactAdmin } from './contact-admin';
 import { GoogleStatus } from './google-status';
-import { Milestone, PublishedMilestones } from './milestone';
+import { PublishedMilestones } from './milestone';
 type Field = {
   name: string;
   label: string;
@@ -273,6 +273,23 @@ export function App({
     path.startsWith('sessions/') ? path.split('/')[1] : '',
   );
   const [child, setChild] = useState('');
+  // Selepas sesi dicipta atau dijadual semula, buka sesi baharu itu sebaik data dimuat semula.
+  const [pendingMove, setPendingMove] = useState<{ cid: unknown; start: string } | null>(null);
+  useEffect(() => {
+    if (!pendingMove) return;
+    const target = (data.class_sessions || []).find(
+      (s) =>
+        s.class_id === pendingMove.cid &&
+        !['cancelled', 'rescheduled'].includes(String(s.status)) &&
+        new Date(String(s.starts_at)).getTime() === new Date(pendingMove.start).getTime(),
+    );
+    if (target) {
+      setPendingMove(null);
+      setSelectedSession(target.id);
+      setPage(`sessions/${target.id}`);
+      navigatePath(`sessions/${target.id}`, demo);
+    }
+  }, [data, pendingMove, demo]);
   // Jadual mingguan dilanjutkan sehingga hujung bulan hadapan; idempoten, jadi selamat setiap muat.
   useEffect(() => {
     if (demo || !['owner', 'admin', 'tutor'].includes(initialRole)) return;
@@ -383,7 +400,24 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'tutor_enrol') {
+        else if (operation === 'change_session') {
+          const old = next.class_sessions.find((x) => x.id === payload.sid)!;
+          old.status = payload.new_status;
+          if (payload.new_status === 'rescheduled') {
+            const start = new Date(String(payload.new_start));
+            const minutes =
+              (new Date(String(old.ends_at)).getTime() -
+                new Date(String(old.starts_at)).getTime()) /
+              60000;
+            next.class_sessions.push({
+              ...old,
+              id,
+              status: 'scheduled',
+              starts_at: start.toISOString(),
+              ends_at: new Date(start.getTime() + minutes * 60000).toISOString(),
+            });
+          }
+        } else if (operation === 'tutor_enrol') {
           const studentId = `${id}-student`;
           const program = next.programs.find((x) => x.id === payload.program_id)!;
           next.students.push({ id: studentId, full_name: payload.student_name, status: 'active' });
@@ -973,6 +1007,54 @@ export function App({
       setBusy(false);
     }
   }
+  const klDate = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
+  // Sesi paling sesuai untuk direkod: hari ini, kemudian sesi lepas belum direkod, kemudian seterusnya.
+  const bestSession = (cid: unknown) => {
+    const now = Date.now();
+    const today = klDate(new Date().toISOString());
+    const list = all('class_sessions')
+      .filter((s) => s.class_id === cid && !['cancelled', 'rescheduled'].includes(String(s.status)))
+      .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
+    const todays = list.filter((s) => klDate(String(s.starts_at)) === today);
+    return (
+      todays.find((s) => s.status !== 'completed') ||
+      todays[0] ||
+      [...list]
+        .reverse()
+        .find((s) => s.status === 'scheduled' && new Date(String(s.starts_at)).getTime() < now) ||
+      list.find((s) => new Date(String(s.starts_at)).getTime() >= now)
+    );
+  };
+  const openStudentSession = async (cid: unknown) => {
+    const found = bestSession(cid);
+    if (found) return go(`sessions/${found.id}`);
+    const start = new Date(Math.floor(Date.now() / 300000) * 300000).toISOString();
+    const minutes = Number(
+      all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
+    );
+    if (
+      await mutate('session', {
+        cid,
+        tid: activeTutor,
+        start_time: start,
+        minutes,
+        lesson_topic: '',
+      })
+    )
+      setPendingMove({ cid, start });
+  };
+  const rescheduleSession = async (session: Row, start: string) => {
+    if (
+      await mutate('change_session', {
+        sid: session.id,
+        new_status: 'rescheduled',
+        reason: 'Tarikh/jam dikemas kini oleh tutor',
+        new_start: start,
+      })
+    )
+      setPendingMove({ cid: session.class_id, start });
+  };
   const monthlySessions = all('class_sessions').filter((s) =>
     dateLabel(String(s.starts_at)).endsWith(`${month.slice(5)}/${month.slice(0, 4)}`),
   );
@@ -1424,13 +1506,41 @@ export function App({
     );
   }
   function calendarScreen() {
+    if (role === 'tutor') {
+      const mine = all('class_tutors')
+        .filter((t) => t.staff_id === activeTutor && !t.ends_on)
+        .map((t) => t.class_id);
+      const rows = all('enrollments').filter(
+        (e) => e.status === 'active' && mine.includes(e.class_id),
+      );
+      return (
+        <Card title="Rekod kehadiran" subtitle="Tekan nama murid untuk merekod kelas">
+          <div className="student-picker">
+            {rows.filter(matches).map((e) => {
+              const c = all('classes').find((x) => x.id === e.class_id);
+              return (
+                <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
+                  <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
+                  <span>
+                    <strong>{lookup('students', e.student_id)}</strong>
+                    <small>{lookup('programs', c?.program_id, 'name')}</small>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+              );
+            })}
+          </div>
+          {!rows.length && <Empty text="Belum ada murid. Daftar murid di menu Murid." />}
+        </Card>
+      );
+    }
     return (
       <>
         <Card
           title="Jadual & sesi"
           subtitle="Waktu Malaysia"
           action={
-            (academic || role === 'tutor') && (
+            academic && (
               <button className="primary" onClick={createSession}>
                 <Plus size={16} />
                 Jadualkan sesi
@@ -2604,6 +2714,7 @@ export function App({
               data={visible}
               busy={busy}
               mutate={mutate}
+              reschedule={rescheduleSession}
             />
           ) : (
             <Empty text="Sesi tidak ditemui atau akses tidak dibenarkan." />
@@ -2612,9 +2723,6 @@ export function App({
           {section === 'parent' && (
             <PublishedMilestones data={visible} student={child || all('students')[0]?.id || ''} />
           )}{' '}
-          {section === 'sessions' && currentSession && (
-            <Milestone data={visible} session={currentSession} mutate={mutate} demo={demo} />
-          )}
           <AdditionalTools
             data={visible}
             role={role}
@@ -2740,12 +2848,27 @@ function SessionEditor({
   data,
   busy,
   mutate,
+  reschedule,
 }: {
   session: Row;
   data: Dataset;
   busy: boolean;
   mutate: (operation: string, payload: Record<string, unknown>) => Promise<boolean>;
+  reschedule: (session: Row, start: string) => Promise<void>;
 }) {
+  const startIso = String(session.starts_at);
+  const initialDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(
+    new Date(startIso),
+  );
+  const initialTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(startIso));
+  const [classDate, setClassDate] = useState(initialDate);
+  const [classTime, setClassTime] = useState(initialTime);
+  const recorded = data.attendance.some((a) => a.session_id === session.id);
   const students = data.students.filter((s) =>
     data.enrollments.some((e) => e.class_id === session.class_id && e.student_id === s.id),
   );
@@ -2841,6 +2964,40 @@ function SessionEditor({
         title={String(cls?.name || 'Sesi')}
         subtitle={`${dateLabel(String(session.starts_at))} · ${timeLabel(String(session.starts_at))} · ${students.length} murid`}
       >
+        <div className="session-when">
+          <label>
+            Tarikh kelas
+            <input
+              type="date"
+              value={classDate}
+              disabled={recorded || busy}
+              onChange={(e) => setClassDate(e.target.value)}
+            />
+          </label>
+          <label>
+            Jam
+            <input
+              type="time"
+              value={classTime}
+              disabled={recorded || busy}
+              onChange={(e) => setClassTime(e.target.value)}
+            />
+          </label>
+          {(classDate !== initialDate || classTime !== initialTime) && !recorded && (
+            <button
+              className="secondary"
+              disabled={busy || !classDate || !classTime}
+              onClick={() =>
+                void reschedule(
+                  session,
+                  new Date(`${classDate}T${classTime}:00+08:00`).toISOString(),
+                )
+              }
+            >
+              Simpan tarikh & jam
+            </button>
+          )}
+        </div>
         <div className="student-tabs">
           {students.map((s) => (
             <button
