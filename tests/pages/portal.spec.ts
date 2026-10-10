@@ -181,6 +181,15 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   const row = page.getByRole('row').filter({ hasText: 'Murid Jadual' });
   await expect(row).toContainText("Iqra'");
+  await row.getByRole('button', { name: /Lihat profil/ }).click();
+  const detail = page.locator('.program-detail').first();
+  await expect(detail).toContainText('30 minit');
+  await expect(detail).toContainText('2 sesi');
+  await expect(detail).toContainText('Isnin 20:00, Khamis 21:00');
+  await expect(detail).toContainText('31/12/2027');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).first().click();
   await row.getByRole('button', { name: 'Padam' }).click();
   await expect(page.getByText(/sesi akan datang dibatalkan/)).toBeVisible();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();

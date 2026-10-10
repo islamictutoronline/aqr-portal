@@ -1764,3 +1764,32 @@ label {
   margin: 8px 0 4px;
   font-weight: 500;
 }
+
+/* Profil murid: butiran program dan jadual mingguan. */
+.program-detail {
+  border: 1px solid #ebe8e0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.program-detail p {
+  margin: 0 0 10px;
+}
+.program-detail dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+.program-detail dt {
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.program-detail dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  color: var(--navy);
+}

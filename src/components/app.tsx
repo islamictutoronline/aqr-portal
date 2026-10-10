@@ -459,6 +459,17 @@ export function App({
             status: 'active',
             starts_on: today,
           });
+          (payload.slots as { day: number; time: string }[]).forEach((slot, k) =>
+            next.class_schedules.push({
+              id: `${id}-rule-${k}`,
+              class_id: id,
+              day_of_week: slot.day,
+              start_time: `${slot.time}:00`,
+              duration_minutes: payload.minutes,
+              effective_from: today,
+              effective_to: payload.end_date,
+            }),
+          );
           // Demo: jana empat minggu sesi daripada slot mingguan.
           for (const slot of payload.slots as { day: number; time: string }[])
             for (let d = 0; d < 28; d++) {
@@ -850,11 +861,30 @@ export function App({
         const t = all('class_tutors').find((x) => x.class_id === e.class_id && !x.ends_on);
         const program = lookup('programs', c?.program_id, 'name');
         const tutorName = t ? lookup('staff_profiles', t.staff_id, 'display_name') : '';
+        // Jadual mingguan aktif: hari, jam, minit setiap sesi dan tarikh tamat.
+        const dayNames = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
+        const rules = all('class_schedules')
+          .filter(
+            (r) =>
+              r.class_id === e.class_id &&
+              (!r.effective_to || String(r.effective_to) >= new Date().toISOString().slice(0, 10)),
+          )
+          .sort(
+            (a, b) =>
+              ((Number(a.day_of_week) + 6) % 7) - ((Number(b.day_of_week) + 6) % 7) ||
+              String(a.start_time).localeCompare(String(b.start_time)),
+          );
         return {
           id: String(e.id),
+          classId: e.class_id,
           program,
           tutor: tutorName === '—' ? '' : tutorName,
           status: e.status,
+          slots: rules.map(
+            (r) => `${dayNames[Number(r.day_of_week)]} ${String(r.start_time).slice(0, 5)}`,
+          ),
+          minutes: rules[0] ? Number(rules[0].duration_minutes) : null,
+          until: rules[0]?.effective_to ? dateLabel(String(rules[0].effective_to)) : '',
         };
       });
   const createGuardian = () =>
@@ -1417,12 +1447,41 @@ export function App({
           )}
         </div>
         <Card title="Program & penjaga">
-          {programsOf(id).map((p) => (
-            <p key={p.id}>
-              <strong>{p.program}</strong>
-              {p.tutor && ` · Tutor: ${p.tutor}`} · <Badge value={p.status} />
-            </p>
-          ))}
+          {programsOf(id).map((p) => {
+            const counts = classCounts(p.classId);
+            return (
+              <div key={p.id} className="program-detail">
+                <p>
+                  <strong>{p.program}</strong>
+                  {p.tutor && ` · Tutor: ${p.tutor}`} · <Badge value={p.status} />
+                </p>
+                <dl>
+                  <div>
+                    <dt>Sesi seminggu</dt>
+                    <dd>{p.slots.length ? `${p.slots.length} sesi` : '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Minit setiap sesi</dt>
+                    <dd>{p.minutes ? `${p.minutes} minit` : '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Hari & jam</dt>
+                    <dd>{p.slots.join(', ') || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Sehingga</dt>
+                    <dd>{p.until || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Bulan {month}</dt>
+                    <dd>
+                      {counts.done} selesai · {counts.left} berbaki
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            );
+          })}
           {(academic || role === 'tutor') && (
             <div className="button-row">
               <button onClick={() => addProgram(id)}>Tambah program</button>
