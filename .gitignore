@@ -1,0 +1,21 @@
+node_modules/
+.next/
+dist-pages/
+dist-pages-test/
+.env*
+!.env.example
+coverage/
+test-results/
+playwright-report/
+private-import/
+*.csv
+*.xlsx
+*.pdf
+*.png
+*.tsbuildinfo
+# Original reference bundle can contain minors' names. Keep it local.
+0[0-9]_*.md
+[01][0-9]_*
+.DS_Store
+10_PREVIEW_DASHBOARD.png
+supabase/setup-all.sql

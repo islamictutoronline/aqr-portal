@@ -1,0 +1,552 @@
+import { PGlite } from '@electric-sql/pglite';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { readFile, readdir } from 'node:fs/promises';
+let db: PGlite;
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const org = id(1),
+  other = id(2),
+  owner = id(11),
+  finance = id(12),
+  tutor = id(13),
+  unrelated = id(14),
+  parent = id(15),
+  parentOther = id(16),
+  academic = id(17);
+async function asUser(user: string) {
+  await db.exec(
+    `reset role; select set_config('request.jwt.claim.sub','${user}',false); set role authenticated;`,
+  );
+}
+beforeAll(async () => {
+  db = new PGlite();
+  await db.exec(
+    "create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; grant usage on schema auth,public to authenticated,anon; grant execute on function auth.uid() to authenticated,anon; create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;grant usage on schema storage to authenticated;grant select,insert,update on storage.objects to authenticated;create function storage.foldername(name text)returns text[] language sql as $$select (string_to_array(name,'/'))[1:array_length(string_to_array(name,'/'),1)-1]$$;",
+  );
+  for (const file of (await readdir('supabase/migrations'))
+    .filter((f) => f.endsWith('.sql'))
+    .sort())
+    await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
+  await db.exec(`insert into auth.users(id) select x::uuid from unnest(array['${owner}','${finance}','${tutor}','${unrelated}','${parent}','${parentOther}','${academic}'])x;
+ insert into organizations(id,slug)values('${org}','aqr-test'),('${other}','other-test');
+ insert into staff_profiles(id,auth_user_id,display_name)values('${owner}','${owner}','Owner'),('${finance}','${finance}','Finance'),('${tutor}','${tutor}','Tutor A'),('${unrelated}','${unrelated}','Tutor B'),('${academic}','${academic}','Academic');
+ insert into staff_memberships(organization_id,staff_id,role)values('${org}','${owner}','owner'),('${org}','${finance}','admin'),('${org}','${tutor}','tutor'),('${org}','${unrelated}','tutor'),('${org}','${academic}','admin');
+ insert into guardians(id,organization_id,auth_user_id,full_name)values('${id(21)}','${org}','${parent}','Parent A'),('${id(22)}','${org}','${parentOther}','Parent B');
+ insert into students(id,organization_id,full_name)values('${id(31)}','${org}','Anonymous A'),('${id(32)}','${org}','Anonymous B'),('${id(33)}','${other}','Cross tenant');
+ insert into student_guardians(organization_id,student_id,guardian_id,is_billing_contact)values('${org}','${id(31)}','${id(21)}',true),('${org}','${id(32)}','${id(22)}',true);
+ insert into subjects(id,organization_id,slug,name)values('${id(41)}','${org}','mengaji','Mengaji');
+ insert into programs(id,organization_id,subject_id,code,name)values('${id(42)}','${org}','${id(41)}','IQRA','Iqra');
+ insert into classes(id,organization_id,program_id,name,max_capacity)values('${id(43)}','${org}','${id(42)}','Class A',10),('${id(44)}','${org}','${id(42)}','Class B',10);
+ insert into class_tutors(organization_id,class_id,staff_id,starts_on)values('${org}','${id(43)}','${tutor}','2026-01-01'),('${org}','${id(44)}','${unrelated}','2026-01-01');
+ insert into enrollments(organization_id,student_id,class_id,starts_on)values('${org}','${id(31)}','${id(43)}','2026-01-01'),('${org}','${id(32)}','${id(44)}','2026-01-01');
+ insert into class_sessions(id,organization_id,class_id,tutor_id,starts_at,ends_at)values('${id(51)}','${org}','${id(43)}','${tutor}','2026-10-10 10:00+08','2026-10-10 10:20+08'),('${id(52)}','${org}','${id(44)}','${unrelated}','2026-10-10 10:00+08','2026-10-10 10:20+08');
+ insert into assessment_options(organization_id,subject_id,group_code,code,label)values('${org}','${id(41)}','skill','bacaan','bacaan'),('${org}','${id(41)}','participation','aktif','aktif'),('${org}','${id(41)}','focus','sebutan','sebutan yang tepat');
+ insert into student_private_notes(organization_id,student_id,text)values('${org}','${id(31)}','Never parent-visible');
+ `);
+});
+afterAll(async () => {
+  await db?.close();
+});
+describe('PostgreSQL RLS / transaction boundaries', () => {
+  it('anonymous cannot read private rows', async () => {
+    await db.exec('set role anon');
+    await expect(db.query('select * from students')).rejects.toThrow();
+    await db.exec('reset role');
+  });
+  it('guardian sees own child and no private notes / draft assessments', async () => {
+    await asUser(parent);
+    expect((await db.query('select id from students')).rows).toEqual([{ id: id(31) }]);
+    expect((await db.query('select * from student_private_notes')).rows).toHaveLength(0);
+    expect((await db.query('select * from assessment_responses')).rows).toHaveLength(0);
+  });
+  it('tutor cannot read another tutor class/student or inject a cross-tenant record', async () => {
+    await asUser(tutor);
+    expect((await db.query('select id from students')).rows).toEqual([{ id: id(31) }]);
+    expect((await db.query('select id from class_sessions')).rows).toEqual([{ id: id(51) }]);
+    await expect(
+      db.exec(`insert into students(organization_id,full_name)values('${other}','Illegal')`),
+    ).rejects.toThrow();
+    expect(
+      (await db.exec(`update students set organization_id='${other}' where id='${id(31)}'`))[0]
+        .affectedRows,
+    ).toBe(0);
+  });
+  it('owner cannot write rows into another org via WITH CHECK', async () => {
+    await asUser(owner);
+    await expect(
+      db.exec(`insert into students(organization_id,full_name)values('${other}','Illegal')`),
+    ).rejects.toThrow();
+    await expect(
+      db.exec(`update students set organization_id='${other}' where id='${id(31)}'`),
+    ).rejects.toThrow();
+  });
+  it('composite FKs prohibit cross-organization references', async () => {
+    await db.exec('reset role');
+    await expect(
+      db.exec(
+        `insert into student_guardians(organization_id,student_id,guardian_id)values('${org}','${id(33)}','${id(21)}')`,
+      ),
+    ).rejects.toThrow();
+  });
+  it('tutor can save zero-typing draft; guardian cannot see it; unrelated tutor cannot write it', async () => {
+    await asUser(tutor);
+    await db.query(`select record_assessment($1,$2,$3,'present',$4,false)`, [
+      org,
+      id(51),
+      id(31),
+      JSON.stringify({ skill: 'bacaan', mastery: 3, participation: 'aktif', focus: 'sebutan' }),
+    ]);
+    await asUser(parent);
+    expect((await db.query('select * from generated_parent_comments')).rows).toHaveLength(0);
+    await asUser(unrelated);
+    await expect(
+      db.query(`select record_assessment($1,$2,$3,'present',$4,true)`, [
+        org,
+        id(51),
+        id(31),
+        JSON.stringify({ mastery: 'not_assessed' }),
+      ]),
+    ).rejects.toThrow();
+  });
+  it('publication creates a factual immutable snapshot isolated by family', async () => {
+    await asUser(tutor);
+    await db.query(`select record_assessment($1,$2,$3,'present',$4,true)`, [
+      org,
+      id(51),
+      id(31),
+      JSON.stringify({ skill: 'bacaan', mastery: 3, participation: 'aktif', focus: 'sebutan' }),
+    ]);
+    await asUser(parent);
+    const own = await db.query<{ text: string }>('select text from generated_parent_comments');
+    expect(own.rows).toHaveLength(1);
+    expect(own.rows[0].text).toContain('memuaskan');
+    await asUser(parentOther);
+    expect((await db.query('select * from generated_parent_comments')).rows).toHaveLength(0);
+  });
+  it('unknown rate fails; unverified entries remain zero; verifier/checker differ; snapshot does not change', async () => {
+    await asUser(finance);
+    await expect(db.query('select review_session($1,$2,false)', [org, id(51)])).rejects.toThrow(
+      'Tiada kadar',
+    );
+    await db.query('select set_rate($1,$2,20,700,$3,$4)', [
+      org,
+      'IQRA',
+      '2026-01-01',
+      'Source test',
+    ]);
+    await db.query('select review_session($1,$2,false)', [org, id(51)]);
+    await expect(db.query('select review_session($1,$2,true)', [org, id(51)])).rejects.toThrow(
+      'berlainan',
+    );
+    await asUser(owner);
+    await db.query('select review_session($1,$2,true)', [org, id(51)]);
+    await db.query('select set_rate($1,$2,20,800,$3,$4)', [org, 'IQRA', '2026-11-01', 'New rate']);
+    expect(
+      (
+        await db.query<{ rate_snapshot_sen: number }>(
+          'select rate_snapshot_sen from tutor_allowance_entries',
+        )
+      ).rows[0].rate_snapshot_sen,
+    ).toBe(700);
+    await expect(
+      db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+        org,
+        id(51),
+        id(31),
+        'absent',
+        JSON.stringify({ mastery: 'not_assessed' }),
+      ]),
+    ).rejects.toThrow('dikunci');
+  });
+  it('invoice and payments reconcile, cannot overallocate or duplicate receipts', async () => {
+    await asUser(finance);
+    const inv = (
+      await db.query<{ create_invoice: string }>('select create_invoice($1,$2,$3,$4,$5,$6)', [
+        org,
+        id(21),
+        '2026-10-20',
+        '2026-10',
+        JSON.stringify([
+          { student_id: id(31), description: 'Configured fee', quantity: 1, unit_price_sen: 15000 },
+        ]),
+        'invoice-idem-1',
+      ])
+    ).rows[0].create_invoice;
+    const p = (
+      await db.query<{ submit_payment: string }>('select submit_payment($1,$2,$3,$4,$5,$6)', [
+        org,
+        id(21),
+        10000,
+        'bank_transfer',
+        'REAL-REF',
+        'payment-idem-1',
+      ])
+    ).rows[0].submit_payment;
+    await expect(
+      db.query('select verify_payment($1,$2,$3,$4)', [org, p, inv, 16000]),
+    ).rejects.toThrow('melebihi');
+    await db.query('select verify_payment($1,$2,$3,$4)', [org, p, inv, 10000]);
+    await db.query('select verify_payment($1,$2,$3,$4)', [org, p, inv, 10000]);
+    const invoice = await db.query<{ status: string }>('select status from invoices where id=$1', [
+      inv,
+    ]);
+    expect(invoice.rows[0].status).toBe('partially_paid');
+    expect((await db.query('select * from receipts')).rows).toHaveLength(1);
+    expect(
+      Number(
+        (
+          await db.query<{ n: string }>(
+            'select total_sen-(select sum(amount_sen) from payment_allocations where invoice_id=$1) as n from invoices where id=$1',
+            [inv],
+          )
+        ).rows[0].n,
+      ),
+    ).toBe(5000);
+    // Admin tunggal mempunyai akses akademik dan kewangan.
+    await asUser(academic);
+    expect((await db.query('select * from invoices')).rows).toHaveLength(1);
+    await asUser(parentOther);
+    expect((await db.query('select * from invoices')).rows).toHaveLength(0);
+    await asUser(parent);
+    expect((await db.query('select * from invoices')).rows).toHaveLength(1);
+    await expect(
+      db.query('select verify_payment($1,$2,$3,$4)', [org, p, inv, 10000]),
+    ).rejects.toThrow();
+    await asUser(finance);
+    await db.query('select reverse_payment($1,$2,$3)', [org, p, 'Duplicate bank entry']);
+    expect((await db.query<{ status: string }>('select status from receipts')).rows[0].status).toBe(
+      'void',
+    );
+    expect((await db.query<{ status: string }>('select status from invoices')).rows[0].status).toBe(
+      'issued',
+    );
+  });
+  it('maker-checker payout enforces separate approval and locks paid ledger', async () => {
+    await asUser(finance);
+    const b = (
+      await db.query<{ payout_batch: string }>('select payout_batch($1,$2,$3)', [
+        org,
+        '2026-10',
+        'create',
+      ])
+    ).rows[0].payout_batch;
+    await expect(
+      db.query('select payout_batch($1,$2,$3,$4)', [org, '2026-10', 'approve', b]),
+    ).rejects.toThrow('berlainan');
+    await asUser(owner);
+    await db.query('select payout_batch($1,$2,$3,$4)', [org, '2026-10', 'approve', b]);
+    await db.query('select payout_batch($1,$2,$3,$4,$5)', [
+      org,
+      '2026-10',
+      'pay',
+      b,
+      'BANK-REFERENCE',
+    ]);
+    expect(
+      (await db.query<{ status: string }>('select status from tutor_allowance_entries')).rows[0]
+        .status,
+    ).toBe('paid');
+    expect((await db.exec('update tutor_allowance_entries set amount_sen=1'))[0].affectedRows).toBe(
+      0,
+    );
+    expect(
+      (await db.query<{ amount_sen: number }>('select amount_sen from tutor_allowance_entries'))
+        .rows[0].amount_sen,
+    ).toBe(700);
+  });
+  it('sensitive session tokens and Google token tables have no exposed policies', async () => {
+    await asUser(owner);
+    for (const table of ['guardian_sessions', 'guardian_invitations', 'google_connections'])
+      expect((await db.query(`select * from ${table}`)).rows).toHaveLength(0);
+  });
+  it('all application tables use RLS; browser cannot upload arbitrary storage objects', async () => {
+    await db.exec('reset role');
+    expect(
+      (
+        await db.query(
+          "select relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity",
+        )
+      ).rows,
+    ).toHaveLength(0);
+    await asUser(parent);
+    await expect(
+      db.exec(
+        `insert into storage.objects(bucket_id,name)values('payment-proofs','${org}/${id(21)}/unsafe.pdf')`,
+      ),
+    ).rejects.toThrow();
+  });
+  it('rate, payout and export reservations cannot be created across tenants', async () => {
+    await asUser(finance);
+    await expect(
+      db.query('select set_rate($1,$2,20,700,$3,$4)', [other, 'IQRA', '2026-01-01', 'Source']),
+    ).rejects.toThrow();
+    await expect(
+      db.query('select reserve_export($1,$2,$3,$4,$5,$6)', [
+        other,
+        'tutor_allowance',
+        '{}',
+        1,
+        'sha',
+        'idem',
+      ]),
+    ).rejects.toThrow();
+  });
+  it('Google export reservations reject concurrent retry and reuse acknowledged URL', async () => {
+    await asUser(owner);
+    const query = 'select (reserve_export($1,$2,$3,$4,$5,$6)).id as id';
+    const args = [org, 'tutor_allowance', '{"month":"2026-10"}', 1, 'hash', 'unique-export'];
+    const result = await db.query<{ id: string }>(query, args);
+    await expect(db.query(query, args)).rejects.toThrow('sedang diproses');
+    await db.query("update export_jobs set status='completed',spreadsheet_url=$2 where id=$1", [
+      result.rows[0].id,
+      'https://docs.google.com/spreadsheets/d/owned',
+    ]);
+    expect((await db.query<{ id: string }>(query, args)).rows[0].id).toBe(result.rows[0].id);
+  });
+  it('fee plans create idempotent monthly invoices from configured assignments', async () => {
+    await asUser(finance);
+    await db.exec(
+      `insert into fee_plans(id,organization_id,name,basis,amount_sen,due_day)values('${id(71)}','${org}','Configured monthly','monthly',15000,7)`,
+    );
+    await db.exec('reset role');
+    const e = (
+      await db.query<{ id: string }>('select id from enrollments where student_id=$1', [id(32)])
+    ).rows[0].id;
+    await asUser(finance);
+    await db.query(
+      'insert into fee_assignments(organization_id,enrollment_id,fee_plan_id,effective_from)values($1,$2,$3,$4)',
+      [org, e, id(71), '2026-01-01'],
+    );
+    await db.query('select generate_invoices($1,$2)', [org, '2026-11']);
+    await db.query('select generate_invoices($1,$2)', [org, '2026-11']);
+    expect((await db.query("select * from invoices where period='2026-11'")).rows).toHaveLength(1);
+    await expect(
+      db.query(
+        'insert into fee_assignments(organization_id,enrollment_id,fee_plan_id,effective_from)values($1,$2,$3,$4)',
+        [org, e, id(71), '2026-02-01'],
+      ),
+    ).rejects.toThrow('bertindih');
+  });
+  it('curriculum publication requires attendance evidence and a matching unit', async () => {
+    await db.exec('reset role');
+    await db.exec(
+      `insert into curriculum_units(id,organization_id,program_id,code,name)values('${id(81)}','${org}','${id(42)}','U1','Reading evidence')`,
+    );
+    await asUser(unrelated);
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      id(52),
+      id(32),
+      'absent',
+      JSON.stringify({ mastery: 'not_assessed' }),
+    ]);
+    await expect(
+      db.query('select record_milestone($1,$2,$3,$4,4,$5,$6,true)', [
+        org,
+        id(52),
+        id(32),
+        id(81),
+        '',
+        '',
+      ]),
+    ).rejects.toThrow('bukti kehadiran');
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      id(52),
+      id(32),
+      'present',
+      JSON.stringify({ skill: 'bacaan', mastery: 4, participation: 'aktif', focus: 'sebutan' }),
+    ]);
+    await db.query('select record_milestone($1,$2,$3,$4,4,$5,$6,true)', [
+      org,
+      id(52),
+      id(32),
+      id(81),
+      '',
+      '',
+    ]);
+    await asUser(parent);
+    expect((await db.query('select * from student_skill_levels')).rows).toHaveLength(0);
+    await asUser(parentOther);
+    expect((await db.query('select * from student_skill_levels')).rows).toHaveLength(1);
+    await asUser(finance);
+    expect((await db.query('select * from student_skill_levels')).rows).toHaveLength(1);
+  });
+  it('adjustment proposal requires a different approver and retains original snapshot', async () => {
+    await asUser(finance);
+    const e = (await db.query<{ id: string }>('select id from tutor_allowance_entries')).rows[0].id;
+    const result = (
+      await db.query<{ adjust_allowance: string }>('select adjust_allowance($1,$2,$3,$4)', [
+        org,
+        e,
+        -100,
+        'Corrected duration policy',
+      ])
+    ).rows[0].adjust_allowance;
+    await expect(
+      db.query('select adjust_allowance($1,$2,$3,$4,$5)', [
+        org,
+        e,
+        0,
+        'Approve adjustment',
+        result,
+      ]),
+    ).rejects.toThrow('berlainan');
+    await asUser(owner);
+    await db.query('select adjust_allowance($1,$2,$3,$4,$5)', [
+      org,
+      e,
+      0,
+      'Approve adjustment',
+      result,
+    ]);
+    expect(
+      (
+        await db.query<{ rate_snapshot_sen: number }>(
+          'select rate_snapshot_sen from tutor_allowance_entries',
+        )
+      ).rows[0].rate_snapshot_sen,
+    ).toBe(700);
+  });
+  it('monthly drafts are private, approved reports are family scoped and immutable', async () => {
+    await asUser(owner);
+    const result = await db.query<{ id: string }>('select prepare_student_report($1,$2,$3) as id', [
+      org,
+      id(31),
+      '2026-10',
+    ]);
+    const report = result.rows[0].id;
+    await asUser(parent);
+    expect((await db.query('select * from monthly_student_reports')).rows).toHaveLength(0);
+    await expect(
+      db.query('select prepare_student_report($1,$2,$3)', [org, id(31), '2026-10']),
+    ).rejects.toThrow();
+    await expect(db.query('select approve_student_report($1,$2)', [org, report])).rejects.toThrow();
+    await asUser(unrelated);
+    expect((await db.query('select * from monthly_student_reports')).rows).toHaveLength(0);
+    await asUser(owner);
+    await db.query('select approve_student_report($1,$2)', [org, report]);
+    await expect(
+      db.query('select prepare_student_report($1,$2,$3)', [org, id(31), '2026-10']),
+    ).rejects.toThrow('dikunci');
+    await expect(db.query("update monthly_student_reports set snapshot='{}'")).rejects.toThrow();
+    await asUser(parentOther);
+    expect((await db.query('select * from monthly_student_reports')).rows).toHaveLength(0);
+    await asUser(parent);
+    const rows = (
+      await db.query<{ snapshot: { student_name: string } }>(
+        'select snapshot from monthly_student_reports',
+      )
+    ).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].snapshot.student_name).toBe('Anonymous A');
+    expect(JSON.stringify(rows)).not.toContain('Never parent-visible');
+  });
+  it('parents cannot submit payments or upload metadata even when owning the child', async () => {
+    await asUser(parent);
+    await expect(
+      db.query('select submit_payment($1,$2,100,$3,$4,$5)', [
+        org,
+        id(21),
+        'cash',
+        'parent-test',
+        'parent-readonly',
+      ]),
+    ).rejects.toThrow('baca sahaja');
+    await expect(
+      db.query('select private.submit_payment_before_readonly($1,$2,100,$3,$4,$5)', [
+        org,
+        id(21),
+        'cash',
+        'parent-test',
+        'parent-bypass',
+      ]),
+    ).rejects.toThrow();
+  });
+  it('manual report delivery cannot target another family or tenant', async () => {
+    await asUser(owner);
+    const report = (await db.query<{ id: string }>('select id from monthly_student_reports'))
+      .rows[0].id;
+    await expect(
+      db.query('select record_report_delivery($1,$2,$3,$4)', [org, report, id(22), 'sent']),
+    ).rejects.toThrow();
+    await expect(
+      db.query('select record_report_delivery($1,$2,$3,$4)', [other, report, id(21), 'sent']),
+    ).rejects.toThrow();
+    await db.query('select record_report_delivery($1,$2,$3,$4)', [org, report, id(21), 'prepared']);
+    await db.query('select record_report_delivery($1,$2,$3,$4)', [org, report, id(21), 'sent']);
+    expect((await db.query('select * from report_deliveries')).rows).toHaveLength(1);
+    await asUser(parent);
+    expect((await db.query('select * from report_deliveries')).rows).toHaveLength(0);
+    await expect(
+      db.query('select record_report_delivery($1,$2,$3,$4)', [org, report, id(21), 'sent']),
+    ).rejects.toThrow();
+  });
+  it('tutor registers a student only in an assigned class without assigning guardians', async () => {
+    await asUser(tutor);
+    await expect(
+      db.query('select tutor_register_student($1,$2,$3)', [org, id(44), 'New child']),
+    ).rejects.toThrow();
+    await expect(
+      db.query('select tutor_register_student($1,$2,$3)', [other, id(43), 'New child']),
+    ).rejects.toThrow();
+    const newStudent = (
+      await db.query<{ id: string }>('select tutor_register_student($1,$2,$3) as id', [
+        org,
+        id(43),
+        'New fictional child',
+      ])
+    ).rows[0].id;
+    expect((await db.query('select id from students where id=$1', [newStudent])).rows).toHaveLength(
+      1,
+    );
+    await asUser(parent);
+    expect((await db.query('select id from students where id=$1', [newStudent])).rows).toHaveLength(
+      0,
+    );
+  });
+  it('self-registration stays pending and cannot self-promote', async () => {
+    const newcomer = id(90);
+    await db.exec('reset role');
+    await db.query(
+      "insert into auth.users(id,email,email_confirmed_at) values($1,'fictional@example.test',now())",
+      [newcomer],
+    );
+    await asUser(newcomer);
+    const application = (
+      await db.query<{ id: string }>("select request_tutor('aqr-test','Fictional applicant') as id")
+    ).rows[0].id;
+    expect((await db.query('select * from students')).rows).toHaveLength(0);
+    await expect(
+      db.query('select review_tutor_application($1,$2,true)', [org, application]),
+    ).rejects.toThrow();
+    await asUser(owner);
+    await db.query('select review_tutor_application($1,$2,true)', [org, application]);
+    await asUser(newcomer);
+    expect(
+      (await db.query<{ role: string }>('select role from staff_memberships')).rows[0].role,
+    ).toBe('tutor');
+    expect((await db.query('select * from students')).rows).toHaveLength(0);
+  });
+  it('guardian email claim requires confirmed matching Auth email', async () => {
+    const newcomer = id(91);
+    await db.exec('reset role');
+    await db.query("insert into auth.users(id,email) values($1,'guardian@example.test')", [
+      newcomer,
+    ]);
+    await db.query(
+      "insert into guardians(id,organization_id,full_name,email)values($1,$2,'Fictional guardian','guardian@example.test')",
+      [id(92), org],
+    );
+    await db.query(
+      'insert into student_guardians(organization_id,student_id,guardian_id) values($1,$2,$3)',
+      [org, id(31), id(92)],
+    );
+    await asUser(newcomer);
+    await expect(db.query('select claim_guardian_access()')).rejects.toThrow();
+    await db.exec('reset role');
+    await db.query('update auth.users set email_confirmed_at=now() where id=$1', [newcomer]);
+    await asUser(newcomer);
+    await db.query('select claim_guardian_access()');
+    expect((await db.query('select id from students')).rows).toEqual([{ id: id(31) }]);
+  });
+});
