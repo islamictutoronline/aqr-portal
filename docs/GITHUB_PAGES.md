@@ -47,7 +47,7 @@ Nama fail ZIP/PDF menggunakan ID murid dan bulan untuk mengelakkan pertembungan 
 
 ## Terbit apabila persediaan selesai
 
-Workflow `.github/workflows/pages.yml` dicetuskan secara manual melalui **workflow_dispatch**. Pilih GitHub Actions sebagai sumber Pages. Workflow menguji kod dan portal statik, kemudian hanya memuat naik `dist-pages/`; jangan memilih seluruh repo atau folder sumber sebagai artifact. Repo belum diinisialisasi/dipush dan tiada deployment dibuat dalam sesi pelaksanaan ini.
+Workflow `.github/workflows/pages.yml` dicetuskan secara manual melalui **workflow_dispatch**. Pilih GitHub Actions sebagai sumber Pages. Workflow menguji kod dan portal statik, kemudian hanya memuat naik `dist-pages/`; jangan memilih seluruh repo atau folder sumber sebagai artifact. Repo ujian: <https://github.com/muzzammilKIAS/aqr-portal> (awam, cabang `main`). URL Pages: <https://muzzammilkias.github.io/aqr-portal/>. Repo ini milik pembangun untuk fasa ujian; ia akan diserahkan kepada admin AQR melalui _Transfer ownership_, dan admin akan menggunakan projek Supabase baharu.
 
 Workflow pemeriksaan biasa kekal dalam `.github/workflows/check.yml`. Binaan Pages boleh dimuat naik ke mana-mana static host yang menyajikan fail dengan MIME betul. Aset menggunakan laluan relatif supaya domain sendiri dan Pages subfolder disokong.
 
