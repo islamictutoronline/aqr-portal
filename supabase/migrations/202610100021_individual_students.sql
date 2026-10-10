@@ -14,7 +14,7 @@ declare sid uuid; begin
 end $$;
 
 -- Cipta kelas individu tersembunyi bagi murid+program+tutor (dalaman, tiada semakan peranan).
-create function private.individual_class(org uuid,student uuid,program uuid,tutor uuid) returns uuid language plpgsql security definer set search_path='' as $$
+create or replace function private.individual_class(org uuid,student uuid,program uuid,tutor uuid) returns uuid language plpgsql security definer set search_path='' as $$
 declare result uuid; label text;
 begin
  if not exists(select 1 from public.programs p where p.id=program and p.organization_id=org) then raise exception 'Program tidak sah'; end if;
@@ -32,7 +32,7 @@ end $$;
 revoke all on function private.individual_class(uuid,uuid,uuid,uuid) from public, anon, authenticated;
 
 -- 2) Tutor mendaftar murid baharu: nama + program; tutor ditugaskan secara automatik.
-create function private.tutor_add_student(org uuid,student_name text,program_id uuid) returns uuid language plpgsql security definer set search_path='' as $$
+create or replace function private.tutor_add_student(org uuid,student_name text,program_id uuid) returns uuid language plpgsql security definer set search_path='' as $$
 declare result uuid;
 begin
  if not private.has_role(org,array['tutor']) then raise exception 'Hanya tutor aktif' using errcode='42501'; end if;
@@ -44,7 +44,7 @@ end $$;
 
 -- 3) Tambah program kepada murid sedia ada. Tutor: murid sendiri, diajar oleh dirinya.
 --    Pemilik/admin: boleh memilih tutor aktif lain (contohnya Fardhu Ain dengan tutor berbeza).
-create function private.add_student_program(org uuid,student_id uuid,program_id uuid,tutor_id uuid default null) returns uuid language plpgsql security definer set search_path='' as $$
+create or replace function private.add_student_program(org uuid,student_id uuid,program_id uuid,tutor_id uuid default null) returns uuid language plpgsql security definer set search_path='' as $$
 declare tutor uuid;
 begin
  if private.has_role(org,array['owner','admin']) then
@@ -56,9 +56,10 @@ begin
  return private.individual_class(org,add_student_program.student_id,add_student_program.program_id,tutor);
 end $$;
 
-create function public.tutor_add_student(org uuid,student_name text,program_id uuid) returns uuid language sql security invoker set search_path='' as $$select private.tutor_add_student(org,student_name,program_id)$$;
-create function public.add_student_program(org uuid,student_id uuid,program_id uuid,tutor_id uuid default null) returns uuid language sql security invoker set search_path='' as $$select private.add_student_program(org,student_id,program_id,tutor_id)$$;
+create or replace function public.tutor_add_student(org uuid,student_name text,program_id uuid) returns uuid language sql security invoker set search_path='' as $$select private.tutor_add_student(org,student_name,program_id)$$;
+create or replace function public.add_student_program(org uuid,student_id uuid,program_id uuid,tutor_id uuid default null) returns uuid language sql security invoker set search_path='' as $$select private.add_student_program(org,student_id,program_id,tutor_id)$$;
 revoke all on function private.tutor_add_student(uuid,text,uuid),private.add_student_program(uuid,uuid,uuid,uuid) from public;
 grant execute on function private.tutor_add_student(uuid,text,uuid),private.add_student_program(uuid,uuid,uuid,uuid) to authenticated;
 revoke all on function public.tutor_add_student(uuid,text,uuid),public.add_student_program(uuid,uuid,uuid,uuid) from public,anon;
 grant execute on function public.tutor_add_student(uuid,text,uuid),public.add_student_program(uuid,uuid,uuid,uuid) to authenticated;
+notify pgrst, 'reload schema';
