@@ -203,3 +203,10 @@ test('admin views sessions per tutor tab and automatic allowance without approva
   await expect(page.locator('.tab-total')).toContainText('RM');
   await expect(page.getByRole('columnheader', { name: 'Kehadiran' })).toBeVisible();
 });
+test('admin dashboard hides the learning sessions list; tutor still sees it', async ({ page }) => {
+  await page.goto('/?demo=1#/dashboard');
+  await expect(page.getByRole('heading', { name: 'Perlu perhatian' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toHaveCount(0);
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toBeVisible();
+});

@@ -1129,48 +1129,51 @@ export function App({
             </div>
           ))}
         </div>
-        <div className="dashboard-grid">
-          <Card
-            title="Sesi pembelajaran"
-            subtitle="Jadual dan tindakan tutor"
-            action={
-              <button
-                className="text-link"
-                onClick={() => go(role === 'guardian' ? 'parent' : 'calendar')}
-              >
-                Lihat semua <ArrowUpRight size={16} />
-              </button>
-            }
-          >
-            <div className="session-list">
-              {monthlySessions.slice(-5).map((s) => (
-                <div className="session-item" key={s.id}>
-                  <div className="time-tile">
-                    <strong>{timeLabel(String(s.starts_at))}</strong>
-                    <small>{dateLabel(String(s.starts_at)).slice(0, 5)}</small>
+        {/* Pentadbir tidak perlu senarai sesi di Utama; tutor dan ibu bapa masih melihatnya. */}
+        <div className={academic ? 'dashboard-grid single' : 'dashboard-grid'}>
+          {!academic && (
+            <Card
+              title="Sesi pembelajaran"
+              subtitle="Jadual dan tindakan tutor"
+              action={
+                <button
+                  className="text-link"
+                  onClick={() => go(role === 'guardian' ? 'parent' : 'calendar')}
+                >
+                  Lihat semua <ArrowUpRight size={16} />
+                </button>
+              }
+            >
+              <div className="session-list">
+                {monthlySessions.slice(-5).map((s) => (
+                  <div className="session-item" key={s.id}>
+                    <div className="time-tile">
+                      <strong>{timeLabel(String(s.starts_at))}</strong>
+                      <small>{dateLabel(String(s.starts_at)).slice(0, 5)}</small>
+                    </div>
+                    <div className="grow">
+                      <strong>{lookup('classes', s.class_id, 'name')}</strong>
+                      <p>
+                        {lookup('staff_profiles', s.tutor_id, 'display_name')} ·{' '}
+                        {all('enrollments').filter((e) => e.class_id === s.class_id).length} murid
+                      </p>
+                    </div>
+                    <Badge value={s.status} />
+                    {role !== 'guardian' && (
+                      <button
+                        className="icon-button"
+                        aria-label="Buka sesi"
+                        onClick={() => go(`sessions/${s.id}`)}
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    )}
                   </div>
-                  <div className="grow">
-                    <strong>{lookup('classes', s.class_id, 'name')}</strong>
-                    <p>
-                      {lookup('staff_profiles', s.tutor_id, 'display_name')} ·{' '}
-                      {all('enrollments').filter((e) => e.class_id === s.class_id).length} murid
-                    </p>
-                  </div>
-                  <Badge value={s.status} />
-                  {role !== 'guardian' && (
-                    <button
-                      className="icon-button"
-                      aria-label="Buka sesi"
-                      onClick={() => go(`sessions/${s.id}`)}
-                    >
-                      <ChevronRight size={18} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {!monthlySessions.length && <Empty text="Tiada sesi bagi bulan ini." />}
-            </div>
-          </Card>
+                ))}
+                {!monthlySessions.length && <Empty text="Tiada sesi bagi bulan ini." />}
+              </div>
+            </Card>
+          )}
           <Card title="Perlu perhatian" subtitle="Utamakan tindakan hari ini">
             <div className="attention">
               <Clock />

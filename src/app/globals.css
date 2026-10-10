@@ -1753,3 +1753,7 @@ label {
   color: var(--navy);
   font-size: 18px;
 }
+
+.dashboard-grid.single {
+  grid-template-columns: 1fr;
+}
