@@ -551,6 +551,71 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       ]),
     ).rejects.toThrow();
   });
+  it('individual model: tutor adds student by program, schedules own sessions, adds programs', async () => {
+    await asUser(owner);
+    await db.query(
+      "insert into programs(id,organization_id,subject_id,code,name)values($1,$2,$3,'FARDHU_AIN_KAFA','Fardhu Ain')",
+      [id(45), org, id(41)],
+    );
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_add_student($1,$2,$3) as id', [
+        org,
+        'Individual child',
+        id(42),
+      ])
+    ).rows[0].id;
+    const cls = (
+      await db.query<{ class_id: string; name: string; mode: string; max_capacity: number }>(
+        'select e.class_id,c.name,c.mode,c.max_capacity from enrollments e join classes c on c.id=e.class_id where e.student_id=$1',
+        [kid],
+      )
+    ).rows;
+    expect(cls).toHaveLength(1);
+    expect(cls[0]).toMatchObject({
+      name: 'Individual child · Iqra',
+      mode: 'one_to_one',
+      max_capacity: 1,
+    });
+    const sid = (
+      await db.query<{ id: string }>('select create_session($1,$2,$3,$4,$5,$6) as id', [
+        org,
+        cls[0].class_id,
+        tutor,
+        '2026-10-12T12:00:00Z',
+        30,
+        '',
+      ])
+    ).rows[0].id;
+    expect(sid).toBeTruthy();
+    await expect(
+      db.query('select create_session($1,$2,$3,$4,$5,$6)', [
+        org,
+        cls[0].class_id,
+        unrelated,
+        '2026-10-12T13:00:00Z',
+        30,
+        '',
+      ]),
+    ).rejects.toThrow();
+    await expect(
+      db.query('select add_student_program($1,$2,$3)', [org, kid, id(42)]),
+    ).rejects.toThrow();
+    await db.query('select add_student_program($1,$2,$3)', [org, kid, id(45)]);
+    await asUser(unrelated);
+    await expect(
+      db.query('select add_student_program($1,$2,$3)', [org, kid, id(45)]),
+    ).rejects.toThrow();
+    await asUser(academic);
+    await db.query('select add_student_program($1,$2,$3,$4)', [org, kid, id(42), unrelated]);
+    expect(
+      (await db.query('select id from enrollments where student_id=$1', [kid])).rows,
+    ).toHaveLength(3);
+    await asUser(parent);
+    await expect(
+      db.query('select tutor_add_student($1,$2,$3)', [org, 'Parent child', id(42)]),
+    ).rejects.toThrow();
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

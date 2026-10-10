@@ -252,21 +252,6 @@ strong {
 .sidebar-bottom {
   margin-top: auto;
 }
-.sidebar-quote {
-  text-align: center;
-  margin: 22px 0 24px;
-}
-.sidebar-quote span {
-  display: block;
-  font:
-    24px Georgia,
-    serif;
-  color: #d6c59f;
-}
-.sidebar-quote small {
-  color: #98a8ba;
-  font-size: 10px;
-}
 .account {
   display: flex;
   align-items: center;
@@ -410,23 +395,6 @@ strong {
 }
 .welcome p {
   font-size: 12px;
-}
-.welcome-art {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  width: 230px;
-  color: #5d7d6d;
-  border-left: 1px solid #dbe2d7;
-}
-.welcome-art span {
-  font-family: Georgia, serif;
-  font-size: 25px;
-  color: #536c5c;
-}
-.welcome-art small {
-  font-size: 9px;
 }
 .metrics {
   display: grid;
@@ -1058,9 +1026,6 @@ footer {
   .demo-banner {
     padding: 10px 25px;
   }
-  .welcome-art {
-    width: 190px;
-  }
   .welcome h1 {
     font-size: 24px;
   }
@@ -1159,9 +1124,6 @@ footer {
   .welcome h1 {
     font-size: 24px;
     max-width: 260px;
-  }
-  .welcome-art {
-    display: none;
   }
   .welcome p {
     font-size: 11px;

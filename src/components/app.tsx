@@ -77,7 +77,7 @@ const nav = [
   ['students', 'Murid', Users],
   ['guardians', 'Penjaga', HeartHandshake],
   ['tutors', 'Tutor', GraduationCap],
-  ['classes', 'Kelas', BookOpen],
+  ['classes', 'Program', BookOpen],
   ['calendar', 'Sesi & kehadiran', CalendarDays],
   ['finance', 'Yuran', Wallet],
   ['allowance', 'Elaun tutor', Layers],
@@ -90,10 +90,10 @@ const menu = [
   ['dashboard', 'Utama', LayoutDashboard, ['dashboard']],
   ['parent', 'Anak saya', HeartHandshake, ['parent']],
   ['calendar', 'Sesi & kehadiran', CalendarDays, ['calendar']],
-  ['students', 'Murid', Users, ['students', 'guardians', 'classes']],
+  ['students', 'Murid', Users, ['students', 'guardians']],
   ['reports', 'Laporan', ChartNoAxesCombined, ['reports']],
   ['finance', 'Kewangan', Wallet, ['finance', 'allowance']],
-  ['settings', 'Tetapan', Settings, ['tutors', 'settings']],
+  ['settings', 'Tetapan', Settings, ['tutors', 'classes', 'settings']],
 ] as const;
 function Badge({ value }: { value: unknown }) {
   const s = String(value);
@@ -253,8 +253,7 @@ export function App({
       (academic &&
         ['students', 'guardians', 'tutors', 'classes', 'calendar', 'reports'].includes(p)) ||
       (finance && ['finance', 'allowance', 'reports'].includes(p)) ||
-      (role === 'tutor' &&
-        ['students', 'classes', 'calendar', 'allowance', 'reports'].includes(p)) ||
+      (role === 'tutor' && ['students', 'calendar', 'allowance', 'reports'].includes(p)) ||
       (role === 'guardian' && ['parent', 'reports'].includes(p)) ||
       (demo && role === 'owner' && p === 'parent'),
   );
@@ -303,7 +302,40 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'tutor_class') {
+        else if (operation === 'tutor_add_student' || operation === 'add_program') {
+          const studentId =
+            operation === 'add_program' ? String(payload.student_id) : `${id}-student`;
+          if (operation === 'tutor_add_student')
+            next.students.push({
+              id: studentId,
+              full_name: payload.student_name,
+              status: 'active',
+            });
+          const student = next.students.find((x) => x.id === studentId)!;
+          const program = next.programs.find((x) => x.id === payload.program_id)!;
+          next.classes.push({
+            id,
+            program_id: program.id,
+            name: `${student.full_name} · ${program.name}`,
+            mode: 'one_to_one',
+            delivery: 'online',
+            max_capacity: 1,
+            active: true,
+          });
+          next.class_tutors.push({
+            id: `${id}-tutor`,
+            class_id: id,
+            staff_id: payload.tutor_id || activeTutor,
+            starts_on: new Date().toISOString().slice(0, 10),
+          });
+          next.enrollments.push({
+            id: `${id}-enrollment`,
+            student_id: studentId,
+            class_id: id,
+            status: 'active',
+            starts_on: new Date().toISOString().slice(0, 10),
+          });
+        } else if (operation === 'tutor_class') {
           next.classes.push({
             id,
             program_id: payload.program_id,
@@ -564,27 +596,50 @@ export function App({
       setBusy(false);
     }
   }
-  // Murid sentiasa didaftarkan terus ke kelas (satu transaksi DB dengan semakan kapasiti).
-  const createStudent = () => {
-    const classes = options('classes', 'name');
-    if (!classes.length) {
-      setNotice('Cipta kelas dahulu, kemudian daftar murid ke dalam kelas itu.');
-      createClass();
-      return;
-    }
+  // Model individu: tutor mendaftar murid dengan program; kelas individu dicipta di pangkalan data.
+  const createStudent = () =>
     setDialog({
       title: 'Daftar murid',
-      operation: 'tutor_student',
+      operation: 'tutor_add_student',
       fields: [
         { name: 'student_name', label: 'Nama penuh' },
-        {
-          name: 'cid',
-          label: role === 'tutor' ? 'Kelas ditugaskan' : 'Kelas',
-          options: classes,
-        },
+        { name: 'program_id', label: 'Program', options: options('programs', 'name') },
       ],
     });
-  };
+  const addProgram = (studentId: string) =>
+    setDialog({
+      title: 'Tambah program',
+      operation: 'add_program',
+      fields: [
+        { name: 'program_id', label: 'Program', options: options('programs', 'name') },
+        ...(academic
+          ? [
+              {
+                name: 'tutor_id',
+                label: 'Tutor',
+                options: options('staff_profiles', 'display_name'),
+              },
+            ]
+          : []),
+      ],
+      transform: (v) => ({ ...v, student_id: studentId }),
+    });
+  // Program aktif murid dan tutornya (kelas individu disembunyikan daripada pengguna).
+  const programsOf = (studentId: unknown) =>
+    all('enrollments')
+      .filter((e) => e.student_id === studentId && e.status === 'active')
+      .map((e) => {
+        const c = all('classes').find((x) => x.id === e.class_id);
+        const t = all('class_tutors').find((x) => x.class_id === e.class_id && !x.ends_on);
+        const program = lookup('programs', c?.program_id, 'name');
+        const tutorName = t ? lookup('staff_profiles', t.staff_id, 'display_name') : '';
+        return {
+          id: String(e.id),
+          program,
+          tutor: tutorName === '—' ? '' : tutorName,
+          status: e.status,
+        };
+      });
   const createGuardian = () =>
     setDialog({
       title: 'Tambah penjaga',
@@ -595,60 +650,31 @@ export function App({
         { name: 'phone', label: 'WhatsApp (+60…)', type: 'tel', optional: true },
       ],
     });
-  // Tutor mencipta kelas sendiri melalui RPC yang menugaskannya secara automatik.
-  const createClass = () =>
-    setDialog({
-      title: role === 'tutor' ? 'Tambah kelas saya' : 'Tambah kelas',
-      operation: role === 'tutor' ? 'tutor_class' : 'class',
-      fields: [
-        { name: 'name', label: 'Nama kelas' },
-        { name: 'program_id', label: 'Program', options: options('programs', 'name') },
-        {
-          name: 'mode',
-          label: 'Jenis',
-          options: [
-            ['group', 'Kumpulan'],
-            ['one_to_one', 'Individu'],
-          ],
-        },
-        {
-          name: 'delivery',
-          label: 'Kaedah',
-          options: [
-            ['physical', 'Bersemuka'],
-            ['online', 'Dalam talian'],
-          ],
-        },
-        { name: 'max_capacity', label: 'Kapasiti', type: 'number', value: '8' },
-        { name: 'venue', label: 'Lokasi', optional: true },
-      ],
-      transform: (v) => {
-        const capacity = v.mode === 'one_to_one' ? 1 : Number(v.max_capacity);
-        return role === 'tutor'
-          ? {
-              program_id: v.program_id,
-              class_name: v.name,
-              class_mode: v.mode,
-              class_delivery: v.delivery,
-              capacity,
-              ...(v.venue ? { class_venue: v.venue } : {}),
-            }
-          : { ...v, max_capacity: capacity };
-      },
-    });
+  // Setiap kelas individu bernama "Murid · Program", jadi pilihan ini ialah senarai murid.
   const createSession = () =>
     setDialog({
       title: 'Jadualkan sesi',
       operation: 'session',
       fields: [
-        { name: 'cid', label: 'Kelas', options: options('classes', 'name') },
-        { name: 'tid', label: 'Tutor', options: options('staff_profiles', 'display_name') },
+        { name: 'cid', label: 'Murid', options: options('classes', 'name') },
+        ...(role === 'tutor'
+          ? []
+          : [{ name: 'tid', label: 'Tutor', options: options('staff_profiles', 'display_name') }]),
         { name: 'start_time', label: 'Tarikh dan masa (MYT)', type: 'datetime-local' },
-        { name: 'minutes', label: 'Tempoh minit', type: 'number', value: '30' },
+        {
+          name: 'minutes',
+          label: 'Tempoh',
+          options: [
+            ['30', '30 minit'],
+            ['20', '20 minit'],
+          ],
+        },
         { name: 'lesson_topic', label: 'Topik', optional: true },
       ],
       transform: (v) => ({
         ...v,
+        ...(role === 'tutor' ? { tid: activeTutor } : {}),
+        lesson_topic: v.lesson_topic || '',
         start_time: new Date(`${v.start_time}:00+08:00`).toISOString(),
         minutes: Number(v.minutes),
       }),
@@ -812,9 +838,13 @@ export function App({
           [
             'Murid aktif',
             all('students').filter((s) => s.status === 'active').length,
-            'Murid dalam kelas berdaftar',
+            'Murid berdaftar',
           ],
-          ['Kelas aktif', all('classes').filter((c) => c.active).length, 'Kumpulan & individu'],
+          [
+            'Program aktif',
+            all('enrollments').filter((e) => e.status === 'active').length,
+            'Murid × program',
+          ],
           [
             'Sesi dilaksana',
             monthlySessions.filter((s) => s.status === 'completed').length,
@@ -835,20 +865,11 @@ export function App({
       <>
         <div className="welcome">
           <div>
-            <p className="eyebrow">BERSAMA MEMBIMBING GENERASI</p>
             <h1>
               Assalamualaikum,{' '}
               {role === 'guardian' ? 'ibu bapa' : role === 'tutor' ? 'tutor' : 'pentadbir'}
               <span className="gold">.</span>
             </h1>
-            <p>Setiap langkah kecil, satu kemajuan bermakna.</p>
-          </div>
-          <div className="welcome-art">
-            <BookOpen size={42} />
-            <span lang="ar" dir="rtl">
-              رَبِّ زِدْنِي عِلْمًا
-            </span>
-            <small>Ya Tuhanku, tambahkanlah ilmuku.</small>
           </div>
         </div>
         <div className="metrics">
@@ -1026,69 +1047,46 @@ export function App({
             </button>
           )}
         </div>
-        <Card title="Kelas & penjaga">
-          {all('enrollments')
-            .filter((e) => e.student_id === id)
-            .map((e) => (
-              <p key={e.id}>
-                {lookup('classes', e.class_id, 'name')} · <Badge value={e.status} />
-              </p>
-            ))}
-          {academic && (
+        <Card title="Program & penjaga">
+          {programsOf(id).map((p) => (
+            <p key={p.id}>
+              <strong>{p.program}</strong>
+              {p.tutor && ` · Tutor: ${p.tutor}`} · <Badge value={p.status} />
+            </p>
+          ))}
+          {(academic || role === 'tutor') && (
             <div className="button-row">
-              <button
-                onClick={() =>
-                  setDialog({
-                    title: 'Daftar kelas',
-                    operation: 'enrollment',
-                    fields: [
-                      { name: 'class_id', label: 'Kelas', options: options('classes', 'name') },
-                      { name: 'starts_on', label: 'Tarikh mula', type: 'date' },
-                      {
-                        name: 'planned_quota',
-                        label: 'Kuota sesi (bukan tuntutan)',
-                        type: 'number',
-                        value: '4',
-                      },
-                    ],
-                    transform: (v) => ({
-                      ...v,
-                      student_id: id,
-                      planned_quota: Number(v.planned_quota),
-                    }),
-                  })
-                }
-              >
-                Daftar kelas
-              </button>
-              <button
-                onClick={() =>
-                  setDialog({
-                    title: 'Pautkan penjaga',
-                    operation: 'link',
-                    fields: [
-                      { name: 'guardian_id', label: 'Penjaga', options: options('guardians') },
-                      {
-                        name: 'relation',
-                        label: 'Hubungan',
-                        options: [
-                          ['ibu', 'Ibu'],
-                          ['bapa', 'Bapa'],
-                          ['penjaga', 'Penjaga'],
-                        ],
-                      },
-                    ],
-                    transform: (v) => ({
-                      ...v,
-                      student_id: id,
-                      portal_allowed: true,
-                      is_billing_contact: true,
-                    }),
-                  })
-                }
-              >
-                Pautkan penjaga
-              </button>
+              <button onClick={() => addProgram(id)}>Tambah program</button>
+              {academic && (
+                <button
+                  onClick={() =>
+                    setDialog({
+                      title: 'Pautkan penjaga',
+                      operation: 'link',
+                      fields: [
+                        { name: 'guardian_id', label: 'Penjaga', options: options('guardians') },
+                        {
+                          name: 'relation',
+                          label: 'Hubungan',
+                          options: [
+                            ['ibu', 'Ibu'],
+                            ['bapa', 'Bapa'],
+                            ['penjaga', 'Penjaga'],
+                          ],
+                        },
+                      ],
+                      transform: (v) => ({
+                        ...v,
+                        student_id: id,
+                        portal_allowed: true,
+                        is_billing_contact: true,
+                      }),
+                    })
+                  }
+                >
+                  Pautkan penjaga
+                </button>
+              )}
             </div>
           )}
         </Card>
@@ -1108,7 +1106,7 @@ export function App({
         title="Direktori murid"
         subtitle="Maklumat minimum, pemantauan secara individu"
         action={
-          (academic || role === 'tutor') && (
+          role === 'tutor' && (
             <button className="primary" onClick={createStudent}>
               <Plus size={16} />
               Daftar murid
@@ -1117,7 +1115,7 @@ export function App({
         }
       >
         <Table
-          headers={['Murid', 'Kelas', 'Status', '']}
+          headers={['Murid', 'Program', 'Status', '']}
           rows={all('students')
             .filter(matches)
             .map((s) => [
@@ -1125,9 +1123,8 @@ export function App({
                 <span className="avatar">{String(s.full_name).slice(0, 1)}</span>
                 <strong>{String(s.full_name)}</strong>
               </div>,
-              all('enrollments')
-                .filter((e) => e.student_id === s.id)
-                .map((e) => lookup('classes', e.class_id, 'name'))
+              programsOf(s.id)
+                .map((p) => p.program)
                 .join(', ') || 'Belum berdaftar',
               <Badge key="status" value={s.status} />,
               <button key="open" className="text-link" onClick={() => go(`students/${s.id}`)}>
@@ -1202,69 +1199,6 @@ export function App({
     return (
       <>
         <Card
-          title="Kelas pembelajaran"
-          subtitle="Pendaftaran, tutor dan kurikulum mengikut program"
-          action={
-            (academic || role === 'tutor') && (
-              <button className="primary" onClick={createClass}>
-                <Plus size={16} />
-                {role === 'tutor' ? 'Tambah kelas saya' : 'Tambah kelas'}
-              </button>
-            )
-          }
-        >
-          <div className="class-grid">
-            {all('classes')
-              .filter(matches)
-              .map((c) => (
-                <article className="class-card" key={c.id}>
-                  <div className="class-icon">
-                    <BookOpen size={22} />
-                  </div>
-                  <Badge value={c.active ? 'active' : 'archived'} />
-                  <h3>{String(c.name)}</h3>
-                  <p>{lookup('programs', c.program_id, 'name')}</p>
-                  <div className="class-details">
-                    <span>{c.mode === 'group' ? 'Kumpulan' : 'Individu'}</span>
-                    <span>
-                      {c.delivery === 'online' ? 'Dalam talian' : String(c.venue || 'Bersemuka')}
-                    </span>
-                  </div>
-                  <strong>
-                    {
-                      all('enrollments').filter((e) => e.class_id === c.id && e.status === 'active')
-                        .length
-                    }{' '}
-                    / {Number(c.max_capacity)} murid
-                  </strong>
-                  {academic && (
-                    <button
-                      className="text-link"
-                      onClick={() =>
-                        setDialog({
-                          title: 'Tugaskan tutor',
-                          operation: 'assignment',
-                          fields: [
-                            {
-                              name: 'staff_id',
-                              label: 'Tutor',
-                              options: options('staff_profiles', 'display_name'),
-                            },
-                            { name: 'starts_on', label: 'Mula tugasan', type: 'date' },
-                          ],
-                          transform: (v) => ({ ...v, class_id: c.id }),
-                        })
-                      }
-                    >
-                      Tugaskan tutor <ArrowUpRight size={16} />
-                    </button>
-                  )}
-                </article>
-              ))}
-          </div>
-          {!all('classes').length && <Empty />}
-        </Card>
-        <Card
           title="Kurikulum"
           subtitle="Kemajuan dikira daripada bukti pencapaian unit"
           action={
@@ -1318,7 +1252,7 @@ export function App({
           title="Jadual & sesi"
           subtitle="Semua masa dalam Asia/Kuala_Lumpur"
           action={
-            academic && (
+            (academic || role === 'tutor') && (
               <button className="primary" onClick={createSession}>
                 <Plus size={16} />
                 Jadualkan sesi
@@ -2183,12 +2117,6 @@ export function App({
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-quote">
-            <span lang="ar" dir="rtl">
-              رَبِّ زِدْنِي عِلْمًا
-            </span>
-            <small>Ilmu membina masa depan.</small>
-          </div>
           <div className="account">
             <span className="avatar">{name.slice(0, 1)}</span>
             <div>

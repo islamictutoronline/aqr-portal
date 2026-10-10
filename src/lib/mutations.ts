@@ -186,6 +186,8 @@ const schemas = {
   }),
   tutor_application: z.object({ application: uuid, accept: z.boolean() }),
   tutor_student: z.object({ cid: uuid, student_name: text }),
+  tutor_add_student: z.object({ student_name: text, program_id: uuid }),
+  add_program: z.object({ student_id: uuid, program_id: uuid, tutor_id: uuid.optional() }),
   tutor_class: z.object({
     program_id: uuid,
     class_name: text,
@@ -257,6 +259,8 @@ export async function executeMutation(
       tutor_application: 'review_tutor_application',
       tutor_student: 'tutor_register_student',
       tutor_class: 'tutor_create_class',
+      tutor_add_student: 'tutor_add_student',
+      add_program: 'add_student_program',
       session: 'create_session',
       assessment: 'record_assessment',
       rate: 'set_rate',
