@@ -1757,3 +1757,10 @@ label {
 .dashboard-grid.single {
   grid-template-columns: 1fr;
 }
+
+.save-hint {
+  display: block;
+  color: #b45309;
+  margin: 8px 0 4px;
+  font-weight: 500;
+}

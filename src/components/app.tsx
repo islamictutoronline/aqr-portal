@@ -402,7 +402,14 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'void_session') {
+        else if (operation === 'move_session') {
+          const sess = next.class_sessions.find((x) => x.id === payload.sid)!;
+          const length =
+            new Date(String(sess.ends_at)).getTime() - new Date(String(sess.starts_at)).getTime();
+          const start = new Date(String(payload.new_start));
+          sess.starts_at = start.toISOString();
+          sess.ends_at = new Date(start.getTime() + length).toISOString();
+        } else if (operation === 'void_session') {
           next.class_sessions.find((x) => x.id === payload.sid)!.status = 'cancelled';
           next.generated_parent_comments
             .filter((c) => c.session_id === payload.sid)
@@ -1129,16 +1136,9 @@ export function App({
       </>
     );
   }
+  // Alih sesi di tempatnya: kehadiran kekal dan halaman kekal pada sesi yang sama.
   const rescheduleSession = async (session: Row, start: string) => {
-    if (
-      await mutate('change_session', {
-        sid: session.id,
-        new_status: 'rescheduled',
-        reason: 'Tarikh/jam dikemas kini oleh tutor',
-        new_start: start,
-      })
-    )
-      setPendingMove({ cid: session.class_id, start });
+    await mutate('move_session', { sid: session.id, new_start: start });
   };
   const allowances = useMemo(() => allowanceRows(visible, month), [visible, month]);
   const allowanceOf = (tid: unknown) =>
@@ -2976,7 +2976,6 @@ function SessionEditor({
   }).format(new Date(startIso));
   const [classDate, setClassDate] = useState(initialDate);
   const [classTime, setClassTime] = useState(initialTime);
-  const recorded = data.attendance.some((a) => a.session_id === session.id);
   const students = data.students.filter((s) =>
     data.enrollments.some((e) => e.class_id === session.class_id && e.student_id === s.id),
   );
@@ -3007,11 +3006,16 @@ function SessionEditor({
   const locked = ['verified', 'approved', 'paid'].includes(String(session.review_status));
   let preview = 'Pilih kehadiran dan penilaian untuk melihat ulasan.';
   let valid = false;
+  // Penilaian adalah pilihan: tanpa sebarang tap, sesi disimpan sebagai "belum dinilai".
+  const noAssessment =
+    !assessment.mastery && !assessment.skill && !assessment.participation && !assessment.focus;
+  const assessmentInput = (): Assessment =>
+    ['absent', 'excused'].includes(attendance) || noAssessment
+      ? { mastery: 'not_assessed' }
+      : (assessment as Assessment);
   try {
     if (attendance) {
-      const input = ['absent', 'excused'].includes(attendance)
-        ? { mastery: 'not_assessed' as const }
-        : (assessment as Assessment);
+      const input = assessmentInput();
       preview = generateComment(
         subjectSlug,
         attendance,
@@ -3069,9 +3073,7 @@ function SessionEditor({
       sid: session.id,
       student: studentId,
       attendance_status: attendance,
-      selected: ['absent', 'excused'].includes(attendance)
-        ? { mastery: 'not_assessed' }
-        : assessment,
+      selected: assessmentInput(),
       publish,
     });
     if (success) {
@@ -3095,7 +3097,7 @@ function SessionEditor({
             <input
               type="date"
               value={classDate}
-              disabled={recorded || busy}
+              disabled={locked || busy}
               onChange={(e) => setClassDate(e.target.value)}
             />
           </label>
@@ -3104,11 +3106,11 @@ function SessionEditor({
             <input
               type="time"
               value={classTime}
-              disabled={recorded || busy}
+              disabled={locked || busy}
               onChange={(e) => setClassTime(e.target.value)}
             />
           </label>
-          {(classDate !== initialDate || classTime !== initialTime) && !recorded && (
+          {(classDate !== initialDate || classTime !== initialTime) && !locked && (
             <button
               className="secondary"
               disabled={busy || !classDate || !classTime}
@@ -3222,6 +3224,13 @@ function SessionEditor({
                   {savedAttendance(studentId) ? 'Simpan perubahan' : 'Simpan kehadiran'}
                 </button>
               </div>
+              {!valid && (
+                <small className="save-hint">
+                  {!attendance
+                    ? 'Pilih kehadiran dahulu.'
+                    : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
+                </small>
+              )}
               <small>
                 {savedAttendance(studentId)
                   ? 'Kehadiran sudah direkod. Ubah pilihan di atas dan simpan untuk membetulkannya.'

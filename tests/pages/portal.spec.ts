@@ -235,3 +235,40 @@ test('tutor edits a recorded attendance, sees remaining sessions and voids a cla
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(history.getByRole('button', { name: 'Padam' })).toHaveCount(rows - 1);
 });
+test('tutor backdates a recorded class and saves attendance without assessment taps', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await page.locator('.student-picker button').first().click();
+  const history = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await history.getByRole('button', { name: 'Edit' }).first().click();
+  const date = page.getByLabel('Tarikh kelas');
+  await expect(date).toBeEnabled();
+  await date.fill('2026-09-15');
+  await page.getByRole('button', { name: 'Simpan tarikh & jam' }).click();
+  await expect(date).toHaveValue('2026-09-15');
+  await expect(page.getByRole('button', { name: 'Simpan tarikh & jam' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  for (const label of ['bacaan', 'aktif', 'sebutan yang tepat']) {
+    const chip = page.getByRole('button', { name: label, exact: true });
+    if ((await chip.getAttribute('aria-pressed')) === 'true') await chip.click();
+  }
+  const save = page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByRole('status')).toContainText('memori tab');
+  // Kelas baharu: hanya kehadiran, tiada tap penilaian.
+  await page.getByRole('button', { name: 'Rekod kelas sekarang' }).click();
+  await expect(page.getByRole('button', { name: 'Simpan kehadiran' })).toBeDisabled();
+  await expect(page.getByText('Pilih kehadiran dahulu.')).toBeVisible();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Simpan kehadiran' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  await expect(page.getByRole('status')).toContainText('memori tab');
+});

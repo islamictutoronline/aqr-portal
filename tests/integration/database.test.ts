@@ -845,6 +845,51 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       db.query('select create_session($1,$2,$3,$4,$5,$6)', [org, cls, tutor, tooOld, 30, '']),
     ).rejects.toThrow();
   });
+  it('tutor moves a recorded session to a past date; attendance kept; no duplicate slot', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Move child',
+        id(42),
+        30,
+        JSON.stringify([{ day: 6, time: '09:00' }]),
+      ])
+    ).rows[0].id;
+    const first = (
+      await db.query<{ id: string; class_id: string }>(
+        "select s.id,s.class_id from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 and s.status='scheduled' order by s.starts_at limit 1",
+        [kid],
+      )
+    ).rows[0];
+    await db.query('select record_assessment($1,$2,$3,$4,$5,$6)', [
+      org,
+      first.id,
+      kid,
+      'present',
+      JSON.stringify({ mastery: 'not_assessed' }),
+      true,
+    ]);
+    const count = async () =>
+      (await db.query('select id from class_sessions where class_id=$1', [first.class_id])).rows
+        .length;
+    const before = await count();
+    const past = new Date(Date.now() - 30 * 86400000).toISOString();
+    await db.query('select move_session($1,$2,$3)', [org, first.id, past]);
+    expect(
+      (
+        await db.query<{ status: string }>('select status from attendance where session_id=$1', [
+          first.id,
+        ])
+      ).rows,
+    ).toEqual([{ status: 'present' }]);
+    await db.query('select extend_schedule($1)', [org]);
+    expect(await count()).toBe(before);
+    await asUser(unrelated);
+    await expect(
+      db.query('select move_session($1,$2,$3)', [org, first.id, new Date().toISOString()]),
+    ).rejects.toThrow();
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (
