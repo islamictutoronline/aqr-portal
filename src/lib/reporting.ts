@@ -11,6 +11,8 @@ import {
   invoiceBalance,
   dateLabel,
   statusLabel,
+  findRate,
+  Rate,
 } from './core';
 export type Report = {
   code: ReportCode;
@@ -23,6 +25,60 @@ export type Report = {
   generated_by: string;
   demo: boolean;
 };
+// Elaun automatik (keputusan pengguna Okt 2026): tiada semakan manual. Sesi selesai dibayar
+// sekali mengikut kadar program + tempoh pada tarikh sesi. Hadir, Lewat, Ganti dan Tidak hadir
+// dibayar; Berizin tidak dibayar. Sesi tanpa kadar dipaparkan dengan rate_sen null.
+export const PAYABLE_ATTENDANCE = ['present', 'late', 'makeup', 'absent'];
+export type AllowanceRow = {
+  session: Row;
+  tutorId: string;
+  label: string;
+  minutes: number;
+  attendance: string;
+  rate_sen: number | null;
+  payable_sen: number;
+};
+export function allowanceRows(data: Dataset, month: string): AllowanceRow[] {
+  const { start, end } = monthBounds(month);
+  const all = (table: string) => data[table] ?? [];
+  const rates = all('tutor_allowance_rates') as unknown as Rate[];
+  const klDay = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
+  return all('class_sessions')
+    .filter((s) => {
+      const t = new Date(String(s.starts_at));
+      return s.status === 'completed' && t >= new Date(start) && t < new Date(end);
+    })
+    .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
+    .map((s) => {
+      const cls = all('classes').find((c) => c.id === s.class_id);
+      const program = all('programs').find((p) => p.id === cls?.program_id);
+      const minutes =
+        (new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000;
+      const marks = all('attendance').filter((a) => a.session_id === s.id);
+      const paid = marks.some((a) => PAYABLE_ATTENDANCE.includes(String(a.status)));
+      let rate: number | null = null;
+      try {
+        rate = Number(
+          findRate(rates, String(program?.code), minutes, klDay(String(s.starts_at))).amount_sen,
+        );
+      } catch {
+        rate = null;
+      }
+      return {
+        session: s,
+        tutorId: String(s.tutor_id),
+        label: String(cls?.name ?? '—'),
+        minutes,
+        attendance:
+          marks.length === 1
+            ? statusLabel(marks[0].status)
+            : `${marks.filter((a) => PAYABLE_ATTENDANCE.includes(String(a.status))).length}/${marks.length} dibayar`,
+        rate_sen: rate,
+        payable_sen: paid && rate ? rate : 0,
+      };
+    });
+}
 export function buildReport(
   data: Dataset,
   code: ReportCode,
@@ -164,39 +220,25 @@ export function buildReport(
   } else if (code === 'tutor_allowance') {
     headers = [
       'Tarikh',
-      'ID sesi',
       'Tutor',
-      'Program',
-      'Kadar snapshot (sen)',
-      'Status',
-      'Penyemak',
-      'Pelulus',
+      'Murid · Program',
+      'Tempoh min',
+      'Kehadiran',
+      'Kadar (sen)',
       'Layak dibayar (sen)',
     ];
-    rows = all('tutor_allowance_entries')
-      .filter(inMonth)
-      .map((e) => {
-        const s = sessions.find((s) => s.id === e.session_id)!;
-        const eligible =
-          ['approved', 'paid'].includes(String(e.status)) &&
-          e.verified_by &&
-          e.approved_by &&
-          e.verified_by !== e.approved_by
-            ? Number(e.amount_sen)
-            : 0;
-        total_sen += eligible;
-        return [
-          dateLabel(String(s.starts_at)),
-          s.id,
-          find('staff_profiles', e.tutor_id, 'display_name'),
-          String(sessionProgram(s)?.name ?? '—'),
-          Number(e.rate_snapshot_sen),
-          statusLabel(e.status),
-          String(staffName(e.verified_by)),
-          String(staffName(e.approved_by)),
-          eligible,
-        ];
-      });
+    rows = allowanceRows(data, month).map((r) => {
+      total_sen += r.payable_sen;
+      return [
+        dateLabel(String(r.session.starts_at)),
+        find('staff_profiles', r.tutorId, 'display_name'),
+        r.label,
+        r.minutes,
+        r.attendance,
+        r.rate_sen ?? 'Tiada kadar',
+        r.payable_sen,
+      ];
+    });
   } else if (code === 'tutor_payout') {
     headers = ['Tutor', 'Bulan', 'Kelompok', 'Amaun (sen)', 'Rujukan', 'Tarikh'];
     rows = all('tutor_payouts')

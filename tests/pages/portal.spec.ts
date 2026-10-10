@@ -186,3 +186,20 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'Murid Jadual' })).toHaveCount(0);
 });
+test('admin views sessions per tutor tab and automatic allowance without approvals', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/calendar');
+  await expect(page.getByRole('heading', { name: 'Sesi hari ini' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Tutor Contoh 1' }).click();
+  await expect(page.getByRole('heading', { name: 'Tutor Contoh 1' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Elaun' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Lulus|Sahkan/ })).toHaveCount(0);
+  await page.goto('/?demo=1#/allowance');
+  await page.reload();
+  await expect(page.getByText('Jumlah perlu dibayar').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Semakan sesi' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Tutor Contoh 2' }).click();
+  await expect(page.locator('.tab-total')).toContainText('RM');
+  await expect(page.getByRole('columnheader', { name: 'Kehadiran' })).toBeVisible();
+});

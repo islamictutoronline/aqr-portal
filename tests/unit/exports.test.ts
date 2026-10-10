@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
-import { buildReport, toCsv } from '../../src/lib/reporting';
+import { buildReport, toCsv, allowanceRows } from '../../src/lib/reporting';
 import { toXlsx } from '../../src/lib/workbook';
 import { demoData, scopeDemo } from '../../src/lib/demo';
 it('creates a real XLSX with metadata, frozen header, literal cells and reconciled counts', async () => {
@@ -40,8 +40,9 @@ it('exports payable snapshots independently of planned quotas', () => {
   const data = demoData();
   const report = buildReport(data, 'tutor_allowance', '2026-10', 'owner', 'Tester', true);
   expect(report.total_sen).toBe(
-    data.tutor_allowance_entries.reduce((n, e) => n + Number(e.amount_sen), 0),
+    allowanceRows(data, '2026-10').reduce((n, r) => n + r.payable_sen, 0),
   );
+  expect(report.total_sen).toBeGreaterThan(0);
   data.enrollments.forEach((e) => (e.planned_quota = 999));
   expect(buildReport(data, 'tutor_allowance', '2026-10', 'owner', 'Tester', true).total_sen).toBe(
     report.total_sen,
@@ -58,7 +59,7 @@ it('guardian demo preview and export use the same scoped rows', () => {
 it('admin Excel shows Malay statuses, staff names and RM amounts from integer sen', async () => {
   const data = demoData();
   const report = buildReport(data, 'tutor_allowance', '2026-10', 'admin', 'Admin', true);
-  expect(report.rows[0]).toContain('Diluluskan');
+  expect(report.headers).toContain('Kehadiran');
   expect(report.rows.flat()).not.toContain('demo-finance');
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(await toXlsx(report));
@@ -68,4 +69,22 @@ it('admin Excel shows Malay statuses, staff names and RM amounts from integer se
   expect(col).toBeGreaterThan(0);
   expect(sheet.getRow(2).getCell(col).value).toBe(Number(report.rows[0][col - 1]) / 100);
   expect(sheet.getColumn(col).numFmt).toBe('"RM" #,##0.00');
+});
+
+it('automatic allowance: absent is paid, excused is not, no manual approval needed', () => {
+  const data = demoData();
+  const rows = allowanceRows(data, '2026-10');
+  const sample = rows.find((r) => r.rate_sen);
+  expect(sample).toBeDefined();
+  const marks = data.attendance.filter((a) => a.session_id === sample!.session.id);
+  marks.forEach((a) => (a.status = 'absent'));
+  expect(
+    allowanceRows(data, '2026-10').find((r) => r.session.id === sample!.session.id)!.payable_sen,
+  ).toBe(sample!.rate_sen);
+  marks.forEach((a) => (a.status = 'excused'));
+  expect(
+    allowanceRows(data, '2026-10').find((r) => r.session.id === sample!.session.id)!.payable_sen,
+  ).toBe(0);
+  data.class_sessions.forEach((x) => (x.review_status = 'reported'));
+  expect(allowanceRows(data, '2026-10').length).toBe(rows.length);
 });

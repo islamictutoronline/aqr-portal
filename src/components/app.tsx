@@ -54,7 +54,7 @@ import {
   statusLabels,
   passwordProblem,
 } from '@/lib/core';
-import { buildReport } from '@/lib/reporting';
+import { buildReport, allowanceRows } from '@/lib/reporting';
 import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
 import { ContactAdmin } from './contact-admin';
@@ -273,6 +273,8 @@ export function App({
     path.startsWith('sessions/') ? path.split('/')[1] : '',
   );
   const [child, setChild] = useState('');
+  const [sessionTab, setSessionTab] = useState('today');
+  const [allowanceTab, setAllowanceTab] = useState('all');
   // Selepas sesi dicipta atau dijadual semula, buka sesi baharu itu sebaik data dimuat semula.
   const [pendingMove, setPendingMove] = useState<{ cid: unknown; start: string } | null>(null);
   useEffect(() => {
@@ -851,35 +853,6 @@ export function App({
         { name: 'phone', label: 'WhatsApp (+60…)', type: 'tel', optional: true },
       ],
     });
-  // Setiap kelas individu bernama "Murid · Program", jadi pilihan ini ialah senarai murid.
-  const createSession = () =>
-    setDialog({
-      title: 'Jadualkan sesi',
-      operation: 'session',
-      fields: [
-        { name: 'cid', label: 'Murid', options: options('classes', 'name') },
-        ...(role === 'tutor'
-          ? []
-          : [{ name: 'tid', label: 'Tutor', options: options('staff_profiles', 'display_name') }]),
-        { name: 'start_time', label: 'Tarikh dan masa (MYT)', type: 'datetime-local' },
-        {
-          name: 'minutes',
-          label: 'Tempoh',
-          options: [
-            ['30', '30 minit'],
-            ['20', '20 minit'],
-          ],
-        },
-        { name: 'lesson_topic', label: 'Topik', optional: true },
-      ],
-      transform: (v) => ({
-        ...v,
-        ...(role === 'tutor' ? { tid: activeTutor } : {}),
-        lesson_topic: v.lesson_topic || '',
-        start_time: new Date(`${v.start_time}:00+08:00`).toISOString(),
-        minutes: Number(v.minutes),
-      }),
-    });
   const invoiceForm = () =>
     setDialog({
       title: 'Invois baharu · kadar ditetapkan admin',
@@ -1055,6 +1028,22 @@ export function App({
     )
       setPendingMove({ cid: session.class_id, start });
   };
+  const allowances = useMemo(() => allowanceRows(visible, month), [visible, month]);
+  const allowanceOf = (tid: unknown) =>
+    allowances.filter((r) => r.tutorId === tid).reduce((n, r) => n + r.payable_sen, 0);
+  const metricCards = (items: [string, React.ReactNode, string][]) => (
+    <div className="metrics">
+      {items.map(([label, value, hint]) => (
+        <div className="metric" key={label}>
+          <div className="metric-top">
+            <span>{label}</span>
+          </div>
+          <strong>{value}</strong>
+          <small>{hint}</small>
+        </div>
+      ))}
+    </div>
+  );
   const monthlySessions = all('class_sessions').filter((s) =>
     dateLabel(String(s.starts_at)).endsWith(`${month.slice(5)}/${month.slice(0, 4)}`),
   );
@@ -1187,10 +1176,9 @@ export function App({
               <Clock />
               <div>
                 <strong>
-                  {monthlySessions.filter((s) => s.review_status === 'reported').length} sesi belum
-                  disemak
+                  {formatMoney(allowances.reduce((n, r) => n + r.payable_sen, 0))} elaun tutor
                 </strong>
-                <p>Rekod dilaporkan menunggu pengesahan.</p>
+                <p>Dikira automatik daripada sesi yang direkod bulan ini.</p>
               </div>
             </div>
             {finance && (
@@ -1534,94 +1522,119 @@ export function App({
         </Card>
       );
     }
+    // Pentadbir hanya melihat ringkasan bulan dan sesi hari ini; butiran penuh di profil tutor.
+    const live = monthlySessions.filter(
+      (x) => !['cancelled', 'rescheduled'].includes(String(x.status)),
+    );
+    const nowMs = Date.now();
+    const today = klDate(new Date().toISOString());
+    const todays = live
+      .filter((x) => klDate(String(x.starts_at)) === today)
+      .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
+    const attendanceOf = (sid: unknown) => {
+      const mark = all('attendance').find((a) => a.session_id === sid);
+      return mark ? statusLabels[String(mark.status)] : '—';
+    };
     return (
       <>
-        <Card
-          title="Jadual & sesi"
-          subtitle="Waktu Malaysia"
-          action={
-            academic && (
-              <button className="primary" onClick={createSession}>
-                <Plus size={16} />
-                Jadualkan sesi
-              </button>
-            )
-          }
-        >
-          <Table
-            headers={['Tarikh / masa', 'Murid · Program', 'Tutor', 'Status', 'Semakan', '']}
-            rows={monthlySessions.filter(matches).map((s) => [
-              <div key="date">
-                <strong>{dateLabel(String(s.starts_at))}</strong>
-                <small>{timeLabel(String(s.starts_at))}</small>
-              </div>,
-              lookup('classes', s.class_id, 'name'),
-              lookup('staff_profiles', s.tutor_id, 'display_name'),
-              <Badge key="status" value={s.status} />,
-              <Badge key="review" value={s.review_status} />,
-              <button key="open" onClick={() => go(`sessions/${s.id}`)}>
-                Rekod sesi <ChevronRight size={16} />
-              </button>,
-            ])}
-          />
-        </Card>
-        <Card
-          title="Jadual mingguan"
-          action={
-            academic && (
-              <button
-                onClick={() =>
-                  setDialog({
-                    title: 'Tambah jadual mingguan',
-                    operation: 'schedule',
-                    fields: [
-                      { name: 'class_id', label: 'Kelas', options: options('classes', 'name') },
-                      {
-                        name: 'day_of_week',
-                        label: 'Hari',
-                        options: [
-                          'Ahad',
-                          'Isnin',
-                          'Selasa',
-                          'Rabu',
-                          'Khamis',
-                          'Jumaat',
-                          'Sabtu',
-                        ].map((d, i) => [String(i), d]),
-                      },
-                      { name: 'start_time', label: 'Masa', type: 'time' },
-                      { name: 'duration_minutes', label: 'Minit', type: 'number', value: '30' },
-                      { name: 'effective_from', label: 'Berkuat kuasa', type: 'date' },
-                    ],
-                    transform: (v) => ({
-                      ...v,
-                      day_of_week: Number(v.day_of_week),
-                      duration_minutes: Number(v.duration_minutes),
-                    }),
-                  })
+        {metricCards([
+          ['Dijadualkan', live.length, `Bulan ${month}`],
+          ['Selesai', live.filter((x) => x.status === 'completed').length, 'Telah direkod tutor'],
+          [
+            'Belum direkod',
+            live.filter(
+              (x) => x.status !== 'completed' && new Date(String(x.ends_at)).getTime() < nowMs,
+            ).length,
+            'Masa sesi sudah berlalu',
+          ],
+          ['Hari ini', todays.length, 'Sesi hari ini'],
+        ])}
+        {/* Tab khas setiap tutor: lihat sesi dan elaun bulan ini, tiada kelulusan satu persatu. */}
+        <div className="subtabs session-tabs" role="tablist" aria-label="Pilih tutor">
+          {[
+            ['today', 'Hari ini'] as [string, string],
+            ...all('staff_profiles')
+              .filter((t) => t.role === 'tutor')
+              .map((t) => [String(t.id), String(t.display_name)] as [string, string]),
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={sessionTab === id}
+              className={sessionTab === id ? 'active' : ''}
+              onClick={() => setSessionTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {sessionTab === 'today' ? (
+          <Card
+            title="Sesi hari ini"
+            subtitle="Pilih tab tutor untuk melihat semua sesinya bulan ini"
+          >
+            {todays.length ? (
+              <Table
+                headers={['Masa', 'Murid · Program', 'Tutor', 'Status', 'Kehadiran', '']}
+                rows={todays.filter(matches).map((x) => [
+                  timeLabel(String(x.starts_at)),
+                  lookup('classes', x.class_id, 'name'),
+                  lookup('staff_profiles', x.tutor_id, 'display_name'),
+                  <Badge key="s" value={x.status} />,
+                  attendanceOf(x.id),
+                  <button key="o" className="text-link" onClick={() => go(`sessions/${x.id}`)}>
+                    Lihat <ChevronRight size={16} />
+                  </button>,
+                ])}
+              />
+            ) : (
+              <Empty text="Tiada sesi hari ini." />
+            )}
+          </Card>
+        ) : (
+          (() => {
+            const mine = live
+              .filter((x) => x.tutor_id === sessionTab)
+              .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
+            return (
+              <Card
+                title={lookup('staff_profiles', sessionTab, 'display_name')}
+                subtitle={`Bulan ${month} · elaun ${formatMoney(allowanceOf(sessionTab))}`}
+                action={
+                  <button className="text-link" onClick={() => go(`tutors/${sessionTab}`)}>
+                    Profil tutor <ChevronRight size={16} />
+                  </button>
                 }
               >
-                Tambah jadual
-              </button>
-            )
-          }
-        >
-          <Table
-            headers={['Kelas', 'Hari', 'Masa', 'Tempoh']}
-            rows={all('class_schedules').map((s) => [
-              lookup('classes', s.class_id, 'name'),
-              ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'][
-                Number(s.day_of_week)
-              ],
-              String(s.start_time),
-              `${s.duration_minutes} minit`,
-            ])}
-          />
-          <p className="footnote">
-            Sesi sebenar dijadualkan secara eksplisit; jadual mingguan tidak mengesahkan
-            pelaksanaan.
-          </p>
-        </Card>
+                <Table
+                  headers={[
+                    'Tarikh',
+                    'Masa',
+                    'Murid · Program',
+                    'Status',
+                    'Kehadiran',
+                    'Elaun',
+                    '',
+                  ]}
+                  rows={mine.filter(matches).map((x) => {
+                    const r = allowances.find((a) => a.session.id === x.id);
+                    return [
+                      dateLabel(String(x.starts_at)),
+                      timeLabel(String(x.starts_at)),
+                      lookup('classes', x.class_id, 'name'),
+                      <Badge key="s" value={x.status} />,
+                      attendanceOf(x.id),
+                      r ? formatMoney(r.payable_sen) : '—',
+                      <button key="o" className="text-link" onClick={() => go(`sessions/${x.id}`)}>
+                        Lihat <ChevronRight size={16} />
+                      </button>,
+                    ];
+                  })}
+                />
+              </Card>
+            );
+          })()
+        )}
       </>
     );
   }
@@ -1870,72 +1883,99 @@ export function App({
     );
   }
   function allowanceScreen() {
-    const entries = all('tutor_allowance_entries').filter((e) =>
-      monthlySessions.some((s) => s.id === e.session_id),
-    );
+    const total = allowances.reduce((n, r) => n + r.payable_sen, 0);
+    const missing = allowances.filter((r) => r.rate_sen === null).length;
+    const tutorIds = [...new Set(allowances.map((r) => r.tutorId))];
     return (
       <>
-        <div className="inline-note">
-          <ShieldCheck size={18} />
-          Elaun dibayar mengikut sesi kelas sebenar yang disahkan dan diluluskan. Kuota tidak layak
-          dibayar.
-        </div>
-        <div className="metrics">
-          {['reported', 'verified', 'approved', 'paid'].map((status) => (
-            <div className="metric" key={status}>
-              <span>{statusLabels[status]}</span>
-              <strong>
-                {status === 'reported'
-                  ? monthlySessions.filter((s) => s.review_status === status).length
-                  : formatMoney(
-                      entries
-                        .filter((e) => e.status === status)
-                        .reduce((n, e) => n + Number(e.amount_sen), 0),
-                    )}
-              </strong>
-              <small>
-                {status === 'reported' ? 'Sesi menunggu semakan' : 'Snapshot kadar sejarah'}
-              </small>
-            </div>
-          ))}
-        </div>
+        {metricCards([
+          [
+            role === 'tutor' ? 'Elaun saya' : 'Jumlah perlu dibayar',
+            formatMoney(total),
+            `Bulan ${month}`,
+          ],
+          ['Sesi dibayar', allowances.filter((r) => r.payable_sen > 0).length, 'Sesi selesai'],
+          [
+            'Tidak dibayar',
+            allowances.filter((r) => r.payable_sen === 0).length,
+            'Berizin / tiada kadar',
+          ],
+        ])}
+        {missing > 0 && (
+          <div className="inline-note">
+            {missing} sesi tiada kadar elaun untuk program dan tempohnya. Semak senarai kadar di
+            bawah.
+          </div>
+        )}
         <Card
-          title="Semakan sesi"
-          action={
-            finance && (
-              <button onClick={() => mutate('payout', { billing_period: month, action: 'create' })}>
-                Sediakan kelompok bulanan
-              </button>
-            )
-          }
+          title={role === 'tutor' ? 'Elaun saya' : 'Elaun tutor'}
+          subtitle="Dikira automatik. Hadir, Lewat, Ganti dan Tidak hadir dibayar; Berizin tidak dibayar."
         >
-          <Table
-            headers={['Tarikh', 'Kelas', 'Tutor', 'Semakan', 'Snapshot', 'Tindakan']}
-            rows={monthlySessions.map((s) => [
-              dateLabel(String(s.starts_at)),
-              lookup('classes', s.class_id, 'name'),
-              lookup('staff_profiles', s.tutor_id, 'display_name'),
-              <Badge key="s" value={s.review_status} />,
-              formatMoney(
-                Number(entries.find((e) => e.session_id === s.id)?.rate_snapshot_sen || 0),
-              ),
-              finance &&
-              s.status === 'completed' &&
-              ['reported', 'needs_review', 'verified'].includes(String(s.review_status)) ? (
-                <button
-                  key="review"
-                  disabled={busy}
-                  onClick={() =>
-                    mutate('review', { sid: s.id, approve: s.review_status === 'verified' })
-                  }
-                >
-                  {s.review_status === 'verified' ? 'Luluskan' : 'Sahkan sesi'}
-                </button>
+          {role === 'tutor' ? (
+            <Table
+              headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
+              rows={allowances.map((r) => [
+                dateLabel(String(r.session.starts_at)),
+                r.label,
+                `${r.minutes} min`,
+                r.attendance,
+                r.rate_sen === null ? 'Tiada kadar' : formatMoney(r.payable_sen),
+              ])}
+            />
+          ) : (
+            <>
+              {/* Tab khas setiap tutor dalam Kewangan: semak paparan sahaja, tiada kelulusan. */}
+              <div className="subtabs session-tabs" role="tablist" aria-label="Pilih tutor">
+                {[
+                  ['all', 'Semua tutor'] as [string, string],
+                  ...all('staff_profiles')
+                    .filter((t) => t.role === 'tutor')
+                    .map((t) => [String(t.id), String(t.display_name)] as [string, string]),
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    role="tab"
+                    aria-selected={allowanceTab === id}
+                    className={allowanceTab === id ? 'active' : ''}
+                    onClick={() => setAllowanceTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {allowanceTab === 'all' ? (
+                <Table
+                  headers={['Tutor', 'Sesi dibayar', 'Jumlah', '']}
+                  rows={tutorIds.map((tid) => [
+                    <strong key="n">{lookup('staff_profiles', tid, 'display_name')}</strong>,
+                    allowances.filter((r) => r.tutorId === tid && r.payable_sen > 0).length,
+                    <strong key="t">{formatMoney(allowanceOf(tid))}</strong>,
+                    <button key="o" className="text-link" onClick={() => setAllowanceTab(tid)}>
+                      Butiran <ChevronRight size={16} />
+                    </button>,
+                  ])}
+                />
               ) : (
-                '—'
-              ),
-            ])}
-          />
+                <>
+                  <p className="tab-total">
+                    Jumlah perlu dibayar: <strong>{formatMoney(allowanceOf(allowanceTab))}</strong>
+                  </p>
+                  <Table
+                    headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
+                    rows={allowances
+                      .filter((r) => r.tutorId === allowanceTab)
+                      .map((r) => [
+                        dateLabel(String(r.session.starts_at)),
+                        r.label,
+                        `${r.minutes} min`,
+                        r.attendance,
+                        r.rate_sen === null ? 'Tiada kadar' : formatMoney(r.payable_sen),
+                      ])}
+                  />
+                </>
+              )}
+            </>
+          )}
         </Card>
         <Card
           title="Kadar elaun berversi"
@@ -1961,52 +2001,6 @@ export function App({
             ])}
           />
         </Card>
-        {finance && (
-          <Card
-            title="Kelompok pembayaran"
-            subtitle="Penyedia dan pelulus mestilah dua orang berbeza"
-          >
-            <Table
-              headers={['Bulan', 'Jumlah', 'Status', 'Tindakan']}
-              rows={all('tutor_payout_batches').map((b) => [
-                String(b.period),
-                formatMoney(Number(b.total_sen)),
-                <Badge key="s" value={b.status} />,
-                b.status === 'review' ? (
-                  <button
-                    key="approve"
-                    onClick={() =>
-                      mutate('payout', { billing_period: b.period, action: 'approve', batch: b.id })
-                    }
-                  >
-                    Luluskan kelompok
-                  </button>
-                ) : b.status === 'approved' ? (
-                  <button
-                    key="pay"
-                    onClick={() =>
-                      setDialog({
-                        title: 'Catat pembayaran sebenar',
-                        operation: 'payout',
-                        fields: [{ name: 'payment_ref', label: 'Rujukan transaksi bank' }],
-                        transform: (v) => ({
-                          ...v,
-                          billing_period: b.period,
-                          action: 'pay',
-                          batch: b.id,
-                        }),
-                      })
-                    }
-                  >
-                    Catat pembayaran
-                  </button>
-                ) : (
-                  '—'
-                ),
-              ])}
-            />
-          </Card>
-        )}
       </>
     );
   }
@@ -2384,21 +2378,12 @@ export function App({
         .filter((s) => s.tutor_id === tid && inMonth(s))
         .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
     const done = (ss: Row[]) => ss.filter((s) => s.status === 'completed').length;
-    const pending = (ss: Row[]) =>
-      ss.filter((s) => s.status === 'completed' && s.review_status === 'reported').length;
     const tutors = all('staff_profiles').filter((t) => t.role === 'tutor');
     const tutorId = page.split('/')[1];
     const tutor = tutors.find((t) => t.id === tutorId);
     if (tutor) {
       const ss = sessionsOf(tutor.id);
       const enrol = studentsOf(tutor.id);
-      const allowance = all('tutor_allowance_entries')
-        .filter(
-          (e) =>
-            ss.some((s) => s.id === e.session_id) &&
-            ['approved', 'paid'].includes(String(e.status)),
-        )
-        .reduce((n, e) => n + Number(e.amount_sen), 0);
       return (
         <>
           <div className="profile-hero">
@@ -2416,8 +2401,7 @@ export function App({
               ['Murid', new Set(enrol.map((e) => e.student_id)).size, 'Murid aktif'],
               ['Sesi dijadualkan', ss.length, `Bulan ${month}`],
               ['Sesi selesai', done(ss), 'Telah dilaksanakan'],
-              ['Belum disemak', pending(ss), 'Menunggu semakan admin'],
-              ['Elaun diluluskan', formatMoney(allowance), 'Sesi diluluskan bulan ini'],
+              ['Elaun perlu dibayar', formatMoney(allowanceOf(tutor.id)), 'Dikira automatik'],
             ].map(([label, value, hint]) => (
               <div className="metric" key={String(label)}>
                 <div className="metric-top">
@@ -2450,14 +2434,17 @@ export function App({
           </Card>
           <Card title="Sesi bulan ini" subtitle="Kelas yang dijadualkan dan dilaksanakan">
             <Table
-              headers={['Tarikh', 'Masa', 'Murid · Program', 'Tempoh', 'Status', 'Semakan', '']}
+              headers={['Tarikh', 'Masa', 'Murid · Program', 'Tempoh', 'Status', 'Elaun', '']}
               rows={ss.map((s) => [
                 dateLabel(String(s.starts_at)),
                 timeLabel(String(s.starts_at)),
                 lookup('classes', s.class_id, 'name'),
                 `${(new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000} min`,
                 <Badge key="s" value={s.status} />,
-                <Badge key="r" value={s.review_status} />,
+                (() => {
+                  const r = allowances.find((x) => x.session.id === s.id);
+                  return r ? formatMoney(r.payable_sen) : '—';
+                })(),
                 <button key="o" className="text-link" onClick={() => go(`sessions/${s.id}`)}>
                   Buka sesi <ChevronRight size={16} />
                 </button>,
@@ -2470,14 +2457,14 @@ export function App({
     return (
       <Card title="Senarai tutor" subtitle={`Ringkasan bulan ${month}. Klik tutor untuk butiran.`}>
         <Table
-          headers={['Tutor', 'Murid', 'Sesi selesai', 'Belum disemak', 'Status', '']}
+          headers={['Tutor', 'Murid', 'Sesi selesai', 'Elaun bulan ini', 'Status', '']}
           rows={tutors.filter(matches).map((t) => {
             const ss = sessionsOf(t.id);
             return [
               <strong key="n">{String(t.display_name)}</strong>,
               new Set(studentsOf(t.id).map((e) => e.student_id)).size,
               `${done(ss)} / ${ss.length}`,
-              pending(ss),
+              formatMoney(allowanceOf(t.id)),
               <Badge key="s" value={t.active ? 'active' : 'archived'} />,
               <button key="o" className="text-link" onClick={() => go(`tutors/${t.id}`)}>
                 Lihat <ChevronRight size={16} />
