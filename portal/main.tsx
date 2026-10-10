@@ -36,6 +36,15 @@ function Root() {
         return;
       }
       try {
+        // Pautan e-mel/admin berbentuk ?token_hash=…&type=email disahkan sekali, kemudian dibuang dari URL.
+        const params = new URLSearchParams(location.search);
+        const tokenHash = params.get('token_hash');
+        const type = params.get('type');
+        if (tokenHash && (type === 'email' || type === 'magiclink')) {
+          history.replaceState(null, '', location.pathname + location.hash);
+          const { error } = await db.auth.verifyOtp({ token_hash: tokenHash, type });
+          if (error) throw new Error('Pautan log masuk tidak sah atau telah tamat tempoh.');
+        }
         const {
           data: { session },
         } = await db.auth.getSession();
