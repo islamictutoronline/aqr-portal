@@ -547,17 +547,31 @@ export function App({
       setBusy(false);
     }
   }
-  const createStudent = () =>
+  // Murid sentiasa didaftarkan terus ke kelas (satu transaksi DB dengan semakan kapasiti).
+  const createStudent = () => {
+    const classes = options('classes', 'name');
+    if (!classes.length) {
+      setNotice(
+        role === 'tutor'
+          ? 'Tiada kelas ditugaskan kepada anda. Hubungi admin.'
+          : 'Cipta kelas dahulu, kemudian daftar murid ke dalam kelas itu.',
+      );
+      if (role !== 'tutor') createClass();
+      return;
+    }
     setDialog({
       title: 'Daftar murid',
-      operation: role === 'tutor' ? 'tutor_student' : 'student',
+      operation: 'tutor_student',
       fields: [
-        { name: role === 'tutor' ? 'student_name' : 'full_name', label: 'Nama penuh' },
-        ...(role === 'tutor'
-          ? [{ name: 'cid', label: 'Kelas ditugaskan', options: options('classes', 'name') }]
-          : [{ name: 'preferred_name', label: 'Nama panggilan', optional: true }]),
+        { name: 'student_name', label: 'Nama penuh' },
+        {
+          name: 'cid',
+          label: role === 'tutor' ? 'Kelas ditugaskan' : 'Kelas',
+          options: classes,
+        },
       ],
     });
+  };
   const createGuardian = () =>
     setDialog({
       title: 'Tambah penjaga',

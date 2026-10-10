@@ -504,6 +504,28 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       0,
     );
   });
+  it('admin registers a student directly into any active class; guardians cannot', async () => {
+    await asUser(academic);
+    const created = (
+      await db.query<{ id: string }>('select tutor_register_student($1,$2,$3) as id', [
+        org,
+        id(44),
+        'Admin fictional child',
+      ])
+    ).rows[0].id;
+    expect(
+      (
+        await db.query('select class_id from enrollments where student_id=$1 and class_id=$2', [
+          created,
+          id(44),
+        ])
+      ).rows,
+    ).toHaveLength(1);
+    await asUser(parent);
+    await expect(
+      db.query('select tutor_register_student($1,$2,$3)', [org, id(43), 'Parent child']),
+    ).rejects.toThrow();
+  });
   it('self-registration stays pending and cannot self-promote', async () => {
     const newcomer = id(90);
     await db.exec('reset role');
