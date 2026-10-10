@@ -38,6 +38,7 @@ import {
   dateLabel,
   timeLabel,
   invoiceBalance,
+  monthBounds,
   skillOptions,
   participationOptions,
   focusOptions,
@@ -89,11 +90,12 @@ const nav = [
 const menu = [
   ['dashboard', 'Utama', LayoutDashboard, ['dashboard']],
   ['parent', 'Anak saya', HeartHandshake, ['parent']],
+  // Pentadbir bermula dari tutor; tutor sendiri hanya nampak "Murid".
+  ['tutors', 'Tutor', GraduationCap, ['tutors', 'students', 'guardians']],
   ['calendar', 'Sesi & kehadiran', CalendarDays, ['calendar']],
-  ['students', 'Murid', Users, ['students', 'guardians']],
   ['reports', 'Laporan', ChartNoAxesCombined, ['reports']],
   ['finance', 'Kewangan', Wallet, ['finance', 'allowance']],
-  ['settings', 'Tetapan', Settings, ['tutors', 'classes', 'settings']],
+  ['settings', 'Tetapan', Settings, ['classes', 'settings']],
 ] as const;
 function Badge({ value }: { value: unknown }) {
   const s = String(value);
@@ -260,12 +262,18 @@ export function App({
   const section = page.split('/')[0];
   const allowed = navigation.map((n) => n[0] as string);
   const groups = menu
-    .map(([id, label, Icon, members]) => ({
-      id,
-      label,
-      Icon,
-      members: (members as readonly string[]).filter((m) => allowed.includes(m)),
-    }))
+    .map(([id, label, Icon, members]) => {
+      const visibleMembers = (members as readonly string[]).filter((m) => allowed.includes(m));
+      // Kumpulan berahli tunggal mengambil nama dan ikon halaman itu sendiri.
+      const single =
+        visibleMembers.length === 1 ? nav.find((n) => n[0] === visibleMembers[0]) : undefined;
+      return {
+        id,
+        label: single ? single[1] : label,
+        Icon: single ? single[2] : Icon,
+        members: visibleMembers,
+      };
+    })
     .filter((g) => g.members.length);
   const group = groups.find((g) => g.members.includes(section));
   const title =
@@ -2027,21 +2035,126 @@ export function App({
       </>
     );
   }
+  // Paparan pentadbir berpusatkan tutor: senarai tutor, kemudian profil dengan murid dan sesi.
   function tutorsScreen() {
+    const { start, end } = monthBounds(month);
+    const inMonth = (s: Row) => {
+      const t = new Date(String(s.starts_at));
+      return t >= new Date(start) && t < new Date(end);
+    };
+    const classesOf = (tid: unknown) =>
+      all('class_tutors')
+        .filter((c) => c.staff_id === tid && !c.ends_on)
+        .map((c) => c.class_id);
+    const studentsOf = (tid: unknown) =>
+      all('enrollments').filter(
+        (e) => e.status === 'active' && classesOf(tid).includes(e.class_id),
+      );
+    const sessionsOf = (tid: unknown) =>
+      all('class_sessions')
+        .filter((s) => s.tutor_id === tid && inMonth(s))
+        .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
+    const done = (ss: Row[]) => ss.filter((s) => s.status === 'completed').length;
+    const pending = (ss: Row[]) =>
+      ss.filter((s) => s.status === 'completed' && s.review_status === 'reported').length;
+    const tutors = all('staff_profiles').filter((t) => t.role === 'tutor');
+    const tutorId = page.split('/')[1];
+    const tutor = tutors.find((t) => t.id === tutorId);
+    if (tutor) {
+      const ss = sessionsOf(tutor.id);
+      const enrol = studentsOf(tutor.id);
+      const allowance = all('tutor_allowance_entries')
+        .filter(
+          (e) =>
+            ss.some((s) => s.id === e.session_id) &&
+            ['approved', 'paid'].includes(String(e.status)),
+        )
+        .reduce((n, e) => n + Number(e.amount_sen), 0);
+      return (
+        <>
+          <div className="profile-hero">
+            <span className="avatar large">{String(tutor.display_name).slice(0, 1)}</span>
+            <div>
+              <h1>{String(tutor.display_name)}</h1>
+              <Badge value={tutor.active ? 'active' : 'archived'} />
+            </div>
+            <button className="secondary" onClick={() => go('tutors')}>
+              Semua tutor
+            </button>
+          </div>
+          <div className="metrics">
+            {[
+              ['Murid', new Set(enrol.map((e) => e.student_id)).size, 'Murid aktif'],
+              ['Sesi dijadualkan', ss.length, `Bulan ${month}`],
+              ['Sesi selesai', done(ss), 'Telah dilaksanakan'],
+              ['Belum disemak', pending(ss), 'Menunggu semakan admin'],
+              ['Elaun diluluskan', formatMoney(allowance), 'Sesi diluluskan bulan ini'],
+            ].map(([label, value, hint]) => (
+              <div className="metric" key={String(label)}>
+                <div className="metric-top">
+                  <span>{label}</span>
+                </div>
+                <strong>{value}</strong>
+                <small>{hint}</small>
+              </div>
+            ))}
+          </div>
+          <Card title="Murid" subtitle="Murid dan program yang diajar oleh tutor ini">
+            <Table
+              headers={['Murid', 'Program', 'Sesi selesai bulan ini', '']}
+              rows={enrol.map((e) => {
+                const c = all('classes').find((x) => x.id === e.class_id);
+                return [
+                  <strong key="n">{lookup('students', e.student_id)}</strong>,
+                  lookup('programs', c?.program_id, 'name'),
+                  done(ss.filter((s) => s.class_id === e.class_id)),
+                  <button
+                    key="o"
+                    className="text-link"
+                    onClick={() => go(`students/${e.student_id}`)}
+                  >
+                    Lihat murid <ChevronRight size={16} />
+                  </button>,
+                ];
+              })}
+            />
+          </Card>
+          <Card title="Sesi bulan ini" subtitle="Kelas yang dijadualkan dan dilaksanakan">
+            <Table
+              headers={['Tarikh', 'Masa', 'Murid · Program', 'Tempoh', 'Status', 'Semakan', '']}
+              rows={ss.map((s) => [
+                dateLabel(String(s.starts_at)),
+                timeLabel(String(s.starts_at)),
+                lookup('classes', s.class_id, 'name'),
+                `${(new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000} min`,
+                <Badge key="s" value={s.status} />,
+                <Badge key="r" value={s.review_status} />,
+                <button key="o" className="text-link" onClick={() => go(`sessions/${s.id}`)}>
+                  Buka sesi <ChevronRight size={16} />
+                </button>,
+              ])}
+            />
+          </Card>
+        </>
+      );
+    }
     return (
-      <Card title="Pasukan tutor" subtitle="Akses berasaskan tugasan kelas dan julat tarikh">
+      <Card title="Senarai tutor" subtitle={`Ringkasan bulan ${month}. Klik tutor untuk butiran.`}>
         <Table
-          headers={['Tutor', 'Kelas ditugaskan', 'Status']}
-          rows={all('staff_profiles')
-            .filter((t) => t.role === 'tutor')
-            .map((t) => [
-              String(t.display_name),
-              all('class_tutors')
-                .filter((c) => c.staff_id === t.id)
-                .map((c) => lookup('classes', c.class_id, 'name'))
-                .join(', ') || 'Belum ditugaskan',
+          headers={['Tutor', 'Murid', 'Sesi selesai', 'Belum disemak', 'Status', '']}
+          rows={tutors.filter(matches).map((t) => {
+            const ss = sessionsOf(t.id);
+            return [
+              <strong key="n">{String(t.display_name)}</strong>,
+              new Set(studentsOf(t.id).map((e) => e.student_id)).size,
+              `${done(ss)} / ${ss.length}`,
+              pending(ss),
               <Badge key="s" value={t.active ? 'active' : 'archived'} />,
-            ])}
+              <button key="o" className="text-link" onClick={() => go(`tutors/${t.id}`)}>
+                Lihat <ChevronRight size={16} />
+              </button>,
+            ];
+          })}
         />
         {role === 'owner' && (
           <form
@@ -2235,7 +2348,9 @@ export function App({
             guardiansScreen()
           ) : section === 'tutors' ? (
             <>
-              <TutorApplications data={visible} onData={setData} demo={demo} />
+              {!page.split('/')[1] && (
+                <TutorApplications data={visible} onData={setData} demo={demo} />
+              )}
               {tutorsScreen()}
             </>
           ) : section === 'classes' ? (

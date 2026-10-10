@@ -135,3 +135,19 @@ test('individual model: tutor registers by program, adds a program and schedules
   await expect(page.getByRole('combobox', { name: 'Murid' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Tutor' })).toHaveCount(0);
 });
+test('admin starts from tutors: list, then tutor profile with students and sessions', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/tutors');
+  await expect(page.getByRole('tab', { name: 'Tutor', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const row = page.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  await row.getByRole('button', { name: /Lihat/ }).click();
+  await expect(page.getByRole('heading', { name: 'Tutor Contoh 1', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesi bulan ini' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Lihat murid/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Semua tutor' }).click();
+  await expect(page.getByRole('heading', { name: 'Senarai tutor' })).toBeVisible();
+});
