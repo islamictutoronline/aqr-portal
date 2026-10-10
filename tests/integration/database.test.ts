@@ -616,6 +616,86 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       db.query('select tutor_add_student($1,$2,$3)', [org, 'Parent child', id(42)]),
     ).rejects.toThrow();
   });
+  it('tutor enrols a student with a weekly schedule; sessions appear; removal keeps history', async () => {
+    await asUser(tutor);
+    const slots = JSON.stringify([
+      { day: 1, time: '20:00' },
+      { day: 4, time: '21:00' },
+    ]);
+    await expect(
+      db.query('select tutor_enrol_student($1,$2,$3,$4,$5)', [org, 'Bad', id(42), 45, slots]),
+    ).rejects.toThrow();
+    await expect(
+      db.query('select tutor_enrol_student($1,$2,$3,$4,$5)', [
+        org,
+        'Dup child',
+        id(42),
+        30,
+        JSON.stringify([
+          { day: 1, time: '20:00' },
+          { day: 1, time: '20:00' },
+        ]),
+      ]),
+    ).rejects.toThrow();
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Weekly child',
+        id(42),
+        30,
+        slots,
+      ])
+    ).rows[0].id;
+    const cls = (
+      await db.query<{ class_id: string }>(
+        "select class_id from enrollments where student_id=$1 and status='active'",
+        [kid],
+      )
+    ).rows[0].class_id;
+    const rules = (
+      await db.query<{ effective_to: string }>(
+        "select to_char(effective_to,'YYYY-MM-DD') as effective_to from class_schedules where class_id=$1",
+        [cls],
+      )
+    ).rows;
+    expect(rules).toHaveLength(2);
+    expect(rules.every((r) => r.effective_to === '2027-12-31')).toBe(true);
+    const sessions = (
+      await db.query<{ starts_at: string; tutor_id: string; ends_at: string }>(
+        'select starts_at,ends_at,tutor_id from class_sessions where class_id=$1',
+        [cls],
+      )
+    ).rows;
+    expect(sessions.length).toBeGreaterThanOrEqual(8);
+    expect(sessions.every((x) => x.tutor_id === tutor)).toBe(true);
+    expect(
+      sessions.every(
+        (x) => new Date(x.ends_at).getTime() - new Date(x.starts_at).getTime() === 30 * 60000,
+      ),
+    ).toBe(true);
+    expect(
+      (await db.query<{ n: number }>('select extend_schedule($1) as n', [org])).rows[0].n,
+    ).toBe(0);
+    await asUser(unrelated);
+    await expect(db.query('select remove_student($1,$2)', [org, kid])).rejects.toThrow();
+    await asUser(parent);
+    await expect(db.query('select remove_student($1,$2)', [org, kid])).rejects.toThrow();
+    await asUser(tutor);
+    await db.query('select remove_student($1,$2)', [org, kid]);
+    await asUser(owner);
+    expect(
+      (await db.query<{ status: string }>('select status from students where id=$1', [kid])).rows[0]
+        .status,
+    ).toBe('archived');
+    expect(
+      (
+        await db.query(
+          "select id from class_sessions where class_id=$1 and status='scheduled' and starts_at>now()",
+          [cls],
+        )
+      ).rows,
+    ).toHaveLength(0);
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

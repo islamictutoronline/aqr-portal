@@ -72,7 +72,56 @@ export type Dialog = {
   operation: string;
   fields: Field[];
   transform?: (values: Record<string, string>) => Record<string, unknown>;
+  extra?: React.ReactNode;
 };
+const weekDays: [string, string][] = [
+  ['1', 'Isnin'],
+  ['2', 'Selasa'],
+  ['3', 'Rabu'],
+  ['4', 'Khamis'],
+  ['5', 'Jumaat'],
+  ['6', 'Sabtu'],
+  ['0', 'Ahad'],
+];
+// Slot mingguan: bilangan sesi seminggu menentukan berapa pasangan hari + jam dipaparkan.
+function WeeklySlots() {
+  const [count, setCount] = useState(1);
+  return (
+    <>
+      <label>
+        Sesi seminggu
+        <select name="per_week" value={count} onChange={(e) => setCount(Number(e.target.value))}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>
+              {n} sesi
+            </option>
+          ))}
+        </select>
+      </label>
+      {Array.from({ length: count }, (_, i) => (
+        <div className="slot-row" key={i}>
+          <label>
+            Sesi {i + 1}: hari
+            <select name={`day_${i + 1}`} required defaultValue="">
+              <option value="" disabled>
+                Pilih…
+              </option>
+              {weekDays.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Jam
+            <input name={`time_${i + 1}`} type="time" required />
+          </label>
+        </div>
+      ))}
+    </>
+  );
+}
 const nav = [
   ['dashboard', 'Utama', LayoutDashboard],
   ['students', 'Murid', Users],
@@ -223,6 +272,29 @@ export function App({
     path.startsWith('sessions/') ? path.split('/')[1] : '',
   );
   const [child, setChild] = useState('');
+  // Jadual mingguan dilanjutkan sehingga hujung bulan hadapan; idempoten, jadi selamat setiap muat.
+  useEffect(() => {
+    if (demo || !['owner', 'admin', 'tutor'].includes(initialRole)) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await apiFetch('/api/mutate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operation: 'extend_schedule', payload: {} }),
+        });
+        const result = await r.json();
+        if (!r.ok || !alive || !Number(result.id)) return;
+        const refresh = await apiFetch('/api/data', { cache: 'no-store' });
+        if (refresh.ok && alive) setData(await refresh.json());
+      } catch {
+        // Lanjutan jadual ialah bantuan; kegagalan tidak menghalang penggunaan lain.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [demo, initialRole]);
   const [reportCode, setReportCode] = useState<ReportCode>('monthly_teaching');
   const academic = ['owner', 'admin'].includes(role);
   const finance = ['owner', 'admin'].includes(role);
@@ -310,7 +382,66 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'tutor_add_student' || operation === 'add_program') {
+        else if (operation === 'tutor_enrol') {
+          const studentId = `${id}-student`;
+          const program = next.programs.find((x) => x.id === payload.program_id)!;
+          next.students.push({ id: studentId, full_name: payload.student_name, status: 'active' });
+          next.classes.push({
+            id,
+            program_id: program.id,
+            name: `${payload.student_name} · ${program.name}`,
+            mode: 'one_to_one',
+            delivery: 'online',
+            max_capacity: 1,
+            active: true,
+          });
+          const today = new Date().toISOString().slice(0, 10);
+          next.class_tutors.push({
+            id: `${id}-tutor`,
+            class_id: id,
+            staff_id: activeTutor,
+            starts_on: today,
+          });
+          next.enrollments.push({
+            id: `${id}-enrollment`,
+            student_id: studentId,
+            class_id: id,
+            status: 'active',
+            starts_on: today,
+          });
+          // Demo: jana empat minggu sesi daripada slot mingguan.
+          for (const slot of payload.slots as { day: number; time: string }[])
+            for (let d = 0; d < 28; d++) {
+              const day = new Date(Date.now() + d * 86400000);
+              if (day.getDay() !== slot.day) continue;
+              const start = new Date(`${day.toISOString().slice(0, 10)}T${slot.time}:00+08:00`);
+              next.class_sessions.push({
+                id: `${id}-${slot.day}-${d}`,
+                class_id: id,
+                tutor_id: activeTutor,
+                starts_at: start.toISOString(),
+                ends_at: new Date(start.getTime() + Number(payload.minutes) * 60000).toISOString(),
+                status: 'scheduled',
+                review_status: 'reported',
+              });
+            }
+        } else if (operation === 'remove_student') {
+          const sid = payload.student_id;
+          next.enrollments
+            .filter((e) => e.student_id === sid && e.status === 'active')
+            .forEach((e) => {
+              e.status = 'withdrawn';
+              next.class_sessions
+                .filter(
+                  (x) =>
+                    x.class_id === e.class_id &&
+                    x.status === 'scheduled' &&
+                    new Date(String(x.starts_at)) > new Date(),
+                )
+                .forEach((x) => (x.status = 'cancelled'));
+            });
+          next.students.find((x) => x.id === sid)!.status = 'archived';
+        } else if (operation === 'tutor_add_student' || operation === 'add_program') {
           const studentId =
             operation === 'add_program' ? String(payload.student_id) : `${id}-student`;
           if (operation === 'tutor_add_student')
@@ -604,15 +735,42 @@ export function App({
       setBusy(false);
     }
   }
-  // Model individu: tutor mendaftar murid dengan program; kelas individu dicipta di pangkalan data.
+  // Tutor mendaftar murid bersama jadual mingguan; sesi dijana terus ke Sesi & kehadiran.
   const createStudent = () =>
     setDialog({
       title: 'Daftar murid',
-      operation: 'tutor_add_student',
+      operation: 'tutor_enrol',
       fields: [
         { name: 'student_name', label: 'Nama penuh' },
         { name: 'program_id', label: 'Program', options: options('programs', 'name') },
+        {
+          name: 'minutes',
+          label: 'Minit setiap sesi',
+          options: [
+            ['30', '30 minit'],
+            ['20', '20 minit'],
+          ],
+        },
+        { name: 'end_date', label: 'Sehingga tarikh', type: 'date', value: '2027-12-31' },
       ],
+      extra: <WeeklySlots />,
+      transform: (v) => ({
+        student_name: v.student_name,
+        program_id: v.program_id,
+        minutes: Number(v.minutes),
+        end_date: v.end_date,
+        slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
+          day: Number(v[`day_${i + 1}`]),
+          time: v[`time_${i + 1}`],
+        })),
+      }),
+    });
+  const removeStudent = (studentId: unknown, studentName: unknown) =>
+    setDialog({
+      title: `Padam murid · ${String(studentName)}`,
+      operation: 'remove_student',
+      fields: [],
+      transform: () => ({ student_id: studentId }),
     });
   const addProgram = (studentId: string) =>
     setDialog({
@@ -1126,6 +1284,7 @@ export function App({
           headers={['Murid', 'Program', 'Status', '']}
           rows={all('students')
             .filter(matches)
+            .filter((s) => role !== 'tutor' || s.status === 'active')
             .map((s) => [
               <div key="name" className="person">
                 <span className="avatar">{String(s.full_name).slice(0, 1)}</span>
@@ -1135,9 +1294,19 @@ export function App({
                 .map((p) => p.program)
                 .join(', ') || 'Belum berdaftar',
               <Badge key="status" value={s.status} />,
-              <button key="open" className="text-link" onClick={() => go(`students/${s.id}`)}>
-                Lihat profil <ChevronRight size={16} />
-              </button>,
+              <div key="open" className="button-row">
+                <button className="text-link" onClick={() => go(`students/${s.id}`)}>
+                  Lihat profil <ChevronRight size={16} />
+                </button>
+                {role === 'tutor' && (
+                  <button
+                    className="text-link danger"
+                    onClick={() => removeStudent(s.id, s.full_name)}
+                  >
+                    Padam
+                  </button>
+                )}
+              </div>,
             ])}
         />
       </Card>
@@ -1269,7 +1438,7 @@ export function App({
           }
         >
           <Table
-            headers={['Tarikh / masa', 'Kelas', 'Tutor', 'Status', 'Semakan', '']}
+            headers={['Tarikh / masa', 'Murid · Program', 'Tutor', 'Status', 'Semakan', '']}
             rows={monthlySessions.filter(matches).map((s) => [
               <div key="date">
                 <strong>{dateLabel(String(s.starts_at))}</strong>
@@ -2497,7 +2666,14 @@ export function App({
                   )}
                 </label>
               ))}
-              {!dialog.fields.length && <p>Sahkan tindakan ini. Rekod sejarah tidak dipadam.</p>}
+              {dialog.extra}
+              {!dialog.fields.length && (
+                <p>
+                  {dialog.operation === 'remove_student'
+                    ? 'Murid dikeluarkan dan sesi akan datang dibatalkan. Rekod kehadiran dan elaun yang lepas dikekalkan.'
+                    : 'Sahkan tindakan ini. Rekod sejarah tidak dipadam.'}
+                </p>
+              )}
               <button className="primary wide" type="submit" disabled={busy}>
                 {busy ? 'Menyimpan…' : demo ? 'Simpan dalam demo' : 'Simpan rekod'}
                 <Check size={16} />

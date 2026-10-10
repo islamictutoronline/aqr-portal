@@ -187,6 +187,23 @@ const schemas = {
   tutor_application: z.object({ application: uuid, accept: z.boolean() }),
   tutor_student: z.object({ cid: uuid, student_name: text }),
   tutor_add_student: z.object({ student_name: text, program_id: uuid }),
+  tutor_enrol: z.object({
+    student_name: text,
+    program_id: uuid,
+    minutes: z.union([z.literal(20), z.literal(30)]),
+    slots: z
+      .array(
+        z.object({
+          day: z.number().int().min(0).max(6),
+          time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        }),
+      )
+      .min(1)
+      .max(7),
+    end_date: z.iso.date(),
+  }),
+  remove_student: z.object({ student_id: uuid }),
+  extend_schedule: z.object({}),
   add_program: z.object({ student_id: uuid, program_id: uuid, tutor_id: uuid.optional() }),
   tutor_class: z.object({
     program_id: uuid,
@@ -261,6 +278,9 @@ export async function executeMutation(
       tutor_class: 'tutor_create_class',
       tutor_add_student: 'tutor_add_student',
       add_program: 'add_student_program',
+      tutor_enrol: 'tutor_enrol_student',
+      remove_student: 'remove_student',
+      extend_schedule: 'extend_schedule',
       session: 'create_session',
       assessment: 'record_assessment',
       rate: 'set_rate',

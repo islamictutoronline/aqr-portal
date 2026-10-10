@@ -1496,3 +1496,13 @@ body {
 .more-tools[open] > summary {
   margin-bottom: 14px;
 }
+
+/* Borang jadual mingguan: hari dan jam sebaris. */
+.slot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.text-link.danger {
+  color: #b42318;
+}

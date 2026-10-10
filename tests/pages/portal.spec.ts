@@ -1,4 +1,14 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+// Isi borang Daftar murid (model individu dengan satu slot mingguan).
+async function enrol(page: Page, name: string, program: string) {
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await page.getByLabel('Nama penuh', { exact: true }).fill(name);
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: program });
+  await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
+  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
+  await page.getByLabel('Jam').first().fill('20:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+}
 import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
@@ -91,10 +101,7 @@ test('tutor can register a student in assigned class and retain tap-only assessm
     await page.getByRole('button', { name: 'Buka menu' }).click();
     await page.getByRole('button', { name: 'Murid', exact: true }).click();
   }
-  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
-  await page.getByLabel('Nama penuh', { exact: true }).fill('Murid Ujian Baharu');
-  await page.getByRole('combobox', { name: 'Program' }).selectOption({ index: 1 });
-  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await enrol(page, 'Murid Ujian Baharu', "Iqra'");
   await expect(page.getByText('Murid Ujian Baharu', { exact: true })).toBeVisible();
   await page.goto('/?demo=1#/sessions/session-6');
   await page.reload();
@@ -114,10 +121,7 @@ test('individual model: tutor registers by program, adds a program and schedules
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Murid', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Kelas' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
-  await page.getByLabel('Nama penuh', { exact: true }).fill('Murid Individu');
-  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
-  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await enrol(page, 'Murid Individu', "Iqra'");
   const row = page.getByRole('row').filter({ hasText: 'Murid Individu' });
   await expect(row).toContainText("Iqra'");
   await row.getByRole('button', { name: /Lihat profil/ }).click();
@@ -150,4 +154,30 @@ test('admin starts from tutors: list, then tutor profile with students and sessi
   await expect(page.getByRole('button', { name: /Lihat murid/ }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Semua tutor' }).click();
   await expect(page.getByRole('heading', { name: 'Senarai tutor' })).toBeVisible();
+});
+test('tutor registers a student with a weekly schedule, sees sessions, then removes the student', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).click();
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await page.getByLabel('Nama penuh', { exact: true }).fill('Murid Jadual');
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
+  await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
+  await expect(page.getByLabel('Sehingga tarikh')).toHaveValue('2027-12-31');
+  await page.getByRole('combobox', { name: 'Sesi seminggu' }).selectOption('2');
+  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
+  await page.getByLabel('Jam').nth(0).fill('20:00');
+  await page.getByRole('combobox', { name: 'Sesi 2: hari' }).selectOption({ label: 'Khamis' });
+  await page.getByLabel('Jam').nth(1).fill('21:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  const row = page.getByRole('row').filter({ hasText: 'Murid Jadual' });
+  await expect(row).toContainText("Iqra'");
+  await row.getByRole('button', { name: 'Padam' }).click();
+  await expect(page.getByText(/sesi akan datang dibatalkan/)).toBeVisible();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Murid Jadual' })).toHaveCount(0);
 });
