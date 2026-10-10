@@ -748,6 +748,58 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       ]),
     ).rejects.toThrow();
   });
+  it('tutor re-records attendance and voids a mistaken session; voided is excluded', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Void child',
+        id(42),
+        30,
+        JSON.stringify([{ day: 3, time: '18:00' }]),
+      ])
+    ).rows[0].id;
+    const sid = (
+      await db.query<{ id: string }>(
+        "select s.id from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 and s.status='scheduled' order by s.starts_at limit 1",
+        [kid],
+      )
+    ).rows[0].id;
+    const record = (status: string) =>
+      db.query('select record_assessment($1,$2,$3,$4,$5,$6)', [
+        org,
+        sid,
+        kid,
+        status,
+        JSON.stringify({ mastery: 'not_assessed' }),
+        true,
+      ]);
+    await record('absent');
+    await record('excused');
+    expect(
+      (
+        await db.query<{ status: string }>('select status from attendance where session_id=$1', [
+          sid,
+        ])
+      ).rows,
+    ).toEqual([{ status: 'excused' }]);
+    await asUser(unrelated);
+    await expect(db.query('select void_session($1,$2)', [org, sid])).rejects.toThrow();
+    await asUser(tutor);
+    await db.query('select void_session($1,$2)', [org, sid]);
+    expect(
+      (await db.query<{ status: string }>('select status from class_sessions where id=$1', [sid]))
+        .rows[0].status,
+    ).toBe('cancelled');
+    expect(
+      (
+        await db.query(
+          "select id from generated_parent_comments where session_id=$1 and status='published'",
+          [sid],
+        )
+      ).rows,
+    ).toHaveLength(0);
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

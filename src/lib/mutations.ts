@@ -204,6 +204,7 @@ const schemas = {
   }),
   remove_student: z.object({ student_id: uuid }),
   extend_schedule: z.object({}),
+  void_session: z.object({ sid: uuid }),
   add_program: z.object({ student_id: uuid, program_id: uuid, tutor_id: uuid.optional() }),
   tutor_class: z.object({
     program_id: uuid,
@@ -281,6 +282,7 @@ export async function executeMutation(
       tutor_enrol: 'tutor_enrol_student',
       remove_student: 'remove_student',
       extend_schedule: 'extend_schedule',
+      void_session: 'void_session',
       session: 'create_session',
       assessment: 'record_assessment',
       rate: 'set_rate',

@@ -110,7 +110,7 @@ test('tutor can register a student in assigned class and retain tap-only assessm
   await page.getByRole('button', { name: '3 Memuaskan', exact: true }).click();
   await page.getByRole('button', { name: 'aktif', exact: true }).click();
   await page.getByRole('button', { name: 'sebutan yang tepat', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Terbit kepada ibu bapa' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
 });
 test('individual model: tutor registers by program, adds a program and schedules a session', async ({
   page,
@@ -209,4 +209,29 @@ test('admin dashboard hides the learning sessions list; tutor still sees it', as
   await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toHaveCount(0);
   await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
   await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toBeVisible();
+});
+test('tutor edits a recorded attendance, sees remaining sessions and voids a class', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await expect(page.locator('.student-picker button').first()).toContainText('Berbaki');
+  await page.locator('.student-picker button').first().click();
+  const history = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await expect(history).toContainText('sesi berbaki');
+  await history.getByRole('button', { name: 'Edit' }).first().click();
+  await expect(page.getByRole('button', { name: 'Simpan perubahan' })).toBeVisible();
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan perubahan' }).click();
+  await expect(page.getByRole('status')).toContainText('memori tab');
+  const rows = await history.getByRole('button', { name: 'Padam' }).count();
+  await history.getByRole('button', { name: 'Padam' }).first().click();
+  await expect(page.getByText(/tidak dikira elaun/)).toBeVisible();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(history.getByRole('button', { name: 'Padam' })).toHaveCount(rows - 1);
 });

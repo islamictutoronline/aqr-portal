@@ -402,7 +402,12 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'change_session') {
+        else if (operation === 'void_session') {
+          next.class_sessions.find((x) => x.id === payload.sid)!.status = 'cancelled';
+          next.generated_parent_comments
+            .filter((c) => c.session_id === payload.sid)
+            .forEach((c) => (c.status = 'retracted'));
+        } else if (operation === 'change_session') {
           const old = next.class_sessions.find((x) => x.id === payload.sid)!;
           old.status = payload.new_status;
           if (payload.new_status === 'rescheduled') {
@@ -990,12 +995,14 @@ export function App({
       .filter((s) => s.class_id === cid && !['cancelled', 'rescheduled'].includes(String(s.status)))
       .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
     const todays = list.filter((s) => klDate(String(s.starts_at)) === today);
+    // Keutamaan: sesi hari ini yang belum direkod, sesi lepas yang belum direkod (terkini dahulu),
+    // sesi hari ini yang sudah direkod, kemudian sesi seterusnya.
     return (
       todays.find((s) => s.status !== 'completed') ||
-      todays[0] ||
       [...list]
         .reverse()
         .find((s) => s.status === 'scheduled' && new Date(String(s.starts_at)).getTime() < now) ||
+      todays[0] ||
       list.find((s) => new Date(String(s.starts_at)).getTime() >= now)
     );
   };
@@ -1017,6 +1024,111 @@ export function App({
     )
       setPendingMove({ cid, start });
   };
+  // Ringkasan sesi bagi satu murid (kelas individu): selesai dan berbaki bulan dipilih.
+  const classCounts = (cid: unknown) => {
+    const inMonth = monthlySessions.filter(
+      (s) => s.class_id === cid && !['cancelled', 'rescheduled'].includes(String(s.status)),
+    );
+    return {
+      done: inMonth.filter((s) => s.status === 'completed').length,
+      left: inMonth.filter((s) => s.status !== 'completed').length,
+    };
+  };
+  const recordNow = async (cid: unknown) => {
+    const start = new Date(Math.floor(Date.now() / 300000) * 300000).toISOString();
+    const minutes = Number(
+      all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
+    );
+    if (
+      await mutate('session', {
+        cid,
+        tid: activeTutor,
+        start_time: start,
+        minutes,
+        lesson_topic: '',
+      })
+    )
+      setPendingMove({ cid, start });
+  };
+  function sessionHistory(current: Row) {
+    const counts = classCounts(current.class_id);
+    const done = all('class_sessions')
+      .filter((s) => s.class_id === current.class_id && s.status === 'completed')
+      .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)));
+    const markOf = (sid: unknown) =>
+      statusLabels[String(all('attendance').find((a) => a.session_id === sid)?.status)] || '—';
+    const pending = all('class_sessions')
+      .filter(
+        (s) =>
+          s.class_id === current.class_id &&
+          s.id !== current.id &&
+          s.status === 'scheduled' &&
+          new Date(String(s.starts_at)).getTime() <= Date.now(),
+      )
+      .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
+    return (
+      <>
+        {pending.length > 0 && (
+          <Card
+            title="Belum direkod"
+            subtitle="Kelas yang masanya sudah berlalu. Tekan Rekod untuk mengisi kehadiran."
+          >
+            <Table
+              headers={['Tarikh', 'Masa', '']}
+              rows={pending.map((s) => [
+                dateLabel(String(s.starts_at)),
+                timeLabel(String(s.starts_at)),
+                <button key="r" className="primary" onClick={() => go(`sessions/${s.id}`)}>
+                  Rekod
+                </button>,
+              ])}
+            />
+          </Card>
+        )}
+        <Card
+          title="Kelas telah dilaksanakan"
+          subtitle={`Bulan ${month}: ${counts.done} selesai · ${counts.left} sesi berbaki`}
+          action={
+            role === 'tutor' && (
+              <button className="secondary" onClick={() => void recordNow(current.class_id)}>
+                <Plus size={16} />
+                Rekod kelas sekarang
+              </button>
+            )
+          }
+        >
+          <Table
+            headers={['Tarikh', 'Masa', 'Kehadiran', '']}
+            rows={done.map((s) => [
+              dateLabel(String(s.starts_at)),
+              timeLabel(String(s.starts_at)),
+              markOf(s.id),
+              <div key="a" className="button-row">
+                <button className="text-link" onClick={() => go(`sessions/${s.id}`)}>
+                  Edit
+                </button>
+                {!['verified', 'approved', 'paid'].includes(String(s.review_status)) && (
+                  <button
+                    className="text-link danger"
+                    onClick={() =>
+                      setDialog({
+                        title: `Padam kelas ${dateLabel(String(s.starts_at))}`,
+                        operation: 'void_session',
+                        fields: [],
+                        transform: () => ({ sid: s.id }),
+                      })
+                    }
+                  >
+                    Padam
+                  </button>
+                )}
+              </div>,
+            ])}
+          />
+        </Card>
+      </>
+    );
+  }
   const rescheduleSession = async (session: Row, start: string) => {
     if (
       await mutate('change_session', {
@@ -1514,7 +1626,10 @@ export function App({
                   <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
                   <span>
                     <strong>{lookup('students', e.student_id)}</strong>
-                    <small>{lookup('programs', c?.program_id, 'name')}</small>
+                    <small>
+                      {lookup('programs', c?.program_id, 'name')} · Selesai{' '}
+                      {classCounts(e.class_id).done} · Berbaki {classCounts(e.class_id).left}
+                    </small>
                   </span>
                   <ChevronRight size={18} />
                 </button>
@@ -2709,6 +2824,7 @@ export function App({
           ) : (
             <Empty text="Sesi tidak ditemui atau akses tidak dibenarkan." />
           )}
+          {section === 'sessions' && currentSession && sessionHistory(currentSession)}
           {section === 'parent' && <ContactAdmin data={visible} />}{' '}
           {section === 'parent' && (
             <PublishedMilestones data={visible} student={child || all('students')[0]?.id || ''} />
@@ -2819,7 +2935,9 @@ export function App({
                 <p>
                   {dialog.operation === 'remove_student'
                     ? 'Murid dikeluarkan dan sesi akan datang dibatalkan. Rekod kehadiran dan elaun yang lepas dikekalkan.'
-                    : 'Sahkan tindakan ini. Rekod sejarah tidak dipadam.'}
+                    : dialog.operation === 'void_session'
+                      ? 'Kelas ini dibatalkan: tidak dikira elaun dan ulasan ditarik daripada ibu bapa.'
+                      : 'Sahkan tindakan ini. Rekod sejarah tidak dipadam.'}
                 </p>
               )}
               <button className="primary wide" type="submit" disabled={busy}>
@@ -2862,9 +2980,26 @@ function SessionEditor({
   const students = data.students.filter((s) =>
     data.enrollments.some((e) => e.class_id === session.class_id && e.student_id === s.id),
   );
+  // Rekod sedia ada dimuatkan semula supaya tutor boleh membetulkan kehadiran yang tersilap.
+  const savedAttendance = (sid: unknown) =>
+    String(
+      data.attendance.find((a) => a.session_id === session.id && a.student_id === sid)?.status ||
+        '',
+    );
+  const savedAssessment = (sid: unknown) => {
+    const latest = data.generated_parent_comments
+      .filter(
+        (c) => c.session_id === session.id && c.student_id === sid && c.status !== 'retracted',
+      )
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+    const sel = (latest?.selections || {}) as Partial<Assessment>;
+    return sel.mastery === 'not_assessed' ? {} : sel;
+  };
   const [studentId, setStudentId] = useState(students[0]?.id || '');
-  const [attendance, setAttendance] = useState('');
-  const [assessment, setAssessment] = useState<Partial<Assessment>>({});
+  const [attendance, setAttendance] = useState(savedAttendance(students[0]?.id));
+  const [assessment, setAssessment] = useState<Partial<Assessment>>(
+    savedAssessment(students[0]?.id),
+  );
   const cls = data.classes.find((c) => c.id === session.class_id);
   const program = data.programs.find((p) => p.id === cls?.program_id);
   const subject = data.subjects.find((s) => s.id === program?.subject_id);
@@ -2943,8 +3078,8 @@ function SessionEditor({
       const next = students[students.findIndex((s) => s.id === studentId) + 1];
       if (next) {
         setStudentId(next.id);
-        setAttendance('');
-        setAssessment({});
+        setAttendance(savedAttendance(next.id));
+        setAssessment(savedAssessment(next.id));
       }
     }
   }
@@ -2995,8 +3130,8 @@ function SessionEditor({
               className={s.id === studentId ? 'selected' : ''}
               onClick={() => {
                 setStudentId(s.id);
-                setAttendance('');
-                setAssessment({});
+                setAttendance(savedAttendance(s.id));
+                setAssessment(savedAssessment(s.id));
               }}
             >
               {String(s.full_name)}
@@ -3078,20 +3213,19 @@ function SessionEditor({
               <p>{preview}</p>
               <small>Template v1 · berdasarkan pilihan sebenar sahaja</small>
               <div className="button-row">
-                <button disabled={!valid || locked || busy} onClick={() => save(false)}>
-                  Simpan draf
-                </button>
                 <button
-                  className="primary"
+                  className="primary wide"
                   disabled={!valid || locked || busy}
                   onClick={() => save(true)}
                 >
-                  <Send size={16} />
-                  Terbit kepada ibu bapa
+                  <Check size={16} />
+                  {savedAttendance(studentId) ? 'Simpan perubahan' : 'Simpan kehadiran'}
                 </button>
               </div>
               <small>
-                Draf hanya dapat dilihat tutor dan pentadbir. Penerbitan ialah tindakan nyata.
+                {savedAttendance(studentId)
+                  ? 'Kehadiran sudah direkod. Ubah pilihan di atas dan simpan untuk membetulkannya.'
+                  : 'Selepas disimpan, ibu bapa boleh melihat kehadiran dan ulasan ini.'}
               </small>
             </aside>
           </div>

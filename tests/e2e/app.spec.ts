@@ -49,7 +49,7 @@ test('tutor publishes one student with no typed assessment and absent has no fab
   page,
 }) => {
   await page.goto('/demo/sessions/session-6');
-  await expect(page.getByRole('button', { name: 'Terbit kepada ibu bapa' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeVisible();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   await page.getByRole('button', { name: 'bacaan', exact: true }).click();
   await page.getByRole('button', { name: '3 Memuaskan', exact: true }).click();
@@ -58,11 +58,11 @@ test('tutor publishes one student with no typed assessment and absent has no fab
   await expect(
     page.getByText(/Alhamdulillah, murid menunjukkan penguasaan yang memuaskan/).first(),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Terbit kepada ibu bapa' }).click();
+  await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
   await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
   await expect(page.getByText('Tiada penilaian pembelajaran untuk sesi ini.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Terbit kepada ibu bapa' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
 });
 test('Excel and CSV endpoints return working downloads; fake live authorization fails', async ({
   request,
