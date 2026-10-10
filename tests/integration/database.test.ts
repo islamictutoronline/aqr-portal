@@ -800,6 +800,51 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       ).rows,
     ).toHaveLength(0);
   });
+  it('tutor records a backdated class before the registration date', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Backdated child',
+        id(42),
+        30,
+        JSON.stringify([{ day: 5, time: '17:00' }]),
+      ])
+    ).rows[0].id;
+    const cls = (
+      await db.query<{ class_id: string }>(
+        "select class_id from enrollments where student_id=$1 and status='active'",
+        [kid],
+      )
+    ).rows[0].class_id;
+    const past = new Date(Date.now() - 20 * 86400000).toISOString();
+    const sid = (
+      await db.query<{ id: string }>('select create_session($1,$2,$3,$4,$5,$6) as id', [
+        org,
+        cls,
+        tutor,
+        past,
+        30,
+        '',
+      ])
+    ).rows[0].id;
+    await db.query('select record_assessment($1,$2,$3,$4,$5,$6)', [
+      org,
+      sid,
+      kid,
+      'present',
+      JSON.stringify({ mastery: 'not_assessed' }),
+      true,
+    ]);
+    expect(
+      (await db.query<{ status: string }>('select status from class_sessions where id=$1', [sid]))
+        .rows[0].status,
+    ).toBe('completed');
+    const tooOld = new Date(Date.now() - 400 * 86400000).toISOString();
+    await expect(
+      db.query('select create_session($1,$2,$3,$4,$5,$6)', [org, cls, tutor, tooOld, 30, '']),
+    ).rejects.toThrow();
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (
