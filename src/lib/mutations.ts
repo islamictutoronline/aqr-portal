@@ -305,7 +305,15 @@ export async function executeMutation(
     };
     result = await ctx.db.rpc(rpc[operation], { org: ctx.org, ...fields });
   }
-  if (result.error)
-    throw new Error('Rekod tidak dapat disimpan. Semak kelayakan, status dan peranan penyemak.');
+  if (result.error) {
+    // Mesej daripada `raise exception` dalam fungsi kita ditulis dalam Bahasa Melayu dan selamat
+    // dipaparkan; ralat sistem lain kekal umum.
+    const { code, message } = result.error as { code?: string; message?: string };
+    throw new Error(
+      code === 'P0001' && message
+        ? message
+        : 'Rekod tidak dapat disimpan. Semak kelayakan, status dan peranan penyemak.',
+    );
+  }
   return { id: result.data, saved: true };
 }

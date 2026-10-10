@@ -272,3 +272,20 @@ test('tutor backdates a recorded class and saves attendance without assessment t
   await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
 });
+test('voiding the open class returns to the list; a voided class is locked', async ({ page }) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await page.locator('.student-picker button').first().click();
+  await page.getByRole('button', { name: 'Rekod kelas sekarang' }).click();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  const history = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await history.getByRole('button', { name: 'Padam' }).first().click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
+});

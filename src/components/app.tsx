@@ -776,6 +776,7 @@ export function App({
         setNotice('Rekod berjaya disimpan dalam pangkalan data.');
       }
       setDialog(null);
+      if (operation === 'void_session' && payload.sid === selectedSession) go('calendar');
       return true;
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'Permintaan gagal');
@@ -3003,7 +3004,8 @@ function SessionEditor({
   const program = data.programs.find((p) => p.id === cls?.program_id);
   const subject = data.subjects.find((s) => s.id === program?.subject_id);
   const subjectSlug = String(subject?.slug || 'mengaji');
-  const locked = ['verified', 'approved', 'paid'].includes(String(session.review_status));
+  const voided = ['cancelled', 'rescheduled'].includes(String(session.status));
+  const locked = voided || ['verified', 'approved', 'paid'].includes(String(session.review_status));
   let preview = 'Pilih kehadiran dan penilaian untuk melihat ulasan.';
   let valid = false;
   // Penilaian adalah pilihan: tanpa sebarang tap, sesi disimpan sebagai "belum dinilai".
@@ -3145,7 +3147,9 @@ function SessionEditor({
         </div>
         {locked && (
           <div className="inline-note">
-            Sesi telah disahkan. Rekod dikunci untuk menjaga sejarah elaun.
+            {voided
+              ? 'Kelas ini telah dipadam atau dijadual semula, jadi tidak boleh diedit. Pilih kelas lain dari senarai di bawah.'
+              : 'Sesi telah disahkan. Rekod dikunci untuk menjaga sejarah elaun.'}
           </div>
         )}
         {!students.length ? (
