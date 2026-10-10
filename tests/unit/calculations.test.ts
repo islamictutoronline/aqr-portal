@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  passwordProblem,
   findRate,
   eligibleAllowance,
   integerSen,
@@ -200,4 +201,11 @@ describe('Tap-only comments and report permissions', () => {
       ),
     ).toContain("dalam tasmi'");
   });
+});
+it('rejects weak admin passwords and accepts strong ones', () => {
+  expect(passwordProblem('admin')).toMatch(/10 aksara/);
+  expect(passwordProblem('adminadmin')).toMatch(/huruf dan nombor/);
+  expect(passwordProblem('password123')).toMatch(/mudah diteka/);
+  expect(passwordProblem('admin12345')).toMatch(/mudah diteka/);
+  expect(passwordProblem('Ustazah-Riyadh-2026')).toBeNull();
 });

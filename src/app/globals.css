@@ -17,7 +17,7 @@ body {
   font-family: 'Avenir Next', 'Segoe UI', sans-serif;
   color: var(--ink);
   background: var(--ivory);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
 }
 button,
@@ -103,7 +103,7 @@ p {
   color: var(--slate);
 }
 small {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--slate);
 }
 strong {
@@ -116,7 +116,7 @@ strong {
   color: var(--slate);
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.7px;
   font-weight: 650;
 }
@@ -209,7 +209,7 @@ strong {
   margin: 0 10px 30px;
 }
 .sidebar-brand > span:nth-child(2) {
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.7;
   letter-spacing: 1px;
   color: #ccd4dc;
@@ -226,7 +226,7 @@ strong {
   color: #bcc9d8;
   min-height: 48px;
   padding: 10px 14px;
-  font-size: 14px;
+  font-size: 15px;
   border-radius: 8px;
 }
 .sidebar nav button svg {
@@ -258,7 +258,7 @@ strong {
   gap: 10px;
   border-top: 1px solid #ffffff14;
   padding: 20px 5px 0;
-  font-size: 11px;
+  font-size: 13px;
 }
 .account small {
   display: block;
@@ -296,7 +296,7 @@ strong {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .breadcrumb > span {
   color: var(--slate);
@@ -311,7 +311,7 @@ strong {
 }
 .role-select select {
   width: auto;
-  font-size: 11px;
+  font-size: 13px;
   border: 0;
   background: #f3f5f5;
   margin: 0;
@@ -325,7 +325,7 @@ strong {
   align-items: center;
   gap: 10px;
   color: #665330;
-  font-size: 10px;
+  font-size: 12px;
 }
 .demo-banner a {
   margin-left: auto;
@@ -370,7 +370,7 @@ strong {
   background: transparent;
   margin: 0;
   padding: 10px 8px;
-  font-size: 11px;
+  font-size: 13px;
   max-width: 170px;
 }
 .welcome {
@@ -391,10 +391,10 @@ strong {
 }
 .welcome .eyebrow {
   color: #6c8173;
-  font-size: 9px;
+  font-size: 12px;
 }
 .welcome p {
-  font-size: 12px;
+  font-size: 13px;
 }
 .metrics {
   display: grid;
@@ -415,7 +415,7 @@ strong {
   align-items: center;
   justify-content: space-between;
   color: var(--slate);
-  font-size: 11px;
+  font-size: 13px;
 }
 .metric-top svg {
   width: 19px;
@@ -429,7 +429,7 @@ strong {
   line-height: 1.2;
 }
 .metric > small {
-  font-size: 10px;
+  font-size: 12px;
 }
 .dashboard-grid {
   display: grid;
@@ -456,14 +456,14 @@ strong {
   margin-bottom: 20px;
 }
 .card-heading p {
-  font-size: 11px;
+  font-size: 13px;
   margin-top: 5px;
 }
 .card-heading h2 {
   font-size: 15px;
 }
 .card-heading button {
-  font-size: 11px;
+  font-size: 13px;
 }
 .session-item {
   display: flex;
@@ -483,17 +483,17 @@ strong {
   text-align: center;
 }
 .time-tile strong {
-  font-size: 12px;
+  font-size: 13px;
 }
 .time-tile small {
   display: block;
-  font-size: 10px;
-}
-.session-item .grow strong {
   font-size: 12px;
 }
+.session-item .grow strong {
+  font-size: 13px;
+}
 .session-item p {
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 4px;
 }
 .badge {
@@ -501,7 +501,7 @@ strong {
   padding: 4px 8px;
   border-radius: 5px;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   font-weight: 500;
 }
@@ -532,10 +532,10 @@ strong {
   flex-shrink: 0;
 }
 .attention strong {
-  font-size: 12px;
+  font-size: 13px;
 }
 .attention p {
-  font-size: 11px;
+  font-size: 13px;
   margin-top: 4px;
 }
 .bar-chart > div {
@@ -543,7 +543,7 @@ strong {
   align-items: center;
   gap: 12px;
   padding: 12px 0;
-  font-size: 11px;
+  font-size: 13px;
 }
 .bar-chart > div > span {
   width: 145px;
@@ -571,10 +571,10 @@ strong {
   border-top: 1px solid #f0f1ef;
 }
 .comment-mini strong {
-  font-size: 12px;
+  font-size: 13px;
 }
 .comment-mini p {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.8;
   margin-top: 7px;
 }
@@ -585,13 +585,13 @@ table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
 }
 th {
   padding: 13px 12px;
   background: #f8faf8;
   color: #657181;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.2px;
   font-weight: 600;
   white-space: nowrap;
@@ -606,7 +606,7 @@ td small {
   margin-top: 4px;
 }
 td button {
-  font-size: 10px;
+  font-size: 12px;
 }
 tr:last-child td {
   border-bottom: 0;
@@ -626,7 +626,7 @@ tr:last-child td {
   gap: 14px;
 }
 .empty p {
-  font-size: 12px;
+  font-size: 13px;
 }
 .class-grid {
   display: grid;
@@ -653,11 +653,11 @@ tr:last-child td {
   margin-bottom: 15px;
 }
 .class-card p {
-  font-size: 11px;
+  font-size: 13px;
   margin: 5px 0 17px;
 }
 .class-card > strong {
-  font-size: 11px;
+  font-size: 13px;
 }
 .class-card > .text-link {
   display: flex;
@@ -666,7 +666,7 @@ tr:last-child td {
 .class-details {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--slate);
   border-top: 1px solid var(--line);
   padding: 12px 0;
@@ -680,11 +680,11 @@ tr:last-child td {
   border-radius: 9px;
   padding: 15px;
   margin-bottom: 23px;
-  font-size: 12px;
+  font-size: 13px;
   color: #466556;
 }
 .footnote {
-  font-size: 11px;
+  font-size: 13px;
   margin-top: 20px;
   line-height: 1.8;
 }
@@ -698,7 +698,7 @@ tr:last-child td {
   border-radius: 9px;
   padding: 12px 15px;
   margin-bottom: 20px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .notice button {
   border: 0;
@@ -716,14 +716,14 @@ tr:last-child td {
 }
 .report-toolbar label {
   min-width: 260px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .report-meta {
   display: flex;
   justify-content: space-between;
   padding: 17px 0;
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 13px;
 }
 .report-meta span {
   color: var(--slate);
@@ -758,7 +758,7 @@ tr:last-child td {
   margin: 8px 0;
 }
 .parent-welcome p {
-  font-size: 12px;
+  font-size: 13px;
 }
 .child-selector,
 .student-tabs {
@@ -782,10 +782,10 @@ tr:last-child td {
 .progress-comment > div {
   display: flex;
   gap: 13px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .progress-comment p {
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 15px;
   line-height: 1.9;
 }
@@ -802,7 +802,7 @@ dt {
 dd {
   color: var(--slate);
   text-align: right;
-  font-size: 12px;
+  font-size: 13px;
   max-width: 65%;
 }
 .settings-list {
@@ -820,7 +820,7 @@ dd {
   margin: 12px 0 24px;
 }
 .chips button {
-  font-size: 11px;
+  font-size: 13px;
   min-height: 45px;
   padding: 10px 14px;
 }
@@ -834,7 +834,7 @@ dd {
   font-size: 20px;
 }
 .assessment-grid legend {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 .preview-comment {
@@ -864,7 +864,7 @@ dd {
   margin: 20px 0;
 }
 .preview-comment button {
-  font-size: 11px;
+  font-size: 13px;
 }
 .invite-form {
   display: flex;
@@ -874,13 +874,13 @@ dd {
 }
 .invite-form label {
   flex: 1;
-  font-size: 12px;
+  font-size: 13px;
 }
 .file-label {
-  font-size: 11px;
+  font-size: 13px;
 }
 .file-label input {
-  font-size: 10px;
+  font-size: 12px;
 }
 .modal-overlay {
   position: fixed;
@@ -902,7 +902,7 @@ dd {
   padding: 26px;
 }
 .modal label {
-  font-size: 12px;
+  font-size: 13px;
   margin: 18px 0;
 }
 .modal form > button {
@@ -966,7 +966,7 @@ dd {
   font-size: 28px;
 }
 .login-form p {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.8;
 }
 .login-form form {
@@ -975,7 +975,7 @@ dd {
   gap: 24px;
 }
 .login-form label {
-  font-size: 12px;
+  font-size: 13px;
 }
 .login-form small {
   line-height: 1.8;
@@ -986,7 +986,7 @@ footer {
   border-top: 1px solid #e4e6e0;
   padding-top: 23px;
   color: #8b9295;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 35px;
 }
 @media (min-width: 1600px) {
@@ -1087,15 +1087,15 @@ footer {
   }
   .role-select select {
     max-width: 150px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .breadcrumb {
     gap: 6px;
-    font-size: 11px;
+    font-size: 13px;
   }
   .demo-banner {
     padding: 10px 18px;
-    font-size: 9px;
+    font-size: 12px;
     gap: 8px;
   }
   .demo-banner a {
@@ -1115,7 +1115,7 @@ footer {
     max-width: 147px;
   }
   .month-filter input {
-    font-size: 11px;
+    font-size: 13px;
     max-width: 110px;
   }
   .welcome {
@@ -1126,7 +1126,7 @@ footer {
     max-width: 260px;
   }
   .welcome p {
-    font-size: 11px;
+    font-size: 13px;
   }
   .metrics {
     grid-template-columns: 1fr 1fr;
@@ -1139,11 +1139,11 @@ footer {
     font-size: 25px;
   }
   .metric-top {
-    font-size: 10px;
+    font-size: 12px;
     gap: 5px;
   }
   .metric > small {
-    font-size: 9px;
+    font-size: 12px;
   }
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -1154,27 +1154,27 @@ footer {
     padding: 19px 16px;
   }
   .card-heading h2 {
-    font-size: 14px;
+    font-size: 15px;
   }
   .card-heading {
     gap: 10px;
   }
   .card-heading .primary {
     padding: 8px 10px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .bar-chart > div > span {
     width: 130px;
   }
   .session-item .badge {
     display: inline-flex;
-    font-size: 9px;
+    font-size: 12px;
   }
   .session-item .grow strong {
-    font-size: 11px;
+    font-size: 13px;
   }
   .session-item .grow p {
-    font-size: 9px;
+    font-size: 12px;
   }
   .time-tile {
     width: 47px;
@@ -1196,7 +1196,7 @@ footer {
     gap: 12px;
   }
   .child-selector button {
-    font-size: 11px;
+    font-size: 13px;
   }
   .settings-list > div {
     flex-direction: column;
@@ -1219,7 +1219,7 @@ footer {
     gap: 7px;
   }
   .button-row button {
-    font-size: 11px;
+    font-size: 13px;
   }
   .assessment-grid {
     gap: 10px;
@@ -1228,11 +1228,11 @@ footer {
     padding: 20px;
   }
   .student-tabs button {
-    font-size: 10px;
+    font-size: 12px;
   }
   .chips.mastery button {
     min-width: 65px;
-    font-size: 10px;
+    font-size: 12px;
     padding: 8px;
   }
   .modal {
@@ -1304,7 +1304,7 @@ footer {
   }
   table {
     min-width: 0;
-    font-size: 9px;
+    font-size: 12px;
   }
   .card-heading {
     margin-bottom: 10px;
@@ -1377,7 +1377,7 @@ body {
 .auth-card .check-label {
   display: flex;
   align-items: center;
-  font-size: 13px;
+  font-size: 14px;
 }
 .auth-card input[type='checkbox'] {
   width: 20px;
@@ -1471,7 +1471,7 @@ body {
   border-radius: 999px;
   background: var(--white);
   color: var(--slate);
-  font-size: 13px;
+  font-size: 14px;
 }
 .subtabs button.active {
   background: var(--navy);
@@ -1488,7 +1488,7 @@ body {
   border: 1px dashed #c9ccc8;
   border-radius: 8px;
   color: var(--slate);
-  font-size: 13px;
+  font-size: 14px;
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -1505,4 +1505,195 @@ body {
 }
 .text-link.danger {
   color: #b42318;
+}
+
+/* ===== Kemasan visual (Okt 2026): tipografi lebih besar, kad lembut, jadual lapang ===== */
+:root {
+  --navy-hover: #22385a;
+  --surface: #ffffff;
+  --surface-muted: #f7f5ef;
+  --ring: 0 0 0 3px rgba(58, 115, 105, 0.22);
+  --shadow-card: 0 1px 2px rgba(24, 41, 66, 0.04), 0 6px 20px rgba(24, 41, 66, 0.05);
+  --radius: 14px;
+}
+body {
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+h1,
+h2,
+h3 {
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+h1 {
+  font-weight: 700;
+}
+.page-tools h2 {
+  font-size: 26px;
+  font-weight: 700;
+}
+.card {
+  border-color: #ebe8e0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 24px 26px;
+}
+.card-heading h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+.card-heading p {
+  color: var(--slate);
+  font-size: 13px;
+}
+/* Jadual */
+th {
+  background: var(--surface-muted);
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+}
+th:first-child {
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+th:last-child {
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+td {
+  padding: 15px 16px;
+  border-bottom-color: #f0eee8;
+}
+tbody tr {
+  transition: background-color 150ms ease;
+}
+tbody tr:hover {
+  background: #fbfaf6;
+}
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+/* Butang dan input */
+button,
+a.button {
+  border-radius: 10px;
+  font-weight: 600;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 100ms ease;
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.primary {
+  box-shadow: 0 1px 2px rgba(24, 41, 66, 0.18);
+}
+.primary:hover:not(:disabled) {
+  background: var(--navy-hover);
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+input,
+select,
+textarea {
+  border-radius: 10px;
+  border-color: #dfdcd3;
+  min-height: 46px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+input:hover,
+select:hover {
+  border-color: #c9c5ba;
+}
+label {
+  font-weight: 500;
+}
+/* Lencana status berbentuk pil */
+.badge {
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+/* Metrik ringkasan */
+.metric {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  border-color: #ebe8e0;
+}
+.metric strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+/* Tab dalam halaman */
+.subtabs button {
+  font-weight: 600;
+}
+.subtabs button:hover:not(.active) {
+  border-color: #c9c5ba;
+  color: var(--navy);
+}
+/* Borang modal */
+.modal {
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(24, 41, 66, 0.25);
+  max-height: 90dvh;
+}
+.modal form {
+  display: grid;
+  gap: 14px;
+}
+.welcome {
+  border-radius: var(--radius);
+}
+.welcome h1 {
+  font-size: 30px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+}
+.sidebar-brand {
+  gap: 12px;
+}
+.sidebar-brand .brand {
+  font-size: 34px;
+}
+.sidebar-brand > span:nth-child(2) {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .page-tools h2 {
+    font-size: 22px;
+    line-height: 1.25;
+  }
+  .card {
+    padding: 20px 18px;
+  }
+  .welcome h1 {
+    font-size: 24px;
+  }
 }

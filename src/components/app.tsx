@@ -52,6 +52,7 @@ import {
   findRate,
   Rate,
   statusLabels,
+  passwordProblem,
 } from '@/lib/core';
 import { buildReport } from '@/lib/reporting';
 import { scopeDemo } from '@/lib/demo';
@@ -1270,7 +1271,7 @@ export function App({
     ) : (
       <Card
         title="Direktori murid"
-        subtitle="Maklumat minimum, pemantauan secara individu"
+
         action={
           role === 'tutor' && (
             <button className="primary" onClick={createStudent}>
@@ -1316,7 +1317,7 @@ export function App({
     return (
       <Card
         title="Penjaga & keluarga"
-        subtitle="Pautkan murid dahulu, kemudian jemput akses OTP e-mel"
+        subtitle="Ibu bapa yang boleh melihat rekod anak"
         action={
           <button className="primary" onClick={createGuardian}>
             <Plus size={16} />
@@ -1377,7 +1378,7 @@ export function App({
       <>
         <Card
           title="Kurikulum"
-          subtitle="Kemajuan dikira daripada bukti pencapaian unit"
+          subtitle="Pencapaian murid mengikut unit"
           action={
             academic && (
               <button
@@ -1427,7 +1428,7 @@ export function App({
       <>
         <Card
           title="Jadual & sesi"
-          subtitle="Semua masa dalam Asia/Kuala_Lumpur"
+          subtitle="Waktu Malaysia"
           action={
             (academic || role === 'tutor') && (
               <button className="primary" onClick={createSession}>
@@ -1605,7 +1606,7 @@ export function App({
         </Card>
         <Card
           title="Bayaran & pengesahan"
-          subtitle="Bukti yang dihantar tidak dikira sebagai kutipan disahkan"
+          subtitle="Bayaran dikira selepas disahkan admin"
           action={
             <button onClick={paymentForm}>
               <Plus size={16} />
@@ -1675,7 +1676,7 @@ export function App({
         </Card>
         <Card
           title="Pelan yuran"
-          subtitle="Ditetapkan pentadbir; berasingan daripada kadar elaun tutor"
+          subtitle="Yuran ditetapkan oleh pentadbir"
           action={
             <button
               onClick={() =>
@@ -1828,7 +1829,7 @@ export function App({
         </Card>
         <Card
           title="Kadar elaun berversi"
-          subtitle="Sumber: 04_KADAR_ELAUN_TUTOR_AQR.csv; tarikh efektif mesti disahkan admin"
+          subtitle="Kadar mengikut program dan tempoh sesi"
           action={
             finance && (
               <button className="primary" onClick={rateForm}>
@@ -1853,7 +1854,7 @@ export function App({
         {finance && (
           <Card
             title="Kelompok pembayaran"
-            subtitle="Maker-checker: penyedia dan pelulus mesti berlainan"
+            subtitle="Penyedia dan pelulus mestilah dua orang berbeza"
           >
             <Table
               headers={['Bulan', 'Jumlah', 'Status', 'Tindakan']}
@@ -1902,10 +1903,7 @@ export function App({
   function reportsScreen() {
     return (
       <>
-        <Card
-          title="Laporan berizin"
-          subtitle="Pratonton, Excel, CSV dan Sheets menggunakan set rekod dan penapis yang sama"
-        >
+        <Card title="Laporan berizin" subtitle="Pilih laporan, semak, kemudian muat turun">
           <div className="report-toolbar">
             <label>
               Jenis laporan
@@ -2147,10 +2145,62 @@ export function App({
             </button>
           )}
         </Card>
-        <Card
-          title="Google Sheets"
-          subtitle="OAuth sebenar; token disulitkan dan disimpan pada server"
-        >
+        {academic && (
+          <Card
+            title="Kata laluan log masuk"
+            subtitle="Pentadbir boleh log masuk dengan e-mel dan kata laluan, tanpa kod e-mel"
+          >
+            <form
+              className="invite-form"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const v = new FormData(form);
+                const password = String(v.get('password'));
+                if (password !== String(v.get('confirm')))
+                  return setNotice('Kata laluan dan pengesahan tidak sama.');
+                const problem = passwordProblem(password);
+                if (problem) return setNotice(problem);
+                if (demo) return setNotice('Demo: kata laluan tidak disimpan.');
+                setBusy(true);
+                try {
+                  const r = await apiFetch('/api/password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password }),
+                  });
+                  const result = await r.json();
+                  if (!r.ok) throw new Error(result.error);
+                  form.reset();
+                  setNotice(
+                    'Kata laluan disimpan. Lain kali pilih "Log masuk dengan kata laluan".',
+                  );
+                } catch (error) {
+                  setNotice(error instanceof Error ? error.message : 'Gagal menyimpan');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <label>
+                Kata laluan baharu
+                <input name="password" type="password" autoComplete="new-password" required />
+              </label>
+              <label>
+                Ulang kata laluan
+                <input name="confirm" type="password" autoComplete="new-password" required />
+              </label>
+              <button disabled={busy} type="submit">
+                Simpan kata laluan
+              </button>
+            </form>
+            <p className="footnote">
+              Sekurang-kurangnya 10 aksara dengan huruf dan nombor. Jangan gunakan kata laluan yang
+              mudah diteka seperti &quot;admin&quot;.
+            </p>
+          </Card>
+        )}
+        <Card title="Google Sheets" subtitle="Sambungan Google Sheets">
           <GoogleStatus demo={demo} />
           {isStatic() && (
             <p>

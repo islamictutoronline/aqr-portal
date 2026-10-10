@@ -42,6 +42,17 @@ export const statusLabels: Record<string, string> = {
 };
 // Label Melayu bagi kod status; digunakan oleh skrin dan fail laporan.
 export const statusLabel = (v: unknown) => statusLabels[String(v)] ?? String(v);
+// Kata laluan pentadbir: panjang, huruf + nombor, dan bukan kata laluan biasa yang mudah diteka.
+const weakPasswords = ['admin', 'password', 'katalaluan', 'qwerty', '123456', 'aqr', 'admin123'];
+export function passwordProblem(pw: string): string | null {
+  if (pw.length < 10) return 'Kata laluan mesti sekurang-kurangnya 10 aksara.';
+  if (!/[a-zA-Z]/.test(pw) || !/\d/.test(pw))
+    return 'Kata laluan mesti mengandungi huruf dan nombor.';
+  const lower = pw.toLowerCase();
+  if (weakPasswords.some((w) => lower.replace(/[^a-z0-9]/g, '').startsWith(w) && lower.length < 14))
+    return 'Kata laluan terlalu mudah diteka. Pilih yang lain.';
+  return null;
+}
 export const formatMoney = (sen: number) =>
   new Intl.NumberFormat('ms-MY', { style: 'currency', currency: 'MYR' }).format(sen / 100);
 export const dateLabel = (date: string) =>

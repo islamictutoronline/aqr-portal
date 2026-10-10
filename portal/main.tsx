@@ -26,6 +26,8 @@ function Root() {
     [busy, setBusy] = useState(false),
     [trusted, setTrusted] = useState(localStorage.getItem('aqr.trusted') === 'yes'),
     [register, setRegister] = useState(false),
+    [usePassword, setUsePassword] = useState(false),
+    [password, setPassword] = useState(''),
     [signed, setSigned] = useState(false);
   const demo = demoAllowed && new URLSearchParams(location.search).get('demo') === '1';
   useEffect(() => {
@@ -92,6 +94,11 @@ function Root() {
     setBusy(true);
     try {
       localStorage.setItem('aqr.trusted', trusted ? 'yes' : 'no');
+      if (usePassword) {
+        const { error } = await db.auth.signInWithPassword({ email, password });
+        if (error) throw new Error('E-mel atau kata laluan salah.');
+        return;
+      }
       const { error } = await db.auth.signInWithOtp({
         email,
         options: {
@@ -176,10 +183,7 @@ function Root() {
               Nama penuh
               <input name="name" required minLength={2} maxLength={120} />
             </label>
-            <label>
-              Kod akademi
-              <input name="academy" required defaultValue="aqr" />
-            </label>
+            <input type="hidden" name="academy" value="aqr" />
             <button className="primary" disabled={busy}>
               Hantar permohonan tutor
             </button>
@@ -208,16 +212,45 @@ function Root() {
                 />
                 Kekalkan sesi pada peranti dipercayai ini
               </label>
+              {usePassword && (
+                <label>
+                  Kata laluan
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </label>
+              )}
               <label className="check-label">
                 <input
                   type="checkbox"
-                  checked={register}
-                  onChange={(e) => setRegister(e.target.checked)}
+                  checked={usePassword}
+                  onChange={(e) => {
+                    setUsePassword(e.target.checked);
+                    if (e.target.checked) setRegister(false);
+                  }}
                 />
-                Saya tutor baharu — daftar akaun
+                Log masuk dengan kata laluan (pentadbir)
               </label>
+              {!usePassword && (
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={register}
+                    onChange={(e) => setRegister(e.target.checked)}
+                  />
+                  Saya tutor baharu — daftar akaun
+                </label>
+              )}
               <button className="primary" disabled={busy}>
-                {register ? 'Daftar dengan e-mel' : 'Hantar pautan log masuk'}
+                {usePassword
+                  ? 'Log masuk'
+                  : register
+                    ? 'Daftar dengan e-mel'
+                    : 'Hantar kod log masuk'}
               </button>
             </form>
             {sent && (
@@ -240,8 +273,8 @@ function Root() {
         {message && <p role="status">{message}</p>}
         {demoAllowed && <a href="?demo=1">Lihat demo rekaan</a>}
         <p className="footnote">
-          Tiada kata laluan. Hanya akaun berizin boleh melihat data. Log keluar selepas menggunakan
-          peranti berkongsi.
+          Log masuk dengan kod e-mel, atau kata laluan bagi pentadbir. Hanya akaun berizin boleh
+          melihat data. Log keluar selepas menggunakan peranti berkongsi.
         </p>
       </section>
     </main>

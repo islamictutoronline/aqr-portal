@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Role } from '../src/lib/core';
+import { Role, passwordProblem } from '../src/lib/core';
 import { loadData } from '../src/lib/data';
 import { executeMutation } from '../src/lib/mutations';
 const url = import.meta.env.VITE_SUPABASE_URL;
@@ -91,6 +91,16 @@ export async function staticTransport(input: string, init?: RequestInit) {
     if (path === '/api/data') return Response.json(await loadData(ctx));
     if (path === '/api/mutate')
       return Response.json(await executeMutation(ctx, JSON.parse(String(init?.body))));
+    if (path === '/api/password') {
+      // Hanya pemilik/admin boleh menggunakan kata laluan; tutor dan ibu bapa kekal dengan kod e-mel.
+      if (!['owner', 'admin'].includes(ctx.role)) throw new Error('Akses tidak dibenarkan');
+      const { password } = JSON.parse(String(init?.body || '{}')) as { password?: string };
+      const problem = passwordProblem(String(password || ''));
+      if (problem) throw new Error(problem);
+      const { error } = await db.auth.updateUser({ password });
+      if (error) throw new Error('Kata laluan tidak dapat disimpan. Cuba log masuk semula.');
+      return Response.json({ saved: true });
+    }
     if (path === '/api/google/status')
       return Response.json({
         connected: false,
