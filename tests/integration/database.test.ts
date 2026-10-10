@@ -939,6 +939,44 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       first <= new Date(Date.parse(monthStart) + 7 * 86400000).toISOString().slice(0, 10),
     ).toBe(true);
   });
+  it('moving a session back onto its slot clears the vacated mark; no duplicates', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>('select tutor_enrol_student($1,$2,$3,$4,$5) as id', [
+        org,
+        'Back and forth child',
+        id(42),
+        30,
+        JSON.stringify([{ day: 4, time: '16:00' }]),
+      ])
+    ).rows[0].id;
+    const first = (
+      await db.query<{ id: string; class_id: string; starts_at: string }>(
+        'select s.id,s.class_id,s.starts_at from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 order by s.starts_at limit 1',
+        [kid],
+      )
+    ).rows[0];
+    const original = new Date(first.starts_at).toISOString();
+    const count = async () =>
+      (await db.query('select id from class_sessions where class_id=$1', [first.class_id])).rows
+        .length;
+    const before = await count();
+    await db.query('select move_session($1,$2,$3)', [
+      org,
+      first.id,
+      new Date(Date.parse(original) + 3600000).toISOString(),
+    ]);
+    await db.query('select move_session($1,$2,$3)', [org, first.id, original]);
+    const ex = (
+      await db.query<{ exceptions: string[] }>(
+        'select exceptions from class_schedules where class_id=$1',
+        [first.class_id],
+      )
+    ).rows[0].exceptions;
+    expect(ex).toEqual([]);
+    await db.query('select extend_schedule($1)', [org]);
+    expect(await count()).toBe(before);
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (
