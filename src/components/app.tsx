@@ -1268,6 +1268,16 @@ export function App({
           ['Baki yuran', formatMoney(invoiceTotals.outstanding), 'Daripada invois sebenar'],
         ]
       : [
+          ...(academic
+            ? [
+                [
+                  'Tutor aktif',
+                  all('staff_profiles').filter((t) => t.role === 'tutor' && t.active !== false)
+                    .length,
+                  'Tutor yang boleh log masuk',
+                ],
+              ]
+            : []),
           [
             'Murid aktif',
             all('students').filter((s) => s.status === 'active').length,
@@ -1315,17 +1325,19 @@ export function App({
           </div>
         </div>
         <div className="metrics">
-          {metrics.map(([label, value, hint], i) => (
+          {metrics.map(([label, value, hint]) => (
             <div className="metric" key={String(label)}>
               <div className="metric-top">
                 <span>{label}</span>
                 {
-                  [
-                    <Users key="u" />,
-                    <BookOpen key="b" />,
-                    <CalendarDays key="c" />,
-                    <ShieldCheck key="s" />,
-                  ][i]
+                  {
+                    'Tutor aktif': <GraduationCap key="g" />,
+                    'Murid aktif': <Users key="u" />,
+                    'Anak berdaftar': <Users key="u" />,
+                    'Program aktif': <BookOpen key="b" />,
+                    'Sesi dilaksana': <CalendarDays key="c" />,
+                    Kehadiran: <ShieldCheck key="s" />,
+                  }[String(label)]
                 }
               </div>
               <strong>{value}</strong>

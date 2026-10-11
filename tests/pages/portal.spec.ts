@@ -225,8 +225,11 @@ test('admin dashboard hides the learning sessions list; tutor still sees it', as
   await page.goto('/?demo=1#/dashboard');
   await expect(page.getByRole('heading', { name: 'Perlu perhatian' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toHaveCount(0);
+  const tile = page.locator('.metric').filter({ hasText: 'Tutor aktif' });
+  await expect(tile).toContainText('3');
   await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
   await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toBeVisible();
+  await expect(page.locator('.metric').filter({ hasText: 'Tutor aktif' })).toHaveCount(0);
 });
 test('tutor edits a recorded attendance, sees remaining sessions and voids a class', async ({
   page,
