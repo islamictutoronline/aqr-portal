@@ -931,6 +931,50 @@ export function App({
                 .forEach((e) => (e.status = 'paid'));
             }
           }
+        } else if (operation === 'invoice_paid') {
+          const inv = next.invoices.find((x) => x.id === payload.inv)!;
+          const due = invoiceBalance(inv, next.payments, next.payment_allocations).outstanding;
+          if (due <= 0) throw new Error('Invois ini sudah dibayar sepenuhnya');
+          const pid = `${id}-pay`;
+          next.payments.push({
+            id: pid,
+            guardian_id: inv.guardian_id,
+            paid_on: payload.paid_on,
+            method: payload.payment_method,
+            amount_sen: due,
+            reference: payload.payment_ref || null,
+            status: 'verified',
+          });
+          next.payment_allocations.push({
+            id: `${id}-alloc`,
+            payment_id: pid,
+            invoice_id: inv.id,
+            amount_sen: due,
+          });
+          next.receipts.push({
+            id: `${id}-receipt`,
+            payment_id: pid,
+            number: `DEMO-RCT-${next.receipts.length + 1}`,
+            details: { amount_sen: due, reference: payload.payment_ref || null },
+            status: 'valid',
+          });
+          inv.status = 'paid';
+        } else if (operation === 'tutor_paid') {
+          (next.tutor_month_payments ||= []).push({
+            id,
+            staff_id: payload.staff_id,
+            period: payload.period,
+            amount_sen: payload.amount_sen,
+            sessions: payload.sessions,
+            paid_on: payload.paid_on,
+            reference: payload.payment_ref || null,
+            status: 'paid',
+            created_at: new Date().toISOString(),
+          });
+        } else if (operation === 'void_tutor_paid') {
+          const pay = next.tutor_month_payments.find((x) => x.id === payload.pid)!;
+          pay.status = 'void';
+          pay.void_reason = payload.reason;
         } else throw new Error('Tindakan ini memerlukan sambungan sebenar');
         setData(next);
         setNotice('Demo: perubahan disimpan dalam memori tab sahaja.');
@@ -2399,33 +2443,48 @@ export function App({
                   formatMoney(b.paid),
                   formatMoney(b.outstanding),
                   <Badge key="s" value={i.status} />,
-                  <a
-                    key="print"
-                    className="text-link"
-                    target="_blank"
-                    rel="noreferrer"
-                    href={`/api/document?type=invoice&id=${i.id}${demo ? '&demo=1' : ''}`}
-                    onClick={(e) => {
-                      if (isStatic()) {
-                        e.preventDefault();
-                        void import('@/lib/student-reports')
-                          .then(async ({ financialPdf }) =>
-                            downloadBlob(
-                              new Blob([await financialPdf(i, 'invoice', demo, invoiceExtra(i))], {
-                                type: 'application/pdf',
-                              }),
-                              fileName(
-                                ['Invois', i.number, lookup('guardians', i.guardian_id)],
-                                'pdf',
+                  <div key="act" className="button-row compact">
+                    {b.outstanding > 0 && !['draft', 'void'].includes(String(i.status)) && (
+                      <button
+                        className="pay-button"
+                        disabled={busy}
+                        onClick={() => markInvoicePaid(i, b.outstanding)}
+                      >
+                        <Check size={15} />
+                        Yuran telah dibayar
+                      </button>
+                    )}
+                    <a
+                      key="print"
+                      className="text-link"
+                      target="_blank"
+                      rel="noreferrer"
+                      href={`/api/document?type=invoice&id=${i.id}${demo ? '&demo=1' : ''}`}
+                      onClick={(e) => {
+                        if (isStatic()) {
+                          e.preventDefault();
+                          void import('@/lib/student-reports')
+                            .then(async ({ financialPdf }) =>
+                              downloadBlob(
+                                new Blob(
+                                  [await financialPdf(i, 'invoice', demo, invoiceExtra(i))],
+                                  {
+                                    type: 'application/pdf',
+                                  },
+                                ),
+                                fileName(
+                                  ['Invois', i.number, lookup('guardians', i.guardian_id)],
+                                  'pdf',
+                                ),
                               ),
-                            ),
-                          )
-                          .catch(() => setNotice('Dokumen gagal dijana.'));
-                      }
-                    }}
-                  >
-                    Cetak / PDF
-                  </a>,
+                            )
+                            .catch(() => setNotice('Dokumen gagal dijana.'));
+                        }
+                      }}
+                    >
+                      Cetak / PDF
+                    </a>
+                  </div>,
                 ];
               })}
           />
@@ -2459,13 +2518,15 @@ export function App({
           }
         >
           <Table
-            headers={['Penjaga', 'Amaun', 'Kaedah', 'Status', 'Tindakan']}
+            headers={['Tarikh', 'Penjaga', 'Amaun', 'Kaedah', 'Rujukan', 'Status', 'Tindakan']}
             rows={all('payments')
               .filter(matches)
               .map((p) => [
+                p.paid_on ? dateLabel(String(p.paid_on)) : '—',
                 lookup('guardians', p.guardian_id),
                 formatMoney(Number(p.amount_sen)),
-                String(p.method),
+                paymentMethods.find(([v]) => v === p.method)?.[1] ?? String(p.method),
+                String(p.reference || 'Tiada rujukan'),
                 <Badge key="s" value={p.status} />,
                 p.status === 'pending_verification' ? (
                   <button
@@ -2611,6 +2672,44 @@ export function App({
     );
   }
   // Maklumat untuk PDF invois/resit (nama penjaga, butiran, bayaran).
+  const paymentMethods: [string, string][] = [
+    ['bank_transfer', 'Pindahan bank'],
+    ['duitnow_qr', 'DuitNow QR'],
+    ['cash', 'Tunai'],
+    ['other', 'Lain-lain'],
+  ];
+  // Satu langkah: baki invois ditanda dibayar; rujukan pilihan; resit dijana.
+  const markInvoicePaid = (i: Row, due: number) =>
+    setDialog({
+      title: `Yuran telah dibayar · ${String(i.number)} · ${formatMoney(due)}`,
+      operation: 'invoice_paid',
+      fields: [
+        {
+          name: 'paid_on',
+          label: 'Tarikh bayaran',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+        {
+          name: 'payment_method',
+          label: 'Kaedah',
+          options: paymentMethods,
+          value: 'bank_transfer',
+        },
+        {
+          name: 'payment_ref',
+          label: 'No. rujukan',
+          optional: true,
+          placeholder: 'Kosongkan jika tiada',
+        },
+      ],
+      transform: (v) => ({
+        inv: i.id,
+        paid_on: v.paid_on,
+        payment_method: v.payment_method,
+        payment_ref: v.payment_ref || '',
+      }),
+    });
   const invoiceExtra = (i: Row) => ({
     guardian: lookup('guardians', i.guardian_id),
     items: all('invoice_items')
@@ -2681,10 +2780,127 @@ export function App({
       }),
     });
   };
+  // Bayaran elaun bulan dipilih (rekod 'void' kekal sebagai sejarah).
+  const tutorPayments = (tid: string) =>
+    all('tutor_month_payments')
+      .filter((p) => p.staff_id === tid && p.period === month)
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  const tutorPaidSen = (tid: string) =>
+    tutorPayments(tid)
+      .filter((p) => p.status === 'paid')
+      .reduce((n, p) => n + Number(p.amount_sen), 0);
+  const lastTutorPayment = (tid: string) =>
+    tutorPayments(tid)
+      .filter((p) => p.status === 'paid')
+      .at(-1);
+  const markTutorPaid = (tid: string) => {
+    const due = allowanceOf(tid) - tutorPaidSen(tid);
+    setDialog({
+      title: `Elaun telah dibayar · ${lookup('staff_profiles', tid, 'display_name')} · ${formatMoney(due)}`,
+      operation: 'tutor_paid',
+      fields: [
+        {
+          name: 'paid_on',
+          label: 'Tarikh bayaran',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+        {
+          name: 'payment_ref',
+          label: 'No. rujukan bank',
+          optional: true,
+          placeholder: 'Kosongkan jika tiada',
+        },
+      ],
+      transform: (v) => ({
+        staff_id: tid,
+        period: month,
+        amount_sen: due,
+        sessions: allowances.filter((r) => r.tutorId === tid && r.payable_sen > 0).length,
+        paid_on: v.paid_on,
+        payment_ref: v.payment_ref || '',
+      }),
+    });
+  };
+  // Status bayaran elaun: Dibayar / Baki / butang "Elaun telah dibayar".
+  const tutorPayStatus = (tid: string) => {
+    const due = allowanceOf(tid);
+    const paid = tutorPaidSen(tid);
+    const last = lastTutorPayment(tid);
+    if (paid > 0 && paid >= due)
+      return (
+        <span key="pay" className="badge success">
+          Dibayar · {dateLabel(String(last?.paid_on))}
+        </span>
+      );
+    if (!finance)
+      return (
+        <span key="pay" className="badge neutral">
+          {paid > 0 ? `Baki ${formatMoney(due - paid)}` : 'Belum dibayar'}
+        </span>
+      );
+    return (
+      <button
+        key="pay"
+        className="pay-button"
+        disabled={busy || due - paid <= 0}
+        onClick={() => markTutorPaid(tid)}
+      >
+        <Check size={15} />
+        {paid > 0 ? `Bayar baki ${formatMoney(due - paid)}` : 'Elaun telah dibayar'}
+      </button>
+    );
+  };
+  // Sejarah bayaran elaun bulan ini (termasuk yang dibatalkan) sebagai rujukan.
+  const tutorPaymentHistory = (tid: string) =>
+    tutorPayments(tid).length ? (
+      <div className="pay-history">
+        <h4>Rekod bayaran elaun · {monthLabel(month)}</h4>
+        <Table
+          headers={['Tarikh bayar', 'Amaun', 'Sesi', 'Rujukan', 'Status', '']}
+          rows={tutorPayments(tid).map((p) => [
+            dateLabel(String(p.paid_on)),
+            formatMoney(Number(p.amount_sen)),
+            String(p.sessions ?? '—'),
+            String(p.reference || 'Tiada rujukan'),
+            p.status === 'void' ? (
+              <span key="s" className="badge neutral" title={String(p.void_reason || '')}>
+                Dibatalkan
+              </span>
+            ) : (
+              <span key="s" className="badge success">
+                Dibayar
+              </span>
+            ),
+            finance && p.status === 'paid' ? (
+              <button
+                key="v"
+                className="text-link danger"
+                onClick={() =>
+                  setDialog({
+                    title: 'Batal rekod bayaran elaun · rekod kekal sebagai sejarah',
+                    operation: 'void_tutor_paid',
+                    fields: [{ name: 'reason', label: 'Sebab (cth. tersilap tekan)' }],
+                    transform: (v) => ({ pid: p.id, reason: v.reason }),
+                  })
+                }
+              >
+                Batal
+              </button>
+            ) : (
+              ''
+            ),
+          ])}
+        />
+      </div>
+    ) : null;
   const downloadPayslip = async (tid: string) => {
     const slip = buildPayslip(visible, tid, month);
+    const paidOn = lastTutorPayment(tid)?.paid_on;
     downloadBlob(
-      new Blob([await payslipPdf(slip, payDate, orgContact())], { type: 'application/pdf' }),
+      new Blob([await payslipPdf(slip, paidOn ? String(paidOn) : payDate, orgContact())], {
+        type: 'application/pdf',
+      }),
       payslipFileName(slip),
     );
   };
@@ -2758,6 +2974,20 @@ export function App({
           subtitle="Dikira automatik. Hadir, Lewat, Ganti dan Tidak hadir dibayar; Cuti bermaklum tidak dibayar."
         >
           {role === 'tutor' && payslipBar(activeTutor)}
+          {role === 'tutor' && (
+            <div className="tab-total pay-row">
+              <span>
+                Status bayaran {monthLabel(month)}:{' '}
+                <strong>
+                  {lastTutorPayment(activeTutor)
+                    ? `${formatMoney(tutorPaidSen(activeTutor))} dibayar pada ${dateLabel(String(lastTutorPayment(activeTutor)!.paid_on))}`
+                    : 'Belum dibayar'}
+                </strong>
+              </span>
+              {tutorPayStatus(activeTutor)}
+            </div>
+          )}
+          {role === 'tutor' && tutorPaymentHistory(activeTutor)}
           {role === 'tutor' ? (
             <Table
               headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
@@ -2793,11 +3023,12 @@ export function App({
               {payslipBar(allowanceTab === 'all' ? undefined : allowanceTab)}
               {allowanceTab === 'all' ? (
                 <Table
-                  headers={['Tutor', 'Sesi dibayar', 'Jumlah', '']}
+                  headers={['Tutor', 'Sesi dibayar', 'Jumlah', 'Bayaran', '']}
                   rows={tutorIds.map((tid) => [
                     <strong key="n">{lookup('staff_profiles', tid, 'display_name')}</strong>,
                     allowances.filter((r) => r.tutorId === tid && r.payable_sen > 0).length,
                     <strong key="t">{formatMoney(allowanceOf(tid))}</strong>,
+                    tutorPayStatus(tid),
                     <button key="o" className="text-link" onClick={() => setAllowanceTab(tid)}>
                       Butiran <ChevronRight size={16} />
                     </button>,
@@ -2805,9 +3036,14 @@ export function App({
                 />
               ) : (
                 <>
-                  <p className="tab-total">
-                    Jumlah perlu dibayar: <strong>{formatMoney(allowanceOf(allowanceTab))}</strong>
-                  </p>
+                  <div className="tab-total pay-row">
+                    <span>
+                      Jumlah perlu dibayar:{' '}
+                      <strong>{formatMoney(allowanceOf(allowanceTab))}</strong>
+                    </span>
+                    {tutorPayStatus(allowanceTab)}
+                  </div>
+                  {tutorPaymentHistory(allowanceTab)}
                   <Table
                     headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
                     rows={allowances

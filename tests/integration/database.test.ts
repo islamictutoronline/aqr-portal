@@ -1369,6 +1369,69 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       ['TARANNUM', 1800, 1],
     ]);
   });
+  it('simple payments: invoice paid in one step (reference optional); tutor allowance paid and voided with history', async () => {
+    await asUser(owner);
+    const inv = (
+      await db.query<{ id: string; total_sen: string }>(
+        "select id,total_sen from invoices where organization_id=$1 and status not in ('draft','void','paid') order by created_at limit 1",
+        [org],
+      )
+    ).rows[0];
+    expect(inv).toBeTruthy();
+    const receipt = (
+      await db.query<{ id: string }>('select mark_invoice_paid($1,$2) id', [org, inv.id])
+    ).rows[0].id;
+    expect(receipt).toBeTruthy();
+    const after = (
+      await db.query<{ status: string }>('select status from invoices where id=$1', [inv.id])
+    ).rows[0];
+    expect(after.status).toBe('paid');
+    // Tiada rujukan pun tidak mengapa; bayaran kedua ditolak kerana sudah dibayar penuh.
+    await expect(db.query('select mark_invoice_paid($1,$2)', [org, inv.id])).rejects.toThrow(
+      /sudah dibayar/,
+    );
+    const pay = (
+      await db.query<{ status: string; reference: string | null; amount_sen: string }>(
+        'select p.status,p.reference,p.amount_sen from payments p join payment_allocations a on a.payment_id=p.id where a.invoice_id=$1 order by p.created_at desc limit 1',
+        [inv.id],
+      )
+    ).rows[0];
+    expect(pay.status).toBe('verified');
+    expect(pay.reference).toBeNull();
+    // Elaun tutor.
+    const p1 = (
+      await db.query<{ id: string }>(
+        "select mark_tutor_paid($1,$2,'2026-10',12500,9,'2026-10-10','FT123') id",
+        [org, tutor],
+      )
+    ).rows[0].id;
+    await db.query("select mark_tutor_paid($1,$2,'2026-10',900,1)", [org, tutor]);
+    await expect(
+      db.query("select mark_tutor_paid($1,$2,'2026-10',0)", [org, tutor]),
+    ).rejects.toThrow(/Tiada elaun/);
+    await expect(db.query('select void_tutor_payment($1,$2,$3)', [org, p1, ''])).rejects.toThrow(
+      /sebab/,
+    );
+    await db.query('select void_tutor_payment($1,$2,$3)', [org, p1, 'Tersilap tekan']);
+    const rows = (
+      await db.query<{ status: string; amount_sen: string }>(
+        'select status, amount_sen from tutor_month_payments where staff_id=$1 order by created_at',
+        [tutor],
+      )
+    ).rows.map((r) => [r.status, Number(r.amount_sen)]);
+    expect(rows).toEqual([
+      ['void', 12500],
+      ['paid', 900],
+    ]);
+    // Tutor melihat rekod sendiri sahaja dan tidak boleh menanda bayaran.
+    await asUser(tutor);
+    expect((await db.query('select id from tutor_month_payments')).rows).toHaveLength(2);
+    await expect(
+      db.query("select mark_tutor_paid($1,$2,'2026-10',100)", [org, tutor]),
+    ).rejects.toThrow();
+    await asUser(unrelated);
+    expect((await db.query('select id from tutor_month_payments')).rows).toHaveLength(0);
+  });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');
     const programs = Number(

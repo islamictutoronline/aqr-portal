@@ -320,6 +320,7 @@ export function demoData(): Dataset {
     export_jobs: [],
     audit_events: [],
     private_import_rows: [],
+    tutor_month_payments: [],
   };
 }
 export function scopeDemo(
@@ -380,6 +381,8 @@ export function scopeDemo(
     role === 'tutor' ? data.tutor_payouts.filter((p) => p.tutor_id === tutor) : [];
   result.tutor_adjustments =
     role === 'tutor' ? data.tutor_adjustments.filter((p) => p.tutor_id === tutor) : [];
+  result.tutor_month_payments =
+    role === 'tutor' ? (data.tutor_month_payments || []).filter((p) => p.staff_id === tutor) : [];
 
   result.staff_profiles = role === 'tutor' ? data.staff_profiles.filter((t) => t.id === tutor) : [];
   result.student_guardians = data.student_guardians.filter((l) =>

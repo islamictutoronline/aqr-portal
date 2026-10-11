@@ -45,6 +45,7 @@ truncate table
   public.guardians,
   public.students,
   public.tutor_payment_details,
+  public.tutor_month_payments,
   public.tutor_applications,
   public.export_jobs,
   public.google_connections,

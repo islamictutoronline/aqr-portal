@@ -5,6 +5,8 @@ export const projections: Record<string, string> = {
   report_deliveries: 'id,report_id,guardian_id,status,note,updated_at,created_at',
   program_fee_rates: 'id,program_code,duration_minutes,amount_sen,effective_from,effective_to',
   tutor_payment_details: 'id,staff_id,job_title,department,bank_name,account_holder,account_number',
+  tutor_month_payments:
+    'id,staff_id,period,amount_sen,sessions,paid_on,reference,status,void_reason,created_at',
   tutor_applications: 'id,display_name,status,created_at',
   student_guardians: 'id,student_id,guardian_id,portal_allowed,is_billing_contact',
   organizations: 'id,name,phone,address,logo_path',

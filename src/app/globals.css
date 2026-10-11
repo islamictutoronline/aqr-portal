@@ -2676,3 +2676,44 @@ label {
   color: #7a5d22;
   font-size: 13px;
 }
+
+/* Butang bayaran mudah: "Elaun telah dibayar" / "Yuran telah dibayar" */
+.pay-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid #b9d8cc;
+  background: #eef7f2;
+  color: #1d6b4a;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pay-button:hover:not(:disabled) {
+  background: #dff0e7;
+}
+.pay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pay-history {
+  margin: 12px 0 16px;
+}
+.pay-history h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.button-row.compact {
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}

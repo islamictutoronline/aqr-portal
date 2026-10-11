@@ -559,3 +559,30 @@ test('tutor downloads class reports without invoices; admin generates reports + 
   await page.getByRole('button', { name: 'Jana laporan + invois' }).click();
   await expect(page.locator('.tutor-group-meta').first()).toContainText('draf');
 });
+test('one-tap payments: tutor allowance paid (with void kept as history) and invoice fee paid without reference', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/allowance');
+  await page.reload();
+  const firstRow = page.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  await firstRow.getByRole('button', { name: 'Elaun telah dibayar' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(firstRow).toContainText('Dibayar ·');
+  // Butiran tutor: sejarah bayaran, batal kekal sebagai rekod.
+  await firstRow.getByRole('button', { name: /Butiran/ }).click();
+  const history = page.locator('.pay-history');
+  await expect(history).toContainText('Tiada rujukan');
+  await history.getByRole('button', { name: 'Batal' }).click();
+  await page.getByLabel('Sebab (cth. tersilap tekan)').fill('Tersilap tekan');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(history).toContainText('Dibatalkan');
+  await expect(page.getByRole('button', { name: 'Elaun telah dibayar' })).toBeVisible();
+  // Yuran: satu langkah, tanpa rujukan.
+  await page.goto('/?demo=1#/finance');
+  await page.reload();
+  const inv = page.getByRole('row').filter({ hasText: 'DEMO-001' });
+  await inv.getByRole('button', { name: 'Yuran telah dibayar' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(inv.getByRole('button', { name: 'Yuran telah dibayar' })).toHaveCount(0);
+  await expect(inv).toContainText('RM 0.00');
+});
