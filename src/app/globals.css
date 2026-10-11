@@ -2093,3 +2093,89 @@ label {
 .danger-button:hover:not(:disabled) {
   background: #fdf1ef;
 }
+
+/* Laporan bulanan admin: kumpulan mengikut tutor yang boleh dibuka. */
+.tutor-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+.tutor-group {
+  border: 1px solid #ebe8e0;
+  border-radius: 12px;
+  background: #fff;
+}
+.tutor-group > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  min-height: 56px;
+}
+.tutor-group > summary::-webkit-details-marker {
+  display: none;
+}
+.tutor-group > summary::after {
+  content: '▾';
+  color: var(--slate);
+  transition: transform 150ms ease;
+}
+.tutor-group[open] > summary::after {
+  transform: rotate(180deg);
+}
+.tutor-group-name {
+  font-weight: 700;
+  color: var(--navy);
+}
+.tutor-group-meta {
+  margin-left: auto;
+  color: var(--slate);
+  font-size: 13px;
+}
+.tutor-group-body {
+  padding: 0 18px 16px;
+  border-top: 1px solid #f0eee8;
+}
+.tutor-group-body > .button-row {
+  margin: 14px 0;
+}
+.report-list {
+  display: grid;
+  gap: 8px;
+}
+.report-list .report-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 12px 14px;
+  border: 1px solid #f0eee8;
+  border-radius: 10px;
+  margin: 0;
+}
+.report-list .report-item > .eyebrow,
+.report-list .report-item > h3,
+.report-list .report-item > p {
+  grid-column: 1;
+  margin: 0;
+}
+.report-list .report-item > .button-row {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  margin: 0;
+}
+.report-list .report-item > .delivery-row {
+  grid-column: 1 / -1;
+}
+@media (max-width: 760px) {
+  .report-list .report-item {
+    grid-template-columns: 1fr;
+  }
+  .report-list .report-item > .button-row {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

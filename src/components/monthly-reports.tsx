@@ -88,7 +88,25 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
       `${targets.length} draf disediakan. Semak kandungan setiap laporan sebelum meluluskan.`,
     );
   }
-  async function approve(r: Row) {
+  // Lulus pukal: satu kemas kini data (demo) atau satu muat semula selepas semua disimpan.
+  async function approveMany(list: Row[]) {
+    const ids = new Set(list.map((r) => r.id));
+    if (demo)
+      onData({
+        ...data,
+        monthly_student_reports: (data.monthly_student_reports || []).map((x) =>
+          ids.has(x.id) ? { ...x, status: 'approved', approved_at: new Date().toISOString() } : x,
+        ),
+      });
+    else {
+      try {
+        for (const r of list) await save('approve_report', { report: r.id });
+      } finally {
+        await refresh();
+      }
+    }
+  }
+  async function approve(r: Row, single = true) {
     if (demo)
       onData({
         ...data,
@@ -100,6 +118,7 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
       await save('approve_report', { report: r.id });
       await refresh();
     }
+    if (!single) return;
     setPreview(null);
     setMessage('Laporan diluluskan dan tersedia dalam portal penjaga.');
   }
@@ -127,6 +146,111 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
     }
     setMessage('Status penghantaran manual disimpan.');
   }
+  // Satu baris laporan murid (digunakan dalam kumpulan tutor untuk admin, atau grid untuk penjaga).
+  const reportRow = (r: Row) => {
+    const snapshot = r.snapshot as StudentSnapshot;
+    return (
+      <article className="report-item" key={r.id}>
+        <p className="eyebrow">{r.status === 'approved' ? 'DILULUSKAN' : 'DRAF'}</p>
+        <h3>{snapshot.student_name}</h3>
+        <p>
+          {snapshot.attendance.length} rekod kehadiran · {snapshot.feedback.length} ulasan
+        </p>
+        <div className="button-row">
+          <button disabled={busy} onClick={() => setPreview(r)}>
+            Lihat laporan
+          </button>
+          <button
+            disabled={busy}
+            onClick={() =>
+              void run(async () =>
+                downloadBlob(
+                  new Blob([await reportPdf(snapshot, r.status === 'approved', demo)], {
+                    type: 'application/pdf',
+                  }),
+                  `AQR_${r.period}_${r.student_id}.pdf`,
+                ),
+              )
+            }
+          >
+            {r.status === 'approved' ? 'Muat turun PDF' : 'PDF draf'}
+          </button>
+        </div>
+        {admin &&
+          r.status === 'approved' &&
+          (data.student_guardians || [])
+            .filter((l) => l.student_id === r.student_id)
+            .map((l) => {
+              const g = data.guardians.find((g) => g.id === l.guardian_id && g.active !== false);
+              if (!g) return null;
+              const status =
+                (data.report_deliveries || []).find(
+                  (d) => d.report_id === r.id && d.guardian_id === g.id,
+                )?.status || '';
+              return (
+                <div className="delivery-row" key={g.id}>
+                  <p>{String(g.full_name)}</p>
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setDraft(
+                        whatsappDraft(
+                          snapshot.student_name,
+                          String(r.period),
+                          location.origin + location.pathname.split('/demo')[0],
+                        ),
+                      );
+                    }}
+                  >
+                    Sediakan mesej WhatsApp
+                  </button>
+                  <label>
+                    Status manual
+                    <select
+                      aria-label={`Status penghantaran ${snapshot.student_name} kepada ${g.full_name}`}
+                      disabled={busy}
+                      value={String(status)}
+                      onChange={(e) => void run(() => delivery(r, g, e.target.value))}
+                    >
+                      <option value="" disabled>
+                        Belum direkod
+                      </option>
+                      <option value="prepared">Disediakan</option>
+                      <option value="sent">Dihantar</option>
+                      <option value="acknowledged">Diterima penjaga</option>
+                      <option value="failed">Gagal dihantar</option>
+                    </select>
+                  </label>
+                  {status && <small>Catatan admin; bukan pengesahan automatik WhatsApp.</small>}
+                </div>
+              );
+            })}
+      </article>
+    );
+  };
+  // Kumpulkan laporan mengikut tutor semasa murid (melalui pendaftaran aktif dan tugasan tutor).
+  const tutorOf = (studentId: unknown) => {
+    const classIds = (data.enrollments || [])
+      .filter((e) => e.student_id === studentId && e.status === 'active')
+      .map((e) => e.class_id);
+    const t = (data.class_tutors || []).find((x) => classIds.includes(x.class_id) && !x.ends_on);
+    return t ? String(t.staff_id) : '';
+  };
+  const groups = [...new Set(reports.map((r) => tutorOf(r.student_id)))]
+    .map((id) => ({
+      id: id || 'none',
+      name: id
+        ? String((data.staff_profiles || []).find((s) => s.id === id)?.display_name || 'Tutor')
+        : 'Tanpa tutor',
+      reports: reports
+        .filter((r) => tutorOf(r.student_id) === id)
+        .sort((x, y) =>
+          String((x.snapshot as StudentSnapshot).student_name).localeCompare(
+            String((y.snapshot as StudentSnapshot).student_name),
+          ),
+        ),
+    }))
+    .sort((x, y) => x.name.localeCompare(y.name));
   return (
     <section className="card monthly-reports">
       <div className="card-heading">
@@ -167,93 +291,61 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
           {admin ? 'Belum ada draf untuk bulan ini.' : 'Belum ada laporan bulanan diluluskan.'}
         </p>
       )}
-      <div className="report-grid">
-        {reports.map((r) => {
-          const snapshot = r.snapshot as StudentSnapshot;
-          return (
-            <article className="report-item" key={r.id}>
-              <p className="eyebrow">{r.status === 'approved' ? 'DILULUSKAN' : 'DRAF'}</p>
-              <h3>{snapshot.student_name}</h3>
-              <p>
-                {snapshot.attendance.length} rekod kehadiran · {snapshot.feedback.length} ulasan
-              </p>
-              <div className="button-row">
-                <button disabled={busy} onClick={() => setPreview(r)}>
-                  Lihat laporan
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () =>
-                      downloadBlob(
-                        new Blob([await reportPdf(snapshot, r.status === 'approved', demo)], {
-                          type: 'application/pdf',
-                        }),
-                        `AQR_${r.period}_${r.student_id}.pdf`,
-                      ),
-                    )
-                  }
-                >
-                  {r.status === 'approved' ? 'Muat turun PDF' : 'PDF draf'}
-                </button>
-              </div>
-              {admin &&
-                r.status === 'approved' &&
-                (data.student_guardians || [])
-                  .filter((l) => l.student_id === r.student_id)
-                  .map((l) => {
-                    const g = data.guardians.find(
-                      (g) => g.id === l.guardian_id && g.active !== false,
-                    );
-                    if (!g) return null;
-                    const status =
-                      (data.report_deliveries || []).find(
-                        (d) => d.report_id === r.id && d.guardian_id === g.id,
-                      )?.status || '';
-                    return (
-                      <div className="delivery-row" key={g.id}>
-                        <p>{String(g.full_name)}</p>
-                        <button
-                          disabled={busy}
-                          onClick={() => {
-                            setDraft(
-                              whatsappDraft(
-                                snapshot.student_name,
-                                String(r.period),
-                                location.origin + location.pathname.split('/demo')[0],
-                              ),
-                            );
-                          }}
-                        >
-                          Sediakan mesej WhatsApp
-                        </button>
-                        <label>
-                          Status manual
-                          <select
-                            aria-label={`Status penghantaran ${snapshot.student_name} kepada ${g.full_name}`}
-                            disabled={busy}
-                            value={String(status)}
-                            onChange={(e) => void run(() => delivery(r, g, e.target.value))}
-                          >
-                            <option value="" disabled>
-                              Belum direkod
-                            </option>
-                            <option value="prepared">Disediakan</option>
-                            <option value="sent">Dihantar</option>
-                            <option value="acknowledged">Diterima penjaga</option>
-                            <option value="failed">Gagal dihantar</option>
-                          </select>
-                        </label>
-                        {status && (
-                          <small>Catatan admin; bukan pengesahan automatik WhatsApp.</small>
-                        )}
-                      </div>
-                    );
-                  })}
-            </article>
-          );
-        })}
-      </div>
+      {admin ? (
+        // Admin: senarai tutor; tekan nama tutor untuk membuka senarai muridnya.
+        <div className="tutor-groups">
+          {groups.map((g) => {
+            const drafts = g.reports.filter((r) => r.status === 'draft');
+            const approved = g.reports.length - drafts.length;
+            return (
+              <details className="tutor-group" key={g.id}>
+                <summary>
+                  <span className="tutor-group-name">{g.name}</span>
+                  <span className="tutor-group-meta">
+                    {g.reports.length} murid · {approved} diluluskan
+                    {drafts.length ? ` · ${drafts.length} draf` : ''}
+                  </span>
+                </summary>
+                <div className="tutor-group-body">
+                  <div className="button-row">
+                    <button
+                      className="primary"
+                      disabled={busy || !drafts.length}
+                      onClick={() =>
+                        void run(async () => {
+                          await approveMany(drafts);
+                          setMessage(
+                            `${drafts.length} laporan ${g.name} diluluskan dan tersedia dalam portal penjaga.`,
+                          );
+                        })
+                      }
+                    >
+                      Luluskan semua draf ({drafts.length})
+                    </button>
+                    <button
+                      disabled={busy || !approved}
+                      onClick={() =>
+                        void run(async () => {
+                          downloadBlob(
+                            await reportsZip(g.reports, demo),
+                            `AQR_Laporan_${month}_${g.name.replace(/[^A-Za-z0-9]+/g, '_')}.zip`,
+                          );
+                          setMessage('ZIP mengandungi laporan diluluskan sahaja.');
+                        })
+                      }
+                    >
+                      ZIP tutor ini
+                    </button>
+                  </div>
+                  <div className="report-list">{g.reports.map(reportRow)}</div>
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="report-grid">{reports.map(reportRow)}</div>
+      )}
       {draft && (
         <div className="message-draft">
           <h3>Mesej untuk disalin</h3>

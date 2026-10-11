@@ -53,6 +53,8 @@ test('admin approves a report, downloads actual PDF and ZIP, then parent sees on
 }) => {
   await page.goto('/?demo=1#/reports');
   await page.getByRole('button', { name: 'Sediakan draf bulanan' }).click();
+  // Laporan dikumpulkan mengikut tutor; buka semua kumpulan.
+  for (const summary of await page.locator('.tutor-group > summary').all()) await summary.click();
   const card = page
     .locator('.report-item')
     .filter({ has: page.getByRole('heading', { name: 'Murid Contoh 01', exact: true }) });
@@ -351,4 +353,16 @@ test('admin removes a tutor only after typing the exact name in the confirmation
   await dialog.getByRole('button', { name: 'Simpan dalam demo' }).click();
   await expect(page.getByRole('heading', { name: 'Senarai tutor' })).toBeVisible();
   await expect(page.getByRole('row').filter({ hasText: 'Tutor Contoh 3' })).toHaveCount(0);
+});
+test('admin approves all drafts of one tutor at once from the tutor group', async ({ page }) => {
+  await page.goto('/?demo=1#/reports');
+  await page.getByRole('button', { name: 'Sediakan draf bulanan' }).click();
+  const group = page.locator('.tutor-group').first();
+  await expect(group.locator('summary')).toContainText('draf');
+  await group.locator('summary').click();
+  const approveAll = group.getByRole('button', { name: /Luluskan semua draf/ });
+  await approveAll.click();
+  await expect(group.locator('summary')).not.toContainText('draf');
+  await expect(approveAll).toBeDisabled();
+  await expect(group.getByText('DILULUSKAN', { exact: true }).first()).toBeVisible();
 });
