@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { context, loadData, mutationGuard, errorResponse, AccessError } from '@/lib/server/access';
 import { demoData, scopeDemo } from '@/lib/demo';
 import { REPORTS, ReportCode, allowedReport, fileName, monthLabel } from '@/lib/core';
@@ -81,7 +83,13 @@ async function run(request: Request, sheets = false) {
       return Response.json({ url });
     }
     const filename = fileName(['AQR', REPORTS[code], monthLabel(month)], format);
-    const body = format === 'xlsx' ? new Uint8Array(await toXlsx(report)) : toCsv(report);
+    const logo = await readFile(join(process.cwd(), 'public/brand/aqr-mark.png')).catch(
+      () => undefined,
+    );
+    const body =
+      format === 'xlsx'
+        ? new Uint8Array(await toXlsx(report, logo ? new Uint8Array(logo) : undefined))
+        : toCsv(report);
     if (ctx && jobId) {
       const result = await ctx.db
         .from('export_jobs')

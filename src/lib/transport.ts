@@ -29,3 +29,7 @@ export function downloadBlob(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+// Laluan aset awam: relatif pada GitHub Pages (subfolder repo), mutlak pada binaan Next.js.
+export function assetUrl(path: string) {
+  return isStatic() ? path : `/${path}`;
+}

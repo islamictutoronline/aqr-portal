@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import { ORGANIZATION, safeCell } from './core';
 import { Report, reportMetadata } from './reporting';
 
-const NAVY = 'FF182942';
+const NAVY = 'FF12433D';
 const GOLD = 'FFAD9461';
 const IVORY = 'FFF8F5EE';
 const ZEBRA = 'FFFBFAF6';
@@ -65,6 +65,7 @@ function formattedSheet(
   headers: string[],
   cells: Cell[][],
   money: boolean[],
+  logoId?: number,
 ) {
   const widths = headers.map((h, i) =>
     Math.min(
@@ -92,7 +93,12 @@ function formattedSheet(
     const cell = sheet.getCell(row, 1);
     cell.value = value;
     cell.font = { name: 'Calibri', size, bold: size >= 11, color: { argb: color } };
-    cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    // Ruang untuk logo di kiri jalur tajuk.
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: 'left',
+      indent: logoId !== undefined && row <= 3 ? 9 : 1,
+    };
     if (fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
   };
   band(1, 'AKADEMI AL-QURAN AR-RIYADH', 9, GOLD, NAVY);
@@ -101,6 +107,8 @@ function formattedSheet(
   sheet.getRow(1).height = 20;
   sheet.getRow(2).height = 30;
   sheet.getRow(3).height = 22;
+  if (logoId !== undefined)
+    sheet.addImage(logoId, { tl: { col: 0.08, row: 0.12 }, ext: { width: 60, height: 70 } });
   for (let c = 1; c <= span; c++)
     sheet.getCell(4, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
   sheet.getRow(4).height = 4;
@@ -159,10 +167,14 @@ function formattedSheet(
   return sheet;
 }
 
-export async function toXlsx(r: Report) {
+export async function toXlsx(r: Report, logo?: Uint8Array) {
   const book = new ExcelJS.Workbook();
   book.creator = ORGANIZATION;
   book.created = new Date(r.generated_at);
+  // Logo AQR (PNG lutsinar) di jalur tajuk setiap helaian bertajuk.
+  const logoId = logo
+    ? book.addImage({ buffer: logo as unknown as ExcelJS.Buffer, extension: 'png' })
+    : undefined;
   // Lajur wang disimpan sebagai integer sen; Excel memaparkannya sebagai nombor RM dua perpuluhan.
   const money = r.headers.map((h) => h.includes('(sen)'));
   const headers = r.headers.map((h) => h.replace('(sen)', '(RM)'));
@@ -173,7 +185,7 @@ export async function toXlsx(r: Report) {
   const info = `${r.rows.length} rekod${money.some(Boolean) ? ` · Jumlah RM ${(r.total_sen / 100).toFixed(2)}` : ''} · Dijana ${klStamp(r.generated_at)} oleh ${r.generated_by}${r.demo ? ' · DATA DEMO' : ''}`;
 
   // --- Helaian LAPORAN (keseluruhan).
-  formattedSheet(book, 'LAPORAN', r.title, subtitle, info, headers, cells, money);
+  formattedSheet(book, 'LAPORAN', r.title, subtitle, info, headers, cells, money, logoId);
 
   // --- Satu tab bagi setiap murid, supaya mudah dirujuk; ditambah senarai murid berpautan.
   const groupIdx = headers.findIndex((h) => h === 'Murid · Program' || h === 'Murid');
@@ -235,6 +247,7 @@ export async function toXlsx(r: Report) {
         subHeaders,
         rows.map((row) => row.filter((_, i) => i !== groupIdx)),
         subMoney,
+        logoId,
       );
       const line = index.getRow(4 + k);
       line.getCell(1).value = { text: key, hyperlink: `#'${name.replace(/'/g, "''")}'!A1` };

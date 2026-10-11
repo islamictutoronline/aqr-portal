@@ -1,6 +1,7 @@
 import { Dataset, ORGANIZATION, Rate, formatMoney, dateLabel, fileName } from './core';
 import { allowanceRows } from './reporting';
-import { monthLabel } from './student-reports';
+import { monthLabel, embedBrand } from './student-reports';
+import { BrandBytes, loadBrandBytes } from './brand';
 
 export type PayslipLine = { label: string; rate_sen: number; sessions: number; total_sen: number };
 export type Payslip = {
@@ -88,6 +89,7 @@ export async function payslipPdf(
   org: { phone?: string; address?: string } = {},
   fontBytes?: Uint8Array,
   boldBytes?: Uint8Array,
+  brand?: BrandBytes,
 ) {
   const { PDFDocument, rgb } = await import('pdf-lib');
   const fontkit = (await import('@pdf-lib/fontkit')).default;
@@ -101,8 +103,9 @@ export async function payslipPdf(
     boldBytes || (fontBytes ? regularBytes : await load('report-latin-bold.woff')),
     { subset: true },
   );
+  const logos = await embedBrand(doc, brand ?? (fontBytes ? {} : await loadBrandBytes()));
   const C = {
-    navy: rgb(0.094, 0.161, 0.259),
+    navy: rgb(0.071, 0.263, 0.239),
     gold: rgb(0.678, 0.58, 0.38),
     ivory: rgb(0.973, 0.961, 0.933),
     zebra: rgb(0.984, 0.98, 0.965),
@@ -129,9 +132,11 @@ export async function payslipPdf(
   // --- Jalur tajuk
   page.drawRectangle({ x: 0, y: H - 112, width: W, height: 112, color: C.navy });
   page.drawRectangle({ x: 0, y: H - 116, width: W, height: 4, color: C.gold });
-  text('AKADEMI AL-QURAN AR-RIYADH', M, H - 40, 9, bold, C.gold);
-  text('Penyata Pendapatan', M, H - 68, 22, bold, C.white);
-  text(`Bulan ${monthLabel(slip.month)}`, M, H - 88, 10, font, C.muted);
+  const tx = logos.aqr ? M + 78 : M;
+  if (logos.aqr) page.drawImage(logos.aqr, { x: M, y: H - 104, width: 62, height: 73 });
+  text('AKADEMI AL-QURAN AR-RIYADH', tx, H - 40, 9, bold, C.gold);
+  text('Penyata Pendapatan', tx, H - 68, 22, bold, C.white);
+  text(`Bulan ${monthLabel(slip.month)}`, tx, H - 88, 10, font, C.muted);
   const badge = 'SULIT';
   const bw = bold.widthOfTextAtSize(badge, 14) + 30;
   page.drawRectangle({ x: W - M - bw, y: H - 82, width: bw, height: 32, color: C.gold });
@@ -140,24 +145,23 @@ export async function payslipPdf(
   let y = H - 140;
   page.drawRectangle({
     x: M,
-    y: y - 70,
+    y: y - 86,
     width: CW,
-    height: 70,
+    height: 86,
     color: C.ivory,
     borderColor: C.line,
     borderWidth: 0.8,
   });
-  page.drawRectangle({ x: M, y: y - 70, width: 4, height: 70, color: C.gold });
+  page.drawRectangle({ x: M, y: y - 86, width: 4, height: 86, color: C.gold });
   const field = (label: string, value: string, x: number, yy: number, width: number) => {
     text(label.toUpperCase(), x, yy, 7.5, bold, C.slate);
     text(fit(value || '—', 11, bold, width), x, yy - 16, 11, bold);
   };
-  field('Nama', slip.tutorName, M + 18, y - 18, 240);
-  field('Jawatan', slip.jobTitle, M + 280, y - 18, 220);
-  field('Jabatan', slip.department, M + 18, y - 50 + 4, 240);
-  text('BULAN', M + 280, y - 46, 7.5, bold, C.slate);
-  text(monthLabel(slip.month), M + 280, y - 62, 11, bold);
-  y -= 96;
+  field('Nama', slip.tutorName, M + 18, y - 20, 240);
+  field('Jawatan', slip.jobTitle, M + 280, y - 20, 220);
+  field('Jabatan', slip.department, M + 18, y - 56, 240);
+  field('Bulan', monthLabel(slip.month), M + 280, y - 56, 220);
+  y -= 112;
   // --- Jadual butiran
   const cols: [string, number, 'l' | 'r'][] = [
     ['BUTIRAN', CW - 110 - 110 - 110, 'l'],
@@ -254,9 +258,11 @@ export async function payslipPdf(
     thickness: 0.6,
     color: C.line,
   });
-  text(ORGANIZATION, M, 48, 8.5, bold);
+  const fx = logos.ito ? M + 46 : M;
+  if (logos.ito) page.drawImage(logos.ito, { x: M, y: 26, width: 38, height: 32 });
+  text(ORGANIZATION, fx, 48, 8.5, bold);
   const contact = [org.phone, org.address].filter(Boolean).join(' · ');
-  if (contact) text(fit(contact, 8, font, CW * 0.7), M, 35, 8, font, C.slate);
+  text(fit(contact || 'Islamic Tutor Online', 8, font, CW * 0.6), fx, 35, 8, font, C.slate);
   right('Dokumen sulit · dijana oleh portal AQR', W - M, 48, 8, font, C.slate);
   doc.setTitle(`Penyata Pendapatan ${slip.tutorName} ${monthLabel(slip.month)}`);
   doc.setAuthor(ORGANIZATION);

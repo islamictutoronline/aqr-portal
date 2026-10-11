@@ -59,6 +59,7 @@ Ujian pelayar membuka kesemua 10 skrin modul tanpa ralat JavaScript atau overflo
 | Import September                                              | Dry-run disahkan        | Opt-in apply ke staging sahaja; petakan 16 nama dan blok tanpa nama secara manual; jangan automatik bayar |
 | WhatsApp tanpa e-mel                                          | Belum dilaksanakan      | Fallback OTP e-mel, seperti pilihan selamat dalam master prompt                                           |
 | Revocation peranti lain / retention automatik / produksi      | Belum dilaksanakan      | Perlu konfigurasi operasi dan semakan staging                                                             |
+| Logo AQR + Islamic Tutor Online (11 Okt)                      | Dilaksanakan, diuji     | PDF laporan/payslip/invois/resit, Excel setiap tab, UI & favicon; CSV teks sahaja (tiada imej)            |
 
 ## Langkah berikut yang nyata
 

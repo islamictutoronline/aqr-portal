@@ -39,8 +39,8 @@ export default function Login() {
         </div>
       </div>
       <section className="login-form">
-        <span className="brand">
-          AQR<span className="gold">.</span>
+        <span className="auth-mobile-logo login-logo" aria-hidden="true">
+          <img src="/brand/aqr-emblem.png" alt="" />
         </span>
         <h2>Buka ruang anda</h2>
         <p>

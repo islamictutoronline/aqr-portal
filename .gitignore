@@ -19,3 +19,6 @@ private-import/
 .DS_Store
 10_PREVIEW_DASHBOARD.png
 supabase/setup-all.sql
+
+# Logo rasmi AQR & Islamic Tutor Online (aset jenama awam, diperlukan oleh binaan Pages)
+!public/brand/*.png

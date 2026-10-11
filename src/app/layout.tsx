@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: 'AQR · Sistem Pengurusan Akademi',
   description: 'Akademi Al-Quran Ar-Riyadh · Tutor & Learning Management System',
   robots: { index: false, follow: false },
+  icons: { icon: '/brand/icon.png', apple: '/brand/icon.png' },
 };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

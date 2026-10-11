@@ -1,6 +1,13 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { apiFetch, navigatePath, loginPath, isStatic, downloadBlob } from '@/lib/transport';
+import {
+  apiFetch,
+  navigatePath,
+  loginPath,
+  isStatic,
+  downloadBlob,
+  assetUrl,
+} from '@/lib/transport';
 import { MonthlyReports, TutorApplications } from './monthly-reports';
 import {
   LayoutDashboard,
@@ -59,6 +66,7 @@ import {
 } from '@/lib/core';
 import { buildReport, allowanceRows, feeRows } from '@/lib/reporting';
 import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/payslip';
+import { loadBrandBytes } from '@/lib/brand';
 import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
 import { ContactAdmin } from './contact-admin';
@@ -1060,7 +1068,7 @@ export function App({
         if (format === 'xlsx') {
           const { toXlsx } = await import('@/lib/workbook');
           downloadBlob(
-            new Blob([new Uint8Array(await toXlsx(report))]),
+            new Blob([new Uint8Array(await toXlsx(report, (await loadBrandBytes()).aqr))]),
             fileName(['AQR', report.title, monthLabel(month)], 'xlsx'),
           );
         } else {
@@ -1354,7 +1362,14 @@ export function App({
     return (
       <>
         <div className="welcome">
-          <div>
+          <img
+            className="welcome-watermark"
+            src={assetUrl('brand/aqr-emblem.png')}
+            alt=""
+            aria-hidden="true"
+          />
+          <div className="welcome-text">
+            <p className="welcome-kicker">Akademi Al-Quran Ar-Riyadh</p>
             <h1>
               Assalamualaikum,{' '}
               {role === 'guardian' ? 'ibu bapa' : role === 'tutor' ? 'tutor' : 'pentadbir'}
@@ -1369,7 +1384,16 @@ export function App({
                 year: 'numeric',
               }).format(new Date())}
             </p>
+            <span className="partner-chip">
+              <img src={assetUrl('brand/ito-logo.png')} alt="" />
+              Bersama Islamic Tutor Online
+            </span>
           </div>
+          <img
+            className="welcome-mark"
+            src={assetUrl('brand/aqr-mark.png')}
+            alt="Logo Akademi Quran Ar-Riyadh"
+          />
         </div>
         <div className="metrics">
           {metrics.map(([label, value, hint]) => (
@@ -2126,7 +2150,7 @@ export function App({
                         void import('@/lib/student-reports')
                           .then(async ({ financialPdf }) =>
                             downloadBlob(
-                              new Blob([await financialPdf(i, 'invoice', demo)], {
+                              new Blob([await financialPdf(i, 'invoice', demo, invoiceExtra(i))], {
                                 type: 'application/pdf',
                               }),
                               fileName(
@@ -2300,7 +2324,7 @@ export function App({
                     void import('@/lib/student-reports')
                       .then(async ({ financialPdf }) =>
                         downloadBlob(
-                          new Blob([await financialPdf(r, 'receipt', demo)], {
+                          new Blob([await financialPdf(r, 'receipt', demo, receiptExtra(r))], {
                             type: 'application/pdf',
                           }),
                           fileName(
@@ -2325,6 +2349,34 @@ export function App({
       </>
     );
   }
+  // Maklumat untuk PDF invois/resit (nama penjaga, butiran, bayaran).
+  const invoiceExtra = (i: Row) => ({
+    guardian: lookup('guardians', i.guardian_id),
+    items: all('invoice_items')
+      .filter((x) => x.invoice_id === i.id)
+      .map((x) => ({
+        description: String(x.description),
+        quantity: Number(x.quantity),
+        unit_price_sen: Number(x.unit_price_sen),
+        total_sen:
+          Number(x.total_sen) ||
+          Number(x.quantity) * Number(x.unit_price_sen) - Number(x.discount_sen || 0),
+      })),
+    paid_sen: invoiceBalance(i, all('payments'), all('payment_allocations')).paid,
+    org: orgContact(),
+  });
+  const receiptExtra = (r: Row) => {
+    const p = all('payments').find((x) => x.id === r.payment_id);
+    return {
+      guardian: p ? lookup('guardians', p.guardian_id) : '',
+      payment: {
+        paid_on: p?.paid_on ? String(p.paid_on) : undefined,
+        method: p?.method ? String(p.method) : undefined,
+        reference: p?.reference ? String(p.reference) : undefined,
+      },
+      org: orgContact(),
+    };
+  };
   // Payslip (penyata pendapatan) dan maklumat bank tutor.
   const orgContact = () => {
     const o = all('organizations')[0] || {};
@@ -3114,8 +3166,8 @@ export function App({
               alt="Logo rasmi akademi"
             />
           ) : (
-            <span className="brand">
-              AQR<span className="gold">.</span>
+            <span className="sidebar-emblem" aria-hidden="true">
+              <img src={assetUrl('brand/aqr-emblem.png')} alt="" />
             </span>
           )}
           <span>

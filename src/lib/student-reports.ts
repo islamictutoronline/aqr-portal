@@ -8,6 +8,7 @@ import {
   monthLabel,
   fileName,
 } from './core';
+import { BrandBytes, loadBrandBytes } from './brand';
 export type StudentSnapshot = {
   student_name: string;
   period: string;
@@ -111,6 +112,7 @@ export async function reportPdf(
   demo = false,
   fontBytes?: Uint8Array,
   boldBytes?: Uint8Array,
+  brand?: BrandBytes,
 ) {
   const { PDFDocument, rgb, degrees } = await import('pdf-lib');
   const fontkit = (await import('@pdf-lib/fontkit')).default;
@@ -125,8 +127,9 @@ export async function reportPdf(
     boldBytes || (fontBytes ? regularBytes : await load('report-latin-bold.woff')),
     { subset: true },
   );
+  const logos = await embedBrand(doc, brand ?? (fontBytes ? {} : await loadBrandBytes()));
   const C = {
-    navy: rgb(0.094, 0.161, 0.259),
+    navy: rgb(0.071, 0.263, 0.239),
     gold: rgb(0.678, 0.58, 0.38),
     teal: rgb(0.227, 0.451, 0.412),
     ivory: rgb(0.973, 0.961, 0.933),
@@ -199,11 +202,14 @@ export async function reportPdf(
   // --- Jalur tajuk
   page.drawRectangle({ x: 0, y: H - 112, width: W, height: 112, color: C.navy });
   page.drawRectangle({ x: 0, y: H - 116, width: W, height: 4, color: C.gold });
-  text('AKADEMI AL-QURAN AR-RIYADH', M, H - 40, 9, bold, C.gold);
-  text('Laporan Pembelajaran Bulanan', M, H - 68, 21, bold, C.white);
+  // Lambang AQR lutsinar terus di atas jalur tajuk (tanpa kotak).
+  const tx = logos.aqr ? M + 78 : M;
+  if (logos.aqr) page.drawImage(logos.aqr, { x: M, y: H - 104, width: 62, height: 73 });
+  text('AKADEMI AL-QURAN AR-RIYADH', tx, H - 40, 9, bold, C.gold);
+  text('Laporan Pembelajaran Bulanan', tx, H - 68, 21, bold, C.white);
   text(
     'Rekod kehadiran dan perkembangan individu murid',
-    M,
+    tx,
     H - 88,
     9.5,
     font,
@@ -388,8 +394,9 @@ export async function reportPdf(
       thickness: 0.6,
       color: C.line,
     });
+    if (logos.ito) pg.drawImage(logos.ito, { x: M, y: 22, width: 30, height: 25 });
     pg.drawText('Akademi Al-Quran Ar-Riyadh · Dokumen sulit untuk ibu bapa / penjaga', {
-      x: M,
+      x: logos.ito ? M + 38 : M,
       y: 32,
       size: 8,
       font,
@@ -426,36 +433,243 @@ export async function reportsZip(reports: Row[], demo: boolean) {
   return zip.generateAsync({ type: 'blob' });
 }
 
-export async function financialPdf(record: Row, type: 'invoice' | 'receipt', demo: boolean) {
+export type FinancialExtra = {
+  guardian?: string;
+  items?: { description: string; quantity: number; unit_price_sen: number; total_sen: number }[];
+  paid_sen?: number;
+  payment?: { paid_on?: string; method?: string; reference?: string };
+  org?: { phone?: string; address?: string };
+  brand?: BrandBytes;
+  fontBytes?: Uint8Array;
+  boldBytes?: Uint8Array;
+};
+const financialStatus: Record<string, string> = {
+  issued: 'BELUM BAYAR',
+  overdue: 'TERTUNGGAK',
+  partially_paid: 'BAYARAN SEPARA',
+  paid: 'DIBAYAR',
+  draft: 'DRAF',
+  void: 'BATAL',
+};
+// Invois dan resit bergaya jenama AQR: jalur tajuk berlogo, maklumat, jadual butiran dan jumlah.
+export async function financialPdf(
+  record: Row,
+  type: 'invoice' | 'receipt',
+  demo: boolean,
+  extra: FinancialExtra = {},
+) {
   const { PDFDocument, rgb } = await import('pdf-lib');
   const fontkit = (await import('@pdf-lib/fontkit')).default;
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
-  const font = await doc.embedFont(
-    await (await fetch(new URL('fonts/report-latin.woff', document.baseURI))).arrayBuffer(),
+  const load = async (file: string) =>
+    new Uint8Array(await (await fetch(new URL(`fonts/${file}`, document.baseURI))).arrayBuffer());
+  const regular = extra.fontBytes || (await load('report-latin.woff'));
+  const font = await doc.embedFont(regular, { subset: true });
+  const bold = await doc.embedFont(
+    extra.boldBytes || (extra.fontBytes ? regular : await load('report-latin-bold.woff')),
     { subset: true },
   );
-  const page = doc.addPage([595.28, 841.89]);
-  const amount =
-    type === 'invoice'
-      ? Number(record.total_sen)
-      : Number((record.details as Record<string, unknown>)?.amount_sen || 0);
-  const lines = [
-    ORGANIZATION,
-    `${demo ? 'DEMO FIKSYEN | ' : ''}${type === 'invoice' ? 'INVOIS' : 'RESIT'}`,
-    `Nombor: ${record.number}`,
-    `Jumlah: ${formatMoney(amount)}`,
-    `Status: ${record.status}`,
-    'MYR | Asia/Kuala_Lumpur',
-  ];
-  lines.forEach((text, i) =>
-    page.drawText(text, {
-      x: 44,
-      y: 780 - i * 42,
-      size: i === 0 ? 16 : 12,
-      font,
-      color: rgb(0.09, 0.16, 0.26),
-    }),
+  const logos = await embedBrand(
+    doc,
+    extra.brand ?? (extra.fontBytes ? {} : await loadBrandBytes()),
   );
+  const C = {
+    green: rgb(0.071, 0.263, 0.239),
+    gold: rgb(0.678, 0.58, 0.38),
+    teal: rgb(0.227, 0.451, 0.412),
+    ivory: rgb(0.973, 0.961, 0.933),
+    zebra: rgb(0.984, 0.98, 0.965),
+    slate: rgb(0.396, 0.443, 0.506),
+    line: rgb(0.91, 0.91, 0.9),
+    white: rgb(1, 1, 1),
+    muted: rgb(0.8, 0.86, 0.84),
+  };
+  const W = 595.28,
+    H = 841.89,
+    M = 44,
+    CW = W - 2 * M;
+  const page = doc.addPage([W, H]);
+  type Font = typeof font;
+  const text = (t: string, x: number, y: number, size: number, f: Font = font, color = C.green) =>
+    page.drawText(t, { x, y, size, font: f, color });
+  const right = (t: string, xr: number, y: number, size: number, f: Font = font, color = C.green) =>
+    text(t, xr - f.widthOfTextAtSize(t, size), y, size, f, color);
+  const fit = (t: string, size: number, f: Font, width: number) => {
+    let v = t;
+    while (v && f.widthOfTextAtSize(v, size) > width) v = v.slice(0, -1);
+    return v === t ? t : `${v.slice(0, -1)}…`;
+  };
+  const isInvoice = type === 'invoice';
+  const details = (record.details || {}) as Record<string, unknown>;
+  const amount = isInvoice ? Number(record.total_sen) : Number(details.amount_sen || 0);
+  // --- Jalur tajuk berlogo
+  page.drawRectangle({ x: 0, y: H - 112, width: W, height: 112, color: C.green });
+  page.drawRectangle({ x: 0, y: H - 116, width: W, height: 4, color: C.gold });
+  const tx = logos.aqr ? M + 78 : M;
+  if (logos.aqr) page.drawImage(logos.aqr, { x: M, y: H - 104, width: 62, height: 73 });
+  text('AKADEMI AL-QURAN AR-RIYADH', tx, H - 40, 9, bold, C.gold);
+  text(isInvoice ? 'Invois' : 'Resit Bayaran', tx, H - 68, 22, bold, C.white);
+  text(`No. ${String(record.number || '—')}`, tx, H - 88, 10, font, C.muted);
+  const badge = demo
+    ? 'DEMO'
+    : isInvoice
+      ? financialStatus[String(record.status)] || ''
+      : 'DITERIMA';
+  if (badge) {
+    const bw = bold.widthOfTextAtSize(badge, 9) + 22;
+    page.drawRectangle({
+      x: W - M - bw,
+      y: H - 80,
+      width: bw,
+      height: 22,
+      color: badge === 'DIBAYAR' || badge === 'DITERIMA' ? C.teal : C.gold,
+    });
+    text(badge, W - M - bw + 11, H - 73, 9, bold, C.white);
+  }
+  // --- Maklumat
+  let y = H - 140;
+  page.drawRectangle({
+    x: M,
+    y: y - 64,
+    width: CW,
+    height: 64,
+    color: C.ivory,
+    borderColor: C.line,
+    borderWidth: 0.8,
+  });
+  page.drawRectangle({ x: M, y: y - 64, width: 4, height: 64, color: C.gold });
+  const field = (label: string, value: string, x: number, width: number) => {
+    text(label.toUpperCase(), x, y - 20, 7.5, bold, C.slate);
+    text(fit(value || '—', 11, bold, width), x, y - 38, 11, bold);
+  };
+  if (isInvoice) {
+    field('Kepada', extra.guardian || '—', M + 18, 200);
+    field('Bulan', record.period ? monthLabel(String(record.period)) : '—', M + 236, 120);
+    field(
+      'Tarikh akhir',
+      record.due_on ? dateLabel(`${record.due_on}T04:00:00Z`) : '—',
+      M + 380,
+      120,
+    );
+  } else {
+    field('Diterima daripada', extra.guardian || '—', M + 18, 200);
+    field(
+      'Tarikh bayaran',
+      extra.payment?.paid_on ? dateLabel(`${extra.payment.paid_on}T04:00:00Z`) : '—',
+      M + 236,
+      120,
+    );
+    field('Kaedah', extra.payment?.method || '—', M + 380, 120);
+  }
+  y -= 92;
+  // --- Jadual butiran (invois)
+  const items = extra.items || [];
+  if (isInvoice && items.length) {
+    const cols: [string, number, 'l' | 'r'][] = [
+      ['BUTIRAN', CW - 70 - 100 - 100, 'l'],
+      ['SESI', 70, 'r'],
+      ['HARGA', 100, 'r'],
+      ['JUMLAH', 100, 'r'],
+    ];
+    page.drawRectangle({ x: M, y: y - 9, width: CW, height: 26, color: C.green });
+    let x = M;
+    cols.forEach(([h, w, align]) => {
+      if (align === 'l') text(h, x + 12, y, 8, bold, C.white);
+      else right(h, x + w - 12, y, 8, bold, C.white);
+      x += w;
+    });
+    y -= 26;
+    items.forEach((it, i) => {
+      if (y < 200) return;
+      if (i % 2) page.drawRectangle({ x: M, y: y - 8, width: CW, height: 24, color: C.zebra });
+      const vals = [
+        it.description,
+        String(it.quantity),
+        formatMoney(it.unit_price_sen),
+        formatMoney(it.total_sen),
+      ];
+      let cx = M;
+      vals.forEach((v, k) => {
+        const [, w, align] = cols[k];
+        if (align === 'l') text(fit(v, 9.5, font, w - 24), cx + 12, y, 9.5, font);
+        else right(v, cx + w - 12, y, 9.5, k === 3 ? bold : font);
+        cx += w;
+      });
+      page.drawLine({
+        start: { x: M, y: y - 8 },
+        end: { x: M + CW, y: y - 8 },
+        thickness: 0.5,
+        color: C.line,
+      });
+      y -= 24;
+    });
+    y -= 16;
+  } else if (!isInvoice) {
+    text(`Rujukan bayaran: ${extra.payment?.reference || '—'}`, M, y, 10, font, C.slate);
+    y -= 30;
+  }
+  // --- Kotak jumlah
+  const bw = 230;
+  const paid = Number(extra.paid_sen || 0);
+  const rows: [string, string][] = isInvoice
+    ? [
+        ['Jumlah invois', formatMoney(amount)],
+        ['Telah dibayar', formatMoney(paid)],
+      ]
+    : [];
+  rows.forEach(([k, v]) => {
+    text(k, W - M - bw, y, 10, font, C.slate);
+    right(v, W - M, y, 10, bold);
+    y -= 18;
+  });
+  y -= 14;
+  page.drawRectangle({ x: W - M - bw, y: y - 22, width: bw, height: 40, color: C.green });
+  text(
+    isInvoice ? 'BAKI PERLU DIBAYAR' : 'JUMLAH DITERIMA',
+    W - M - bw + 14,
+    y - 5,
+    8.5,
+    bold,
+    C.gold,
+  );
+  right(
+    formatMoney(isInvoice ? Math.max(0, amount - paid) : amount),
+    W - M - 14,
+    y - 7,
+    15,
+    bold,
+    C.white,
+  );
+  // --- Pengaki
+  page.drawLine({
+    start: { x: M, y: 64 },
+    end: { x: W - M, y: 64 },
+    thickness: 0.6,
+    color: C.line,
+  });
+  const fx = logos.ito ? M + 46 : M;
+  if (logos.ito) page.drawImage(logos.ito, { x: M, y: 26, width: 38, height: 32 });
+  text(ORGANIZATION, fx, 48, 8.5, bold);
+  const contact = [extra.org?.phone, extra.org?.address].filter(Boolean).join(' · ');
+  text(fit(contact || 'Islamic Tutor Online', 8, font, CW * 0.6), fx, 35, 8, font, C.slate);
+  right('Dijana oleh portal AQR · MYR', W - M, 48, 8, font, C.slate);
+  doc.setTitle(`${isInvoice ? 'Invois' : 'Resit'} ${String(record.number || '')}`);
+  doc.setAuthor(ORGANIZATION);
   return new Uint8Array(await doc.save());
+}
+
+// Benamkan logo PNG ke dalam dokumen PDF (tiada logo jika bait tidak tersedia).
+export async function embedBrand(
+  doc: import('pdf-lib').PDFDocument,
+  bytes: BrandBytes,
+): Promise<{ aqr?: import('pdf-lib').PDFImage; ito?: import('pdf-lib').PDFImage }> {
+  const safe = async (b?: Uint8Array) => {
+    try {
+      return b ? await doc.embedPng(b) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  return { aqr: await safe(bytes.aqr), ito: await safe(bytes.ito) };
 }
