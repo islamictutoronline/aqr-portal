@@ -2461,3 +2461,24 @@ label {
   font-size: 13px;
   font-weight: 600;
 }
+.phone-field {
+  display: grid;
+  gap: 10px;
+}
+.phone-preview {
+  margin: -2px 0 0;
+  font-size: 13px;
+  color: var(--slate);
+}
+.phone-preview.good strong {
+  color: var(--navy);
+  letter-spacing: 0.02em;
+}
+.phone-preview.bad {
+  color: #a1352a;
+  font-weight: 600;
+}
+.phone-preview a {
+  color: var(--teal);
+  font-weight: 600;
+}

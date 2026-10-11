@@ -359,17 +359,32 @@ export const countryCodes: [string, string][] = [
   ['+92', 'Pakistan (+92)'],
   ['+880', 'Bangladesh (+880)'],
 ];
-// Gabung kod negara + nombor tempatan: (+60, "012-345 6789") → +60123456789.
-// Nombor yang ditaip bermula dengan "+" mengatasi kod yang dipilih.
+// Gabung kod negara + nombor yang ditaip bebas oleh tutor, dibaiki secara automatik:
+// sengkang/jarak dibuang, 0 di depan dibuang, kod negara yang ditaip semula (60…, +60…, +6 0…) dikesan.
+// (+60, "012-345 6789") → +60123456789; (+60, "6012 3456789") → +60123456789; "+65 9123 4567" → +6591234567.
 export function joinPhone(code: string, number: string): string | null {
   const n = number.trim();
   if (!n) return null;
-  if (n.startsWith('+')) return normalizePhone(n);
-  const cc = code.replace(/[^0-9]/g, '');
-  let d = n.replace(/[^0-9]/g, '').replace(/^0+/, '');
-  // Pengguna menaip kod negara sekali lagi (cth. 60123456789 dengan +60 dipilih).
-  if (d.startsWith(cc) && d.length - cc.length >= 8) d = d.slice(cc.length);
-  return normalizePhone(`+${cc}${d}`);
+  let digits = n.replace(/[^0-9]/g, '');
+  let cc = code.replace(/[^0-9]/g, '');
+  if (n.startsWith('+')) {
+    // Nombor bermula "+" mengatasi kod yang dipilih.
+    const known = countryCodes
+      .map(([c]) => c.slice(1))
+      .sort((x, y) => y.length - x.length)
+      .find((c) => digits.startsWith(c));
+    if (!known) return normalizePhone(n);
+    cc = known;
+    digits = digits.slice(known.length);
+  } else {
+    digits = digits.replace(/^0+/, '');
+    if (digits.startsWith(cc) && digits.length - cc.length >= 8) digits = digits.slice(cc.length);
+  }
+  digits = digits.replace(/^0+/, '');
+  // Malaysia: telefon bimbit 1X + 7–8 digit, atau talian tetap 3–9 + 7–8 digit.
+  if (cc === '60' && !/^(1\d{8,9}|[3-9]\d{7,8})$/.test(digits))
+    throw new Error('No. Malaysia tidak lengkap. Contoh: 0123456789');
+  return normalizePhone(`+${cc}${digits}`);
 }
 // Pisah nombor E.164 kepada [kod negara, nombor tempatan] untuk borang kemas kini.
 export function splitPhone(phone: string): [string, string] {

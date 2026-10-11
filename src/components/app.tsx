@@ -104,6 +104,60 @@ const weekDays: [string, string][] = [
   ['0', 'Ahad'],
 ];
 // Slot mingguan: bilangan sesi seminggu menentukan berapa pasangan hari + jam dipaparkan.
+// No. WhatsApp: kod negara + nombor ditaip bebas; pratonton menunjukkan nombor yang akan disimpan.
+function PhoneField({ label, initial }: { label: string; initial?: string }) {
+  const [start] = useState(() => (initial ? splitPhone(initial) : ['+60', '']));
+  const [code, setCode] = useState(start[0]);
+  const [num, setNum] = useState(start[1]);
+  let preview: string | null = null;
+  let problem = '';
+  try {
+    preview = joinPhone(code, num);
+  } catch (e) {
+    problem = e instanceof Error ? e.message : 'No. tidak sah';
+  }
+  return (
+    <div className="phone-field">
+      <label>
+        Kod negara
+        <select name="guardian_cc" value={code} onChange={(e) => setCode(e.target.value)}>
+          {countryCodes.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        {label}
+        <input
+          name="guardian_phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          required
+          placeholder="cth. 0123456789"
+          value={num}
+          onChange={(e) => setNum(e.target.value)}
+        />
+      </label>
+      <p className={`phone-preview ${problem ? 'bad' : preview ? 'good' : ''}`} aria-live="polite">
+        {problem ? (
+          problem
+        ) : preview ? (
+          <>
+            Akan disimpan: <strong>{preview}</strong> ·{' '}
+            <a href={`https://wa.me/${preview.slice(1)}`} target="_blank" rel="noreferrer">
+              Uji di WhatsApp
+            </a>
+          </>
+        ) : (
+          'Taip bebas: 012…, 6012…, +6012… — sengkang dan jarak dibuang automatik.'
+        )}
+      </p>
+    </div>
+  );
+}
 function WeeklySlots() {
   const [count, setCount] = useState(1);
   return (
@@ -955,17 +1009,10 @@ export function App({
           value: g ? String(g.full_name) : '',
         },
         {
-          name: 'guardian_cc',
-          label: 'Kod negara',
-          options: countryCodes,
-          value: g?.phone ? splitPhone(String(g.phone))[0] : '+60',
-        },
-        {
           name: 'guardian_phone',
           label: 'No. WhatsApp penjaga',
-          type: 'tel',
-          placeholder: '12-345 6789',
-          value: g?.phone ? splitPhone(String(g.phone))[1] : '',
+          type: 'whatsapp',
+          value: g?.phone ? String(g.phone) : '',
         },
       ],
       transform: (v) => ({
@@ -988,13 +1035,7 @@ export function App({
           optional: true,
           placeholder: 'Kosongkan → Ibu/Bapa (nama murid)',
         },
-        { name: 'guardian_cc', label: 'Kod negara', options: countryCodes, value: '+60' },
-        {
-          name: 'guardian_phone',
-          label: 'No. WhatsApp penjaga',
-          type: 'tel',
-          placeholder: '12-345 6789',
-        },
+        { name: 'guardian_phone', label: 'No. WhatsApp penjaga', type: 'whatsapp' },
         { name: 'program_id', label: 'Program', options: options('programs', 'name') },
         {
           name: 'minutes',
@@ -3595,41 +3636,45 @@ export function App({
                 }
               }}
             >
-              {dialog.fields.map((f) => (
-                <label key={f.name}>
-                  {f.label}
-                  {f.optional && <small> (pilihan)</small>}
-                  {f.options ? (
-                    <select
-                      autoFocus={dialog.fields[0] === f}
-                      name={f.name}
-                      required={!f.optional}
-                      defaultValue={f.value ?? ''}
-                    >
-                      <option value="" disabled>
-                        Pilih…
-                      </option>
-                      {f.options.map(([v, l]) => (
-                        <option key={v} value={v}>
-                          {l}
+              {dialog.fields.map((f) =>
+                f.type === 'whatsapp' ? (
+                  <PhoneField key={f.name} label={f.label} initial={f.value} />
+                ) : (
+                  <label key={f.name}>
+                    {f.label}
+                    {f.optional && <small> (pilihan)</small>}
+                    {f.options ? (
+                      <select
+                        autoFocus={dialog.fields[0] === f}
+                        name={f.name}
+                        required={!f.optional}
+                        defaultValue={f.value ?? ''}
+                      >
+                        <option value="" disabled>
+                          Pilih…
                         </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      autoFocus={dialog.fields[0] === f}
-                      name={f.name}
-                      type={f.type || 'text'}
-                      required={!f.optional}
-                      defaultValue={f.value}
-                      min={f.type === 'number' ? 0 : undefined}
-                      pattern={f.pattern}
-                      placeholder={f.placeholder}
-                      title={f.pattern ? 'Taip tepat seperti yang diminta' : undefined}
-                    />
-                  )}
-                </label>
-              ))}
+                        {f.options.map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        autoFocus={dialog.fields[0] === f}
+                        name={f.name}
+                        type={f.type || 'text'}
+                        required={!f.optional}
+                        defaultValue={f.value}
+                        min={f.type === 'number' ? 0 : undefined}
+                        pattern={f.pattern}
+                        placeholder={f.placeholder}
+                        title={f.pattern ? 'Taip tepat seperti yang diminta' : undefined}
+                      />
+                    )}
+                  </label>
+                ),
+              )}
               {dialog.extra}
               {!dialog.fields.length && (
                 <p>

@@ -220,8 +220,15 @@ describe('no. WhatsApp penjaga dengan kod negara', () => {
     expect(joinPhone('+65', '9123 4567')).toBe('+6591234567');
     expect(joinPhone('+966', '050 123 4567')).toBe('+966501234567');
     expect(joinPhone('+60', '+44 7700 900123')).toBe('+447700900123');
+    expect(joinPhone('+60', '+6012-345 6789')).toBe('+60123456789');
+    expect(joinPhone('+60', '+60 012 345 6789')).toBe('+60123456789');
+    expect(joinPhone('+60', '6 012 345 6789')).toBe('+60123456789');
+    expect(joinPhone('+60', '011-1234 5678')).toBe('+601112345678');
+    expect(joinPhone('+60', '03-1234 5678')).toBe('+60312345678');
+    expect(() => joinPhone('+60', '012345')).toThrow(/Malaysia tidak lengkap/);
+    expect(() => joinPhone('+60', '01234567890123')).toThrow(/Malaysia tidak lengkap/);
     expect(joinPhone('+60', '')).toBeNull();
-    expect(() => joinPhone('+60', '12')).toThrow(/tidak sah/);
+    expect(() => joinPhone('+65', '12')).toThrow(/tidak sah/);
   });
   it('memisahkan semula untuk borang kemas kini', () => {
     expect(splitPhone('+60123456789')).toEqual(['+60', '123456789']);
