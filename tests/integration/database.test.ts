@@ -1546,6 +1546,74 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       .rows[0];
     expect(cls.name.startsWith('Murid Jadual Baharu · ')).toBe(true);
   });
+  it('tutor remark: own words saved per student-month, in the report snapshot, locked after approval', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6) as id',
+        [
+          org,
+          'Murid Rumusan',
+          id(42),
+          JSON.stringify([{ day: 4, time: '19:00' }]),
+          '2027-12-31',
+          '0127778899',
+        ],
+      )
+    ).rows[0].id;
+    const period = (
+      await db.query<{ p: string }>(
+        "select to_char(now() at time zone 'Asia/Kuala_Lumpur','YYYY-MM') p",
+      )
+    ).rows[0].p;
+    await expect(
+      db.query('select save_tutor_remark($1,$2,$3,$4)', [org, kid, period, 'x'.repeat(1501)]),
+    ).rejects.toThrow(/terlalu panjang/);
+    await db.query('select save_tutor_remark($1,$2,$3,$4)', [
+      org,
+      kid,
+      period,
+      '  Murid semakin yakin membaca surah pendek.  ',
+    ]);
+    await db.query('select save_tutor_remark($1,$2,$3,$4)', [
+      org,
+      kid,
+      period,
+      'Murid semakin yakin. Teruskan bacaan setiap malam.',
+    ]);
+    expect(
+      (await db.query('select remark from monthly_tutor_remarks where student_id=$1', [kid])).rows,
+    ).toEqual([{ remark: 'Murid semakin yakin. Teruskan bacaan setiap malam.' }]);
+    // Tutor lain tidak boleh menulis atau membaca.
+    await asUser(unrelated);
+    await expect(
+      db.query('select save_tutor_remark($1,$2,$3,$4)', [org, kid, period, 'Bukan murid saya']),
+    ).rejects.toThrow();
+    expect(
+      (await db.query('select id from monthly_tutor_remarks where student_id=$1', [kid])).rows,
+    ).toHaveLength(0);
+    // Snapshot laporan membawa rumusan; selepas diluluskan, rumusan dikunci.
+    await asUser(owner);
+    const rid = (
+      await db.query<{ id: string }>('select prepare_student_report($1,$2,$3) id', [
+        org,
+        kid,
+        period,
+      ])
+    ).rows[0].id;
+    const snap = (
+      await db.query<{ snapshot: { tutor_remark: string } }>(
+        'select snapshot from monthly_student_reports where id=$1',
+        [rid],
+      )
+    ).rows[0].snapshot;
+    expect(snap.tutor_remark).toBe('Murid semakin yakin. Teruskan bacaan setiap malam.');
+    await db.query('select approve_student_report($1,$2)', [org, rid]);
+    await asUser(tutor);
+    await expect(
+      db.query('select save_tutor_remark($1,$2,$3,$4)', [org, kid, period, 'Ubah selepas lulus']),
+    ).rejects.toThrow(/dikunci/);
+  });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');
     const programs = Number(

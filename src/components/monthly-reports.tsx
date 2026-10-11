@@ -156,6 +156,7 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
         <h3>{snapshot.student_name}</h3>
         <p>
           {snapshot.attendance.length} rekod kehadiran · {snapshot.feedback.length} ulasan
+          {snapshot.tutor_remark ? ' · rumusan tutor ✓' : ''}
         </p>
         <div className="button-row">
           <button disabled={busy} onClick={() => setPreview(r)}>
@@ -382,6 +383,12 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
               {preview.period as string} ·{' '}
               {preview.status === 'approved' ? 'Diluluskan' : 'Draf untuk semakan'}
             </p>
+            {(preview.snapshot as StudentSnapshot).tutor_remark && (
+              <>
+                <h3>Rumusan tutor</h3>
+                <p className="remark-quote">{(preview.snapshot as StudentSnapshot).tutor_remark}</p>
+              </>
+            )}
             <h3>Kehadiran</h3>
             {(preview.snapshot as StudentSnapshot).attendance.map((a, i) => (
               <p key={i}>

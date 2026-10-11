@@ -999,6 +999,19 @@ export function App({
                 .forEach((e) => (e.status = 'paid'));
             }
           }
+        } else if (operation === 'save_tutor_remark') {
+          const text = String(payload.remark || '').trim();
+          next.monthly_tutor_remarks = (next.monthly_tutor_remarks || []).filter(
+            (r) => !(r.student_id === payload.student_id && r.period === payload.period),
+          );
+          if (text)
+            next.monthly_tutor_remarks.push({
+              id,
+              student_id: payload.student_id,
+              period: payload.period,
+              remark: text,
+              updated_at: new Date().toISOString(),
+            });
         } else if (operation === 'update_student') {
           const st = next.students.find((x) => x.id === payload.student_id)!;
           const old = String(st.full_name);
@@ -1256,6 +1269,28 @@ export function App({
     });
   };
   // Tutor mendaftar murid bersama jadual mingguan; sesi dijana terus ke Sesi & kehadiran.
+  // Rumusan tutor (ayat sendiri) bagi laporan bulanan seorang murid.
+  const editRemark = (student: Row) => {
+    const current = all('monthly_tutor_remarks').find(
+      (r) => r.student_id === student.id && r.period === month,
+    );
+    setDialog({
+      title: `Rumusan tutor · ${String(student.full_name)} · ${monthLabel(month)}`,
+      operation: 'save_tutor_remark',
+      fields: [
+        {
+          name: 'remark',
+          label: 'Rumusan untuk laporan bulanan (ayat sendiri)',
+          type: 'textarea',
+          optional: true,
+          placeholder:
+            'Contoh: Alhamdulillah, bacaan semakin lancar. Fokus bulan depan ialah tajwid mad.',
+          value: current ? String(current.remark) : '',
+        },
+      ],
+      transform: (v) => ({ student_id: student.id, period: month, remark: v.remark || '' }),
+    });
+  };
   const editStudent = (student: Row) =>
     setDialog({
       title: 'Kemaskini murid',
@@ -4157,7 +4192,14 @@ export function App({
                   />
                 </>
               )}
-              {role === 'tutor' && <TutorClassReports data={visible} month={month} demo={demo} />}{' '}
+              {role === 'tutor' && (
+                <TutorClassReports
+                  data={visible}
+                  month={month}
+                  demo={demo}
+                  onRemark={(st) => editRemark(st)}
+                />
+              )}{' '}
               {reportsScreen()}
             </>
           ) : section === 'parent' ? (
@@ -4259,6 +4301,20 @@ export function App({
                   <PhoneField key={f.name} label={f.label} initial={f.value} />
                 ) : f.type === 'guardian' ? (
                   <GuardianField key={f.name} choices={f.choices || []} initialId={f.value} />
+                ) : f.type === 'textarea' ? (
+                  <label key={f.name}>
+                    {f.label}
+                    {f.optional && <small> (pilihan)</small>}
+                    <textarea
+                      autoFocus
+                      name={f.name}
+                      rows={6}
+                      maxLength={1500}
+                      required={!f.optional}
+                      placeholder={f.placeholder}
+                      defaultValue={f.value}
+                    />
+                  </label>
                 ) : (
                   <label key={f.name}>
                     {f.label}

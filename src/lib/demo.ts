@@ -321,6 +321,7 @@ export function demoData(): Dataset {
     audit_events: [],
     private_import_rows: [],
     tutor_month_payments: [],
+    monthly_tutor_remarks: [],
   };
 }
 export function scopeDemo(
@@ -403,6 +404,10 @@ export function scopeDemo(
         )
       : [];
   result.report_deliveries = [];
+  result.monthly_tutor_remarks =
+    role === 'tutor'
+      ? (data.monthly_tutor_remarks || []).filter((r) => studentIds.includes(r.student_id))
+      : [];
   result.tutor_applications = [];
   result.audit_events = [];
   result.private_import_rows = [];

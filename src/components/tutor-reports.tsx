@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { Download, FileText } from 'lucide-react';
-import { Dataset, fileName, monthLabel } from '@/lib/core';
+import { Download, FileText, PenLine } from 'lucide-react';
+import { Dataset, Row, fileName, monthLabel } from '@/lib/core';
 import { downloadBlob } from '@/lib/transport';
 import { demoSnapshot } from '@/lib/student-reports';
 
@@ -10,10 +10,13 @@ export function TutorClassReports({
   data,
   month,
   demo,
+  onRemark,
 }: {
   data: Dataset;
   month: string;
   demo: boolean;
+  // Buka borang rumusan tutor (ayat sendiri) bagi murid ini.
+  onRemark?: (student: Row) => void;
 }) {
   const [busy, setBusy] = useState(''),
     [message, setMessage] = useState('');
@@ -72,8 +75,18 @@ export function TutorClassReports({
               <FileText size={16} aria-hidden="true" />
               <span>
                 <strong>{snap.student_name}</strong>
-                <small>{done ? `${done} kelas direkod` : 'Tiada kelas direkod bulan ini'}</small>
+                <small>
+                  {done ? `${done} kelas direkod` : 'Tiada kelas direkod bulan ini'}
+                  {snap.tutor_remark ? ' · ' : ''}
+                  {snap.tutor_remark && <span className="tag ok">Ada rumusan</span>}
+                </small>
               </span>
+              {onRemark && (
+                <button className="secondary" onClick={() => onRemark(students[i])}>
+                  <PenLine size={15} />
+                  {snap.tutor_remark ? 'Ubah rumusan' : 'Tulis rumusan'}
+                </button>
+              )}
               <button
                 disabled={!!busy || !done}
                 onClick={() =>

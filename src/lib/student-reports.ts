@@ -16,6 +16,8 @@ export type StudentSnapshot = {
   attendance: { date: string; class_name: string; status: string; reading?: Reading | null }[];
   feedback: { date: string; text: string }[];
   progress: { date: string; mastery: number; notes: string | null }[];
+  // Rumusan bebas tutor untuk bulan ini (pilihan).
+  tutor_remark?: string | null;
 };
 // Snapshot daripada data yang dimuatkan (skop RLS). Demo, dan rekod kelas tutor; laporan rasmi
 // yang dihantar kepada ibu bapa tetap dibina oleh pangkalan data (prepare_student_report).
@@ -44,6 +46,12 @@ export function demoSnapshot(data: Dataset, student: Row, period: string): Stude
     feedback: (data.generated_parent_comments || [])
       .filter((c) => c.student_id === student.id && c.status === 'published' && get(c.session_id))
       .map((c) => ({ date: String(get(c.session_id)!.starts_at), text: String(c.text) })),
+    tutor_remark:
+      String(
+        (data.monthly_tutor_remarks || []).find(
+          (r) => r.student_id === student.id && r.period === period,
+        )?.remark ?? '',
+      ) || null,
     progress: (data.student_progress || [])
       .filter((p) => p.student_id === student.id && p.published_at && get(p.session_id))
       .map((p) => ({
@@ -301,6 +309,24 @@ export async function reportPdf(
     y -= 16;
   }
   y -= 10;
+  // Rumusan tutor: ayat tutor sendiri, dipaparkan dalam kotak petikan.
+  if (snapshot.tutor_remark) {
+    section('Rumusan tutor');
+    const lines = snapshot.tutor_remark
+      .split(/\n+/)
+      .flatMap((para) => wrap(para, 10.5, font, CW - 28));
+    const boxH = lines.length * 16 + 18;
+    ensure(Math.min(boxH, 200));
+    page.drawRectangle({ x: M, y: y - boxH + 14, width: CW, height: boxH, color: C.ivory });
+    page.drawRectangle({ x: M, y: y - boxH + 14, width: 3, height: boxH, color: C.teal });
+    y -= 4;
+    for (const l of lines) {
+      ensure(16);
+      text(l, M + 16, y, 10.5, font);
+      y -= 16;
+    }
+    y -= 12;
+  }
   // Rekod kelas tutor tiada invois: rujuk admin untuk jumlah yuran.
   if (approved === 'tutor') {
     ensure(44);

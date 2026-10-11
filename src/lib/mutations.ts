@@ -212,6 +212,11 @@ const schemas = {
   }),
   remove_student: z.object({ student_id: uuid }),
   update_student: z.object({ student_id: uuid, full_name: text }),
+  save_tutor_remark: z.object({
+    student_id: uuid,
+    period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    remark: z.string().max(1500).default(''),
+  }),
   update_schedule: z.object({
     cid: uuid,
     minutes: z.union([z.literal(20), z.literal(30)]),
@@ -371,6 +376,7 @@ export async function executeMutation(
       void_tutor_paid: 'void_tutor_payment',
       remove_student: 'remove_student',
       update_student: 'update_student',
+      save_tutor_remark: 'save_tutor_remark',
       update_schedule: 'update_schedule',
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',

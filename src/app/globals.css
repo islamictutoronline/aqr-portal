@@ -3146,3 +3146,37 @@ label {
     align-self: start;
   }
 }
+.class-report-list li {
+  grid-template-columns: auto 1fr auto auto;
+}
+.class-report-list li > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.class-report-list small .tag {
+  margin-left: 2px;
+}
+.remark-quote {
+  padding: 10px 14px;
+  border-left: 3px solid var(--teal);
+  background: #f6faf8;
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+textarea {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid #dfe3dc;
+  border-radius: 10px;
+  resize: vertical;
+}
+@media (max-width: 760px) {
+  .class-report-list li {
+    grid-template-columns: auto 1fr;
+  }
+  .class-report-list li > button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}

@@ -14,6 +14,7 @@ begin;
 truncate table
   public.report_deliveries,
   public.monthly_student_reports,
+  public.monthly_tutor_remarks,
   public.generated_parent_comments,
   public.assessment_responses,
   public.attendance,

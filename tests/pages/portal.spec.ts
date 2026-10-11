@@ -676,3 +676,36 @@ test('student profile: rename student and change weekly schedule (prefilled), se
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Murid Nama Baharu', level: 1 })).toBeVisible();
 });
+test('tutor writes own summary (rumusan) for a student; admin sees it in the monthly report preview', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/reports');
+  await page.getByLabel('Bulan laporan').fill('2026-10');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Laporan', exact: true }).click();
+  const row = page.locator('.class-report-list li').filter({ hasText: 'Murid Contoh 01' });
+  await row.getByRole('button', { name: 'Tulis rumusan' }).click();
+  await page
+    .getByLabel('Rumusan untuk laporan bulanan (ayat sendiri)')
+    .fill('Alhamdulillah, bacaan semakin lancar. Fokus bulan depan ialah mad asli.');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(row).toContainText('Ada rumusan');
+  await expect(row.getByRole('button', { name: 'Ubah rumusan' })).toBeVisible();
+  // Admin: draf laporan membawa rumusan tutor.
+  await page.getByLabel('Pratonton peranan demo').selectOption('owner');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Laporan', exact: true }).click();
+  await page.getByLabel('Bulan laporan').fill('2026-10');
+  await page.getByRole('button', { name: 'Sediakan draf bulanan' }).click();
+  for (const summary of await page.locator('.monthly-reports .tutor-group > summary').all())
+    await summary.click();
+  const card = page
+    .locator('.report-item')
+    .filter({ has: page.getByRole('heading', { name: 'Murid Contoh 01', exact: true }) });
+  await expect(card).toContainText('rumusan tutor ✓');
+  await card.getByRole('button', { name: 'Lihat laporan' }).click();
+  await expect(page.locator('.remark-quote')).toContainText('Fokus bulan depan ialah mad asli.');
+});
