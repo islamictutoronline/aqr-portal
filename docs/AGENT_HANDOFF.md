@@ -29,6 +29,8 @@ Selepas serahan pertama, pengguna memberi keperluan muktamad (`docs/REQUIREMENTS
 
 **11 Okt — kata laluan untuk tutor:** tutor (selain pemilik/admin) boleh menetapkan/menukar kata laluan sendiri (`passwordCard()` di Tetapan; `/api/password` dalam `portal/client.ts` membenarkan `tutor`, `updateUser({ password, data: { password_set: true } })`). Kod e-mel hanya diperlukan semasa daftar/log masuk pertama atau lupa kata laluan. Utama tutor memaparkan kad "Tetapkan kata laluan anda" sehingga `user_metadata.password_set` benar (`getContext` → prop `passwordSet`). Log masuk: tab **Kata laluan** (lalai) | **Kod e-mel**; pilihan diingati dalam `localStorage` `aqr.loginMethod`. Ibu bapa kekal dengan kod e-mel. Tiada migrasi DB.
 
+**11 Okt — reset untuk ujian kali ke-2:** atas permintaan jelas pengguna, `supabase/reset-test-data.sql` (bukan migrasi) memadam semua data operasi, tutor (profil, keahlian, akaun Auth) dan pemohon; mengekalkan organisasi, program, kurikulum, pilihan, kadar elaun, kadar yuran dan akaun pemilik/admin. Diuji pada PGlite (ujian integrasi terakhir). Sebelum reset (11 Okt): 1 pemilik, 2 tutor (1 tidak aktif), 17 murid, 162 sesi, 596 audit. Pengguna menjalankan skrip sendiri dalam SQL Editor. **Jangan jalankan skrip ini tanpa permintaan pengguna.**
+
 **Status akhir sesi 10 Okt (malam) — sambung di sini:**
 
 - Pembaikan terakhir dideploy: sesi dibatalkan/dijadual semula dikunci dengan nota (sebelum ini kelihatan boleh diedit tetapi setiap simpanan ditolak — punca aduan "tak dapat simpan" pada sesi QALEESYA yang sudah dipadam), ralat P0001 dipaparkan terus, padam kelas semasa kembali ke senarai.

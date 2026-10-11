@@ -1179,4 +1179,51 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await db.query('select claim_guardian_access()');
     expect((await db.query('select id from students')).rows).toEqual([{ id: id(31) }]);
   });
+  it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
+    await db.exec('reset role');
+    const programs = Number(
+      (await db.query<{ n: number }>('select count(*) n from programs')).rows[0].n,
+    );
+    expect(
+      Number((await db.query<{ n: number }>('select count(*) n from class_sessions')).rows[0].n),
+    ).toBeGreaterThan(0);
+    await db.exec(await readFile('supabase/reset-test-data.sql', 'utf8'));
+    const count = async (sql: string) => Number((await db.query<{ n: number }>(sql)).rows[0].n);
+    for (const t of [
+      'students',
+      'guardians',
+      'classes',
+      'class_sessions',
+      'attendance',
+      'invoices',
+      'monthly_student_reports',
+      'tutor_applications',
+      'audit_events',
+    ])
+      expect(await count(`select count(*) n from ${t}`)).toBe(0);
+    expect(
+      await count("select count(*) n from staff_memberships where role not in ('owner','admin')"),
+    ).toBe(0);
+    expect(
+      await count(
+        'select count(*) n from staff_profiles where id in ($$' +
+          tutor +
+          '$$,$$' +
+          unrelated +
+          '$$)',
+      ),
+    ).toBe(0);
+    expect(
+      await count('select count(*) n from staff_memberships where staff_id=$$' + owner + '$$'),
+    ).toBe(1);
+    // Hanya akaun pentadbir yang tinggal dalam Auth; tutor, pemohon dan ibu bapa dibuang.
+    expect(await count('select count(*) n from auth.users')).toBe(
+      await count('select count(*) n from staff_profiles'),
+    );
+    expect(await count('select count(*) n from programs')).toBe(programs);
+    expect(await count('select count(*) n from tutor_allowance_rates')).toBeGreaterThan(0);
+    // Pemilik masih boleh bekerja selepas reset.
+    await asUser(owner);
+    expect(await count('select count(*) n from organizations')).toBeGreaterThan(0);
+  });
 });
