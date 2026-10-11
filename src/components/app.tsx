@@ -61,6 +61,9 @@ import {
   statusLabels,
   passwordProblem,
   normalizePhone,
+  countryCodes,
+  joinPhone,
+  splitPhone,
   feeReference,
   fileName,
   monthLabel,
@@ -286,7 +289,12 @@ export function App({
           month: '2-digit',
         }).format(new Date()),
   );
-  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [dialog, setDialogState] = useState<Dialog | null>(null);
+  // Borang baharu bermula tanpa mesej lama.
+  const setDialog = (d: Dialog | null) => {
+    if (d) setNotice('');
+    setDialogState(d);
+  };
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -947,14 +955,24 @@ export function App({
           value: g ? String(g.full_name) : '',
         },
         {
+          name: 'guardian_cc',
+          label: 'Kod negara',
+          options: countryCodes,
+          value: g?.phone ? splitPhone(String(g.phone))[0] : '+60',
+        },
+        {
           name: 'guardian_phone',
           label: 'No. WhatsApp penjaga',
           type: 'tel',
-          placeholder: '012-345 6789',
-          value: g?.phone ? String(g.phone) : '',
+          placeholder: '12-345 6789',
+          value: g?.phone ? splitPhone(String(g.phone))[1] : '',
         },
       ],
-      transform: (v) => ({ student_id: studentId, ...v }),
+      transform: (v) => ({
+        student_id: studentId,
+        guardian_name: v.guardian_name || '',
+        guardian_phone: joinPhone(v.guardian_cc, v.guardian_phone) ?? '',
+      }),
     });
   };
   // Tutor mendaftar murid bersama jadual mingguan; sesi dijana terus ke Sesi & kehadiran.
@@ -970,11 +988,12 @@ export function App({
           optional: true,
           placeholder: 'Kosongkan → Ibu/Bapa (nama murid)',
         },
+        { name: 'guardian_cc', label: 'Kod negara', options: countryCodes, value: '+60' },
         {
           name: 'guardian_phone',
           label: 'No. WhatsApp penjaga',
           type: 'tel',
-          placeholder: '012-345 6789',
+          placeholder: '12-345 6789',
         },
         { name: 'program_id', label: 'Program', options: options('programs', 'name') },
         {
@@ -1001,7 +1020,7 @@ export function App({
         end_date: v.end_date,
         start_date: v.start_date,
         guardian_name: v.guardian_name || '',
-        guardian_phone: v.guardian_phone || '',
+        guardian_phone: joinPhone(v.guardian_cc, v.guardian_phone) ?? '',
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],
@@ -3619,6 +3638,12 @@ export function App({
                     : dialog.operation === 'void_session'
                       ? 'Kelas ini dibatalkan: tidak dikira elaun dan ulasan ditarik daripada ibu bapa.'
                       : 'Sahkan tindakan ini. Rekod sejarah tidak dipadam.'}
+                </p>
+              )}
+              {/* Ralat ditunjukkan dalam borang supaya tidak terlindung di belakang tetingkap. */}
+              {notice && (
+                <p role="alert" className="dialog-error">
+                  {notice}
                 </p>
               )}
               <button className="primary wide" type="submit" disabled={busy}>

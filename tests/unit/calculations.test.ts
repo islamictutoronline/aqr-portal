@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   passwordProblem,
+  joinPhone,
+  splitPhone,
   findRate,
   eligibleAllowance,
   integerSen,
@@ -208,4 +210,23 @@ it('rejects weak admin passwords and accepts strong ones', () => {
   expect(passwordProblem('password123')).toMatch(/mudah diteka/);
   expect(passwordProblem('admin12345')).toMatch(/mudah diteka/);
   expect(passwordProblem('Ustazah-Riyadh-2026')).toBeNull();
+});
+
+describe('no. WhatsApp penjaga dengan kod negara', () => {
+  it('menggabungkan kod negara dengan nombor tempatan', () => {
+    expect(joinPhone('+60', '012-345 6789')).toBe('+60123456789');
+    expect(joinPhone('+60', '12 345 6789')).toBe('+60123456789');
+    expect(joinPhone('+60', '60123456789')).toBe('+60123456789');
+    expect(joinPhone('+65', '9123 4567')).toBe('+6591234567');
+    expect(joinPhone('+966', '050 123 4567')).toBe('+966501234567');
+    expect(joinPhone('+60', '+44 7700 900123')).toBe('+447700900123');
+    expect(joinPhone('+60', '')).toBeNull();
+    expect(() => joinPhone('+60', '12')).toThrow(/tidak sah/);
+  });
+  it('memisahkan semula untuk borang kemas kini', () => {
+    expect(splitPhone('+60123456789')).toEqual(['+60', '123456789']);
+    expect(splitPhone('+6591234567')).toEqual(['+65', '91234567']);
+    expect(splitPhone('+966501234567')).toEqual(['+966', '501234567']);
+    expect(splitPhone('+6731234567')).toEqual(['+673', '1234567']);
+  });
 });

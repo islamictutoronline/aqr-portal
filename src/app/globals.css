@@ -2452,3 +2452,12 @@ label {
 .guardian-cell small {
   color: var(--slate);
 }
+.dialog-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fdf0ee;
+  color: #a1352a;
+  font-size: 13px;
+  font-weight: 600;
+}

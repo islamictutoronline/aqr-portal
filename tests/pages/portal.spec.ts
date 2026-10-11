@@ -458,4 +458,15 @@ test('tutor enters the guardian while enrolling; blank name defaults to Ibu/Bapa
     'href',
     'https://wa.me/60123456789',
   );
+  // Penjaga di luar negara: pilih kod negara; nombor tidak sah dipaparkan dalam borang.
+  await page.getByRole('button', { name: 'Kemaskini penjaga' }).click();
+  await expect(page.getByRole('combobox', { name: 'Kod negara' })).toHaveValue('+60');
+  await expect(page.getByLabel('No. WhatsApp penjaga')).toHaveValue('123456789');
+  await page.getByRole('combobox', { name: 'Kod negara' }).selectOption('+65');
+  await page.getByLabel('No. WhatsApp penjaga').fill('12');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('No. WhatsApp tidak sah');
+  await page.getByLabel('No. WhatsApp penjaga').fill('9123 4567');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.locator('.guardian-line')).toContainText('+6591234567');
 });

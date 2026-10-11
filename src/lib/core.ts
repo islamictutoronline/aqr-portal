@@ -329,3 +329,53 @@ export function normalizePhone(raw: string): string | null {
     throw new Error('No. WhatsApp tidak sah. Contoh: 012-345 6789');
   return d;
 }
+// Kod negara untuk no. WhatsApp penjaga (Malaysia lalai). Senarai ringkas negara biasa waris AQR.
+export const countryCodes: [string, string][] = [
+  ['+60', 'Malaysia (+60)'],
+  ['+65', 'Singapura (+65)'],
+  ['+673', 'Brunei (+673)'],
+  ['+62', 'Indonesia (+62)'],
+  ['+66', 'Thailand (+66)'],
+  ['+966', 'Arab Saudi (+966)'],
+  ['+971', 'UAE (+971)'],
+  ['+974', 'Qatar (+974)'],
+  ['+965', 'Kuwait (+965)'],
+  ['+968', 'Oman (+968)'],
+  ['+973', 'Bahrain (+973)'],
+  ['+20', 'Mesir (+20)'],
+  ['+90', 'Turki (+90)'],
+  ['+44', 'United Kingdom (+44)'],
+  ['+353', 'Ireland (+353)'],
+  ['+49', 'Jerman (+49)'],
+  ['+33', 'Perancis (+33)'],
+  ['+31', 'Belanda (+31)'],
+  ['+61', 'Australia (+61)'],
+  ['+64', 'New Zealand (+64)'],
+  ['+1', 'AS / Kanada (+1)'],
+  ['+81', 'Jepun (+81)'],
+  ['+82', 'Korea Selatan (+82)'],
+  ['+86', 'China (+86)'],
+  ['+91', 'India (+91)'],
+  ['+92', 'Pakistan (+92)'],
+  ['+880', 'Bangladesh (+880)'],
+];
+// Gabung kod negara + nombor tempatan: (+60, "012-345 6789") → +60123456789.
+// Nombor yang ditaip bermula dengan "+" mengatasi kod yang dipilih.
+export function joinPhone(code: string, number: string): string | null {
+  const n = number.trim();
+  if (!n) return null;
+  if (n.startsWith('+')) return normalizePhone(n);
+  const cc = code.replace(/[^0-9]/g, '');
+  let d = n.replace(/[^0-9]/g, '').replace(/^0+/, '');
+  // Pengguna menaip kod negara sekali lagi (cth. 60123456789 dengan +60 dipilih).
+  if (d.startsWith(cc) && d.length - cc.length >= 8) d = d.slice(cc.length);
+  return normalizePhone(`+${cc}${d}`);
+}
+// Pisah nombor E.164 kepada [kod negara, nombor tempatan] untuk borang kemas kini.
+export function splitPhone(phone: string): [string, string] {
+  const match = [...countryCodes]
+    .map(([c]) => c)
+    .sort((a, b) => b.length - a.length)
+    .find((c) => phone.startsWith(c));
+  return match ? [match, phone.slice(match.length)] : ['+60', phone];
+}
