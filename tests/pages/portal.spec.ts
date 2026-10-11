@@ -503,3 +503,56 @@ test('admin sends one WhatsApp package per family: all siblings reports + invoic
   await family.getByRole('button', { name: 'Tandakan dihantar' }).click();
   await expect(family).toContainText('Dihantar');
 });
+test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent comment; other programs have none', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/sessions/session-12');
+  await page.reload();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByLabel("Jilid Iqra'").selectOption('2');
+  await page.getByLabel('Muka surat').fill('5');
+  await expect(page.locator('.preview-comment')).toContainText("Bacaan: Iqra' 2, muka surat 5.");
+  await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
+  await page.goto('/?demo=1#/sessions/session-13');
+  await page.reload();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByLabel('Surah').selectOption('112');
+  await page.getByLabel('Ayat hingga').fill('9');
+  await expect(page.locator('.reading-issue')).toContainText('hanya 4 ayat');
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeDisabled();
+  await page.getByLabel('Ayat dari').fill('1');
+  await page.getByLabel('Ayat hingga').fill('4');
+  await expect(page.locator('.preview-comment')).toContainText('Bacaan: Surah Al-Ikhlas ayat 1–4.');
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
+  // Cuti bermaklum: tiada bacaan.
+  await page.getByRole('button', { name: 'Cuti bermaklum', exact: true }).click();
+  await expect(page.locator('.reading-fields')).toHaveCount(0);
+  await page.goto('/?demo=1#/sessions/session-15');
+  await page.reload();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await expect(page.locator('.reading-fields')).toHaveCount(0);
+});
+test('tutor downloads class reports without invoices; admin generates reports + invoices in one click', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/reports');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Laporan', exact: true }).click();
+  const card = page.locator('.tutor-class-reports');
+  await expect(card).toContainText('Laporan kelas murid saya');
+  await expect(page.locator('.family-delivery')).toHaveCount(0);
+  const pdfWait = page.waitForEvent('download');
+  await card.getByRole('button', { name: 'PDF', exact: true }).first().click();
+  expect((await pdfWait).suggestedFilename()).toMatch(/^Laporan Kelas .*\.pdf$/);
+  const zipWait = page.waitForEvent('download');
+  await card.getByRole('button', { name: /Muat turun semua/ }).click();
+  expect((await zipWait).suggestedFilename()).toMatch(/^Laporan Kelas .*\.zip$/);
+  // Admin
+  await page.goto('/?demo=1#/reports');
+  await page.reload();
+  await page.getByLabel('Bulan laporan').fill('2026-10');
+  await page.getByRole('button', { name: 'Jana laporan + invois' }).click();
+  await expect(page.locator('.tutor-group-meta').first()).toContainText('draf');
+});

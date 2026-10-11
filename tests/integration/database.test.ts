@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { readFile, readdir } from 'node:fs/promises';
+import { readingLabel, type Reading } from '../../src/lib/quran';
 let db: PGlite;
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const org = id(1),
@@ -1235,6 +1236,116 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
         ).rows[0].n,
       ),
     ).toBe(2);
+  });
+  it('session reading (Iqra/Quran) is validated, stored, added to the comment and the monthly report', async () => {
+    await db.exec('reset role');
+    // Label SQL sama dengan label TypeScript.
+    const cases: Reading[] = [
+      { kind: 'iqra', jilid: 3, page: 12 },
+      { kind: 'quran', surah: 67, ayah_from: 1, ayah_to: 10, page: 562 },
+      { kind: 'quran', surah: 3, ayah_from: 5, ayah_to: 5 },
+      { kind: 'quran', page: 1 },
+    ];
+    for (const c of cases)
+      expect(
+        (await db.query<{ t: string }>('select private.reading_label($1) t', [JSON.stringify(c)]))
+          .rows[0].t,
+      ).toBe(readingLabel(c));
+    await expect(
+      db.query('select private.reading_label($1)', [
+        JSON.stringify({ kind: 'quran', surah: 67, ayah_to: 31 }),
+      ]),
+    ).rejects.toThrow(/hanya 30 ayat/);
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6) as id',
+        [
+          org,
+          'Murid Bacaan',
+          id(42),
+          JSON.stringify([{ day: 3, time: '18:00' }]),
+          '2027-12-31',
+          '0123334444',
+        ],
+      )
+    ).rows[0].id;
+    const sess = (
+      await db.query<{ id: string; mon: string }>(
+        "select s.id, to_char(s.starts_at at time zone 'Asia/Kuala_Lumpur','YYYY-MM') as mon from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 order by s.starts_at limit 1",
+        [kid],
+      )
+    ).rows[0];
+    await expect(
+      db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+        org,
+        sess.id,
+        kid,
+        'present',
+        JSON.stringify({
+          mastery: 'not_assessed',
+          reading: { kind: 'quran', surah: 112, ayah_to: 9 },
+        }),
+      ]),
+    ).rejects.toThrow(/hanya 4 ayat/);
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      sess.id,
+      kid,
+      'present',
+      JSON.stringify({ mastery: 'not_assessed', reading: { kind: 'iqra', jilid: 3, page: 12 } }),
+    ]);
+    const att = (
+      await db.query<{ reading: Reading }>(
+        'select reading from attendance where session_id=$1 and student_id=$2',
+        [sess.id, kid],
+      )
+    ).rows[0];
+    expect(att.reading).toEqual({ kind: 'iqra', jilid: 3, page: 12 });
+    const text = (
+      await db.query<{ text: string }>(
+        "select text from generated_parent_comments where session_id=$1 and student_id=$2 and status='published'",
+        [sess.id, kid],
+      )
+    ).rows[0].text;
+    expect(text).toContain("Bacaan: Iqra' 3, muka surat 12.");
+    // Tidak hadir: bacaan dibuang.
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      sess.id,
+      kid,
+      'absent',
+      JSON.stringify({ mastery: 'not_assessed', reading: { kind: 'iqra', jilid: 3 } }),
+    ]);
+    expect(
+      (
+        await db.query<{ reading: unknown }>('select reading from attendance where session_id=$1', [
+          sess.id,
+        ])
+      ).rows[0].reading,
+    ).toBeNull();
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      sess.id,
+      kid,
+      'late',
+      JSON.stringify({ mastery: 'not_assessed', reading: { kind: 'iqra', jilid: 4, page: 2 } }),
+    ]);
+    await asUser(owner);
+    const rid = (
+      await db.query<{ id: string }>('select prepare_student_report($1,$2,$3) id', [
+        org,
+        kid,
+        sess.mon,
+      ])
+    ).rows[0].id;
+    const snap = (
+      await db.query<{ snapshot: { attendance: { reading: Reading }[] } }>(
+        'select snapshot from monthly_student_reports where id=$1',
+        [rid],
+      )
+    ).rows[0].snapshot;
+    expect(snap.attendance[0].reading).toEqual({ kind: 'iqra', jilid: 4, page: 2 });
   });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');

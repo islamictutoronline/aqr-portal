@@ -73,6 +73,16 @@ import {
 import { buildReport, allowanceRows, feeRows } from '@/lib/reporting';
 import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/payslip';
 import { loadBrandBytes } from '@/lib/brand';
+import { demoSnapshot } from '@/lib/student-reports';
+import { TutorClassReports } from './tutor-reports';
+import {
+  Reading,
+  hasReading,
+  readingKind,
+  readingLabel,
+  readingProblem,
+  surahs,
+} from '@/lib/quran';
 import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
 import { ContactAdmin } from './contact-admin';
@@ -491,41 +501,27 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'generate_session_invoices') {
-          const rows = feeRows(next, String(payload.billing_period)).filter(
-            (f) => f.guardianId && f.rate_sen !== null,
-          );
-          for (const gid of new Set(rows.map((f) => f.guardianId!))) {
-            const mine = rows.filter((f) => f.guardianId === gid);
-            const key = `sessions:${payload.billing_period}:${gid}`;
-            const existing = next.invoices.find((i) => i.idempotency_key === key);
-            const invId = existing?.id || `${id}-${gid}`;
-            next.invoice_items = next.invoice_items.filter((x) => x.invoice_id !== invId);
-            mine.forEach((f, k) =>
-              next.invoice_items.push({
-                id: `${invId}-${k}`,
-                invoice_id: invId,
-                student_id: f.studentId,
-                description: `${f.student} · ${f.program} (${f.minutes} minit)`,
-                quantity: f.sessions,
-                unit_price_sen: f.rate_sen,
-                discount_sen: 0,
-              }),
+        else if (operation === 'generate_session_invoices')
+          demoInvoices(next, String(payload.billing_period), id);
+        else if (operation === 'month_package') {
+          const period = String(payload.billing_period);
+          next.monthly_student_reports ||= [];
+          for (const st of next.students.filter((x) => x.status !== 'archived')) {
+            const old = next.monthly_student_reports.find(
+              (r) => r.student_id === st.id && r.period === period,
             );
-            const total = mine.reduce((n, f) => n + f.total_sen, 0);
-            if (existing) existing.total_sen = total;
-            else
-              next.invoices.push({
-                id: invId,
-                number: `DEMO-${next.invoices.length + 1}`,
-                guardian_id: gid,
-                total_sen: total,
-                period: payload.billing_period,
-                due_on: `${payload.billing_period}-28`,
-                status: 'issued',
-                idempotency_key: key,
-              });
+            if (old?.status === 'approved') continue;
+            const row = {
+              id: old?.id || `demo-report-${st.id}-${period}`,
+              student_id: st.id,
+              period,
+              status: 'draft',
+              snapshot: demoSnapshot(next, st, period),
+            };
+            if (old) Object.assign(old, row);
+            else next.monthly_student_reports.push(row);
           }
+          demoInvoices(next, period, id);
         } else if (operation === 'save_payment_details') {
           next.tutor_payment_details = [
             ...(next.tutor_payment_details || []).filter((x) => x.staff_id !== payload.staff_id),
@@ -730,11 +726,20 @@ export function App({
           next.attendance = next.attendance.filter(
             (a) => !(a.session_id === payload.sid && a.student_id === payload.student),
           );
+          const sel = payload.selected as Assessment;
+          const attended = ['present', 'late', 'makeup'].includes(
+            String(payload.attendance_status),
+          );
+          if (attended && sel.reading && hasReading(sel.reading)) {
+            const problem = readingProblem(sel.reading);
+            if (problem) throw new Error(problem);
+          }
           next.attendance.push({
             id,
             session_id: payload.sid,
             student_id: payload.student,
             status: payload.attendance_status,
+            reading: attended && hasReading(sel.reading) ? sel.reading : null,
           });
           if (payload.publish)
             next.generated_parent_comments
@@ -950,6 +955,41 @@ export function App({
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+  // Demo: tiru generate_session_invoices (yuran ikut sesi; satu invois setiap penjaga bil).
+  function demoInvoices(next: Dataset, period: string, id: string) {
+    const rows = feeRows(next, period).filter((f) => f.guardianId && f.rate_sen !== null);
+    for (const gid of new Set(rows.map((f) => f.guardianId!))) {
+      const mine = rows.filter((f) => f.guardianId === gid);
+      const key = `sessions:${period}:${gid}`;
+      const existing = next.invoices.find((i) => i.idempotency_key === key);
+      const invId = existing?.id || `${id}-${gid}`;
+      next.invoice_items = next.invoice_items.filter((x) => x.invoice_id !== invId);
+      mine.forEach((f, k) =>
+        next.invoice_items.push({
+          id: `${invId}-${k}`,
+          invoice_id: invId,
+          student_id: f.studentId,
+          description: `${f.student} · ${f.program} (${f.minutes} minit)`,
+          quantity: f.sessions,
+          unit_price_sen: f.rate_sen,
+          discount_sen: 0,
+        }),
+      );
+      const total = mine.reduce((n, f) => n + f.total_sen, 0);
+      if (existing) existing.total_sen = total;
+      else
+        next.invoices.push({
+          id: invId,
+          number: `DEMO-${next.invoices.length + 1}`,
+          guardian_id: gid,
+          total_sen: total,
+          period: period,
+          due_on: `${period}-28`,
+          status: 'issued',
+          idempotency_key: key,
+        });
     }
   }
   // Demo: tiru private.save_student_guardian (nama lalai, no. sama = penjaga sama, penjaga bil).
@@ -2184,7 +2224,7 @@ export function App({
                       'Selesai',
                       'Hadir',
                       'Tidak hadir',
-                      'Berizin',
+                      'Cuti bermaklum',
                       'Elaun',
                       '',
                     ]}
@@ -2267,7 +2307,7 @@ export function App({
       <>
         <Card
           title="Yuran bulan ini"
-          subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Berizin tidak.`}
+          subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Cuti bermaklum tidak.`}
           action={
             academic && (
               <button
@@ -2704,7 +2744,7 @@ export function App({
           [
             'Tidak dibayar',
             allowances.filter((r) => r.payable_sen === 0).length,
-            'Berizin / tiada kadar',
+            'Cuti bermaklum / tiada kadar',
           ],
         ])}
         {missing > 0 && (
@@ -2715,7 +2755,7 @@ export function App({
         )}
         <Card
           title={role === 'tutor' ? 'Elaun saya' : 'Elaun tutor'}
-          subtitle="Dikira automatik. Hadir, Lewat, Ganti dan Tidak hadir dibayar; Berizin tidak dibayar."
+          subtitle="Dikira automatik. Hadir, Lewat, Ganti dan Tidak hadir dibayar; Cuti bermaklum tidak dibayar."
         >
           {role === 'tutor' && payslipBar(activeTutor)}
           {role === 'tutor' ? (
@@ -2820,7 +2860,7 @@ export function App({
   function reportsScreen() {
     return (
       <>
-        <Card title="Laporan berizin" subtitle="Pilih laporan, semak, kemudian muat turun">
+        <Card title="Laporan Excel & CSV" subtitle="Pilih laporan, semak, kemudian muat turun">
           <div className="report-toolbar">
             <label>
               Jenis laporan
@@ -3570,9 +3610,17 @@ export function App({
                     demo={demo}
                     onData={setData}
                   />
-                  <GuardianDelivery data={visible} month={month} demo={demo} onData={setData} />
+                  <GuardianDelivery
+                    data={visible}
+                    month={month}
+                    demo={demo}
+                    onData={setData}
+                    busy={busy}
+                    onGenerate={() => void mutate('month_package', { billing_period: month })}
+                  />
                 </>
-              )}{' '}
+              )}
+              {role === 'tutor' && <TutorClassReports data={visible} month={month} demo={demo} />}{' '}
               {reportsScreen()}
             </>
           ) : section === 'parent' ? (
@@ -3780,7 +3828,25 @@ function SessionEditor({
     const sel = (latest?.selections || {}) as Partial<Assessment>;
     return sel.mastery === 'not_assessed' ? {} : sel;
   };
+  // Bacaan sesi (Iqra'/al-Quran) yang disimpan, atau kosong.
+  const savedReading = (sid: unknown): Partial<Reading> =>
+    (data.attendance.find((a) => a.session_id === session.id && a.student_id === sid)
+      ?.reading as Reading | null) || {};
+  // Bacaan sesi terdahulu murid ini sebagai rujukan untuk menyambung.
+  const previousReading = (sid: unknown) =>
+    data.attendance
+      .filter(
+        (a) =>
+          a.student_id === sid && a.session_id !== session.id && hasReading(a.reading as Reading),
+      )
+      .map((a) => ({
+        reading: a.reading as Reading,
+        at: String(data.class_sessions.find((x) => x.id === a.session_id)?.starts_at || ''),
+      }))
+      .filter((x) => x.at && x.at < startIso)
+      .sort((a, b) => b.at.localeCompare(a.at))[0];
   const [studentId, setStudentId] = useState(students[0]?.id || '');
+  const [reading, setReading] = useState<Partial<Reading>>(savedReading(students[0]?.id));
   const [attendance, setAttendance] = useState(savedAttendance(students[0]?.id));
   const [assessment, setAssessment] = useState<Partial<Assessment>>(
     savedAssessment(students[0]?.id),
@@ -3789,6 +3855,11 @@ function SessionEditor({
   const program = data.programs.find((p) => p.id === cls?.program_id);
   const subject = data.subjects.find((s) => s.id === program?.subject_id);
   const subjectSlug = String(subject?.slug || 'mengaji');
+  const kind = readingKind(program?.code);
+  const attendedNow = ['present', 'late', 'makeup'].includes(attendance);
+  const readingInput = (): Reading | undefined =>
+    kind && attendedNow && hasReading(reading) ? ({ ...reading, kind } as Reading) : undefined;
+  const readingIssue = readingInput() ? readingProblem(readingInput()!) : null;
   const voided = ['cancelled', 'rescheduled'].includes(String(session.status));
   const locked = voided || ['verified', 'approved', 'paid'].includes(String(session.review_status));
   let preview = 'Pilih kehadiran dan penilaian untuk melihat ulasan.';
@@ -3796,10 +3867,14 @@ function SessionEditor({
   // Penilaian adalah pilihan: tanpa sebarang tap, sesi disimpan sebagai "belum dinilai".
   const noAssessment =
     !assessment.mastery && !assessment.skill && !assessment.participation && !assessment.focus;
-  const assessmentInput = (): Assessment =>
-    ['absent', 'excused'].includes(attendance) || noAssessment
-      ? { mastery: 'not_assessed' }
-      : (assessment as Assessment);
+  const assessmentInput = (): Assessment => {
+    const base: Assessment =
+      ['absent', 'excused'].includes(attendance) || noAssessment
+        ? { mastery: 'not_assessed' }
+        : ({ ...assessment, reading: undefined } as Assessment);
+    const r = readingInput();
+    return r ? { ...base, reading: r } : base;
+  };
   try {
     if (attendance) {
       const input = assessmentInput();
@@ -3809,7 +3884,7 @@ function SessionEditor({
         input,
         data.assessment_options.filter((o) => o.subject_id === subject?.id),
       );
-      valid = true;
+      valid = !readingIssue;
     }
   } catch {
     /* Explicit choices required. */
@@ -3869,6 +3944,7 @@ function SessionEditor({
         setStudentId(next.id);
         setAttendance(savedAttendance(next.id));
         setAssessment(savedAssessment(next.id));
+        setReading(savedReading(next.id));
       }
     }
   }
@@ -3929,6 +4005,7 @@ function SessionEditor({
                 setStudentId(s.id);
                 setAttendance(savedAttendance(s.id));
                 setAssessment(savedAssessment(s.id));
+                setReading(savedReading(s.id));
               }}
             >
               {String(s.full_name)}
@@ -3969,6 +4046,103 @@ function SessionEditor({
                   ))}
                 </div>
               </fieldset>
+              {kind && attendedNow && (
+                <fieldset className="reading-fields">
+                  <legend>Bacaan sesi ini (untuk laporan)</legend>
+                  {(() => {
+                    const prev = previousReading(studentId);
+                    return prev ? (
+                      <p className="reading-prev">
+                        Sesi lepas: <strong>{readingLabel(prev.reading)}</strong>
+                      </p>
+                    ) : null;
+                  })()}
+                  <div className="reading-grid">
+                    {kind === 'iqra' ? (
+                      <label>
+                        Jilid Iqra'
+                        <select
+                          disabled={locked}
+                          value={reading.jilid ?? ''}
+                          onChange={(e) =>
+                            setReading((r) => ({
+                              ...r,
+                              jilid: e.target.value ? Number(e.target.value) : undefined,
+                            }))
+                          }
+                        >
+                          <option value="">—</option>
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <option key={n} value={n}>
+                              Iqra' {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <>
+                        <label className="reading-surah">
+                          Surah
+                          <select
+                            disabled={locked}
+                            value={reading.surah ?? ''}
+                            onChange={(e) =>
+                              setReading((r) => ({
+                                ...r,
+                                surah: e.target.value ? Number(e.target.value) : undefined,
+                              }))
+                            }
+                          >
+                            <option value="">—</option>
+                            {surahs.map(([name, ayahs], i) => (
+                              <option key={name} value={i + 1}>
+                                {i + 1}. {name} ({ayahs} ayat)
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {(['ayah_from', 'ayah_to'] as const).map((f) => (
+                          <label key={f}>
+                            {f === 'ayah_from' ? 'Ayat dari' : 'Ayat hingga'}
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={reading.surah ? surahs[reading.surah - 1][1] : 286}
+                              disabled={locked}
+                              value={reading[f] ?? ''}
+                              onChange={(e) =>
+                                setReading((r) => ({
+                                  ...r,
+                                  [f]: e.target.value ? Number(e.target.value) : undefined,
+                                }))
+                              }
+                            />
+                          </label>
+                        ))}
+                      </>
+                    )}
+                    <label>
+                      Muka surat
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={kind === 'iqra' ? 60 : 604}
+                        disabled={locked}
+                        value={reading.page ?? ''}
+                        onChange={(e) =>
+                          setReading((r) => ({
+                            ...r,
+                            page: e.target.value ? Number(e.target.value) : undefined,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  {readingIssue && <p className="reading-issue">{readingIssue}</p>}
+                </fieldset>
+              )}
               {!['absent', 'excused'].includes(attendance) && (
                 <>
                   {group('2. Kemahiran dinilai', 'skill', skillOptions[subjectSlug])}
@@ -4025,7 +4199,9 @@ function SessionEditor({
                 <small className="save-hint">
                   {!attendance
                     ? 'Pilih kehadiran dahulu.'
-                    : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
+                    : readingIssue
+                      ? `Betulkan bacaan: ${readingIssue}.`
+                      : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
                 </small>
               )}
               <small>

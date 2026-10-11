@@ -22,7 +22,7 @@ export const projections: Record<string, string> = {
   enrollments: 'id,student_id,class_id,starts_on,ends_on,status,planned_quota',
   class_sessions:
     'id,class_id,tutor_id,starts_at,ends_at,status,review_status,topic,verified_by,approved_by',
-  attendance: 'id,session_id,student_id,status,reason',
+  attendance: 'id,session_id,student_id,status,reason,reading',
   generated_parent_comments:
     'id,session_id,student_id,selections,template_version,text,status,published_at,created_at',
   student_progress: 'id,student_id,session_id,mastery,parent_notes,published_at',

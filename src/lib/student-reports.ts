@@ -9,14 +9,16 @@ import {
   fileName,
 } from './core';
 import { BrandBytes, loadBrandBytes } from './brand';
+import { Reading, hasReading, readingLabel, readingShort } from './quran';
 export type StudentSnapshot = {
   student_name: string;
   period: string;
-  attendance: { date: string; class_name: string; status: string }[];
+  attendance: { date: string; class_name: string; status: string; reading?: Reading | null }[];
   feedback: { date: string; text: string }[];
   progress: { date: string; mastery: number; notes: string | null }[];
 };
-// Demo only: production snapshots are assembled by the database, never accepted from a browser.
+// Snapshot daripada data yang dimuatkan (skop RLS). Demo, dan rekod kelas tutor; laporan rasmi
+// yang dihantar kepada ibu bapa tetap dibina oleh pangkalan data (prepare_student_report).
 export function demoSnapshot(data: Dataset, student: Row, period: string): StudentSnapshot {
   const { start, end } = monthBounds(period);
   const sessions = (data.class_sessions || []).filter(
@@ -37,6 +39,7 @@ export function demoSnapshot(data: Dataset, student: Row, period: string): Stude
           data.classes.find((c) => c.id === get(a.session_id)!.class_id)?.name || '',
         ),
         status: String(a.status),
+        reading: (a.reading as Reading | null) ?? null,
       })),
     feedback: (data.generated_parent_comments || [])
       .filter((c) => c.student_id === student.id && c.status === 'published' && get(c.session_id))
@@ -57,7 +60,7 @@ const attendanceLabels: Record<string, string> = {
   present: 'Hadir',
   late: 'Lewat',
   absent: 'Tidak hadir',
-  excused: 'Berizin',
+  excused: 'Cuti bermaklum',
   makeup: 'Ganti',
 };
 const malayDays = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
@@ -87,11 +90,16 @@ export function reportNarrative(snapshot: StudentSnapshot) {
     );
     if (absent || excused)
       parts.push(
-        [absent ? `${absent} kelas tidak dihadiri` : '', excused ? `${excused} kelas berizin` : '']
+        [
+          absent ? `${absent} kelas tidak dihadiri` : '',
+          excused ? `${excused} kelas cuti bermaklum` : '',
+        ]
           .filter(Boolean)
           .join(' dan ') + '.',
       );
   }
+  const lastReading = [...snapshot.attendance].reverse().find((a) => hasReading(a.reading));
+  if (lastReading) parts.push(`Bacaan terkini: ${readingLabel(lastReading.reading)}.`);
   const scores = snapshot.progress.map((p) => p.mastery).filter((m) => m >= 1 && m <= 5);
   if (scores.length) {
     const avg = scores.reduce((n, m) => n + m, 0) / scores.length;
@@ -106,14 +114,16 @@ export function reportNarrative(snapshot: StudentSnapshot) {
   parts.push('Terima kasih atas sokongan ibu bapa. Teruskan latihan bersama anak di rumah.');
   return parts.join(' ');
 }
+// approved: true = DILULUSKAN (admin), false = DRAF, 'tutor' = rekod kelas tutor (tanpa tera draf).
 export async function reportPdf(
   snapshot: StudentSnapshot,
-  approved: boolean,
+  approved: boolean | 'tutor',
   demo = false,
   fontBytes?: Uint8Array,
   boldBytes?: Uint8Array,
   brand?: BrandBytes,
 ) {
+  const title = approved === 'tutor' ? 'Laporan Kelas Bulanan' : 'Laporan Pembelajaran Bulanan';
   const { PDFDocument, rgb, degrees } = await import('pdf-lib');
   const fontkit = (await import('@pdf-lib/fontkit')).default;
   const doc = await PDFDocument.create();
@@ -180,7 +190,7 @@ export async function reportPdf(
     text(t, xr - f.widthOfTextAtSize(t, size), yy, size, f, color);
   const continuationHeader = () => {
     page.drawRectangle({ x: 0, y: H - 34, width: W, height: 34, color: C.navy });
-    text('AQR · Laporan Pembelajaran Bulanan', M, H - 22, 9, bold, C.white);
+    text(`AQR · ${title}`, M, H - 22, 9, bold, C.white);
     right(`${snapshot.student_name} · ${month}`, W - M, H - 22, 9, font, C.white);
     y = H - 60;
   };
@@ -206,7 +216,7 @@ export async function reportPdf(
   const tx = logos.aqr ? M + 78 : M;
   if (logos.aqr) page.drawImage(logos.aqr, { x: M, y: H - 104, width: 62, height: 73 });
   text('AKADEMI AL-QURAN AR-RIYADH', tx, H - 40, 9, bold, C.gold);
-  text('Laporan Pembelajaran Bulanan', tx, H - 68, 21, bold, C.white);
+  text(title, tx, H - 68, 21, bold, C.white);
   text(
     'Rekod kehadiran dan perkembangan individu murid',
     tx,
@@ -216,7 +226,13 @@ export async function reportPdf(
     rgb(0.8, 0.84, 0.88),
   );
   right(month, W - M, H - 52, 14, bold, C.white);
-  const badge = demo ? 'DEMO' : approved ? 'DILULUSKAN' : 'DRAF';
+  const badge = demo
+    ? 'DEMO'
+    : approved === 'tutor'
+      ? 'REKOD TUTOR'
+      : approved
+        ? 'DILULUSKAN'
+        : 'DRAF';
   const bw = bold.widthOfTextAtSize(badge, 8.5) + 18;
   page.drawRectangle({
     x: W - M - bw,
@@ -287,14 +303,27 @@ export async function reportPdf(
   y -= 10;
   // --- Jadual kehadiran
   section('Rekod kehadiran');
-  const cols: [string, number][] = [
-    ['BIL', 32],
-    ['TARIKH', 78],
-    ['HARI', 64],
-    ['MASA', 66],
-    ['PROGRAM', CW - 32 - 78 - 64 - 66 - 84],
-    ['KEHADIRAN', 84],
-  ];
+  // Lajur BACAAN hanya jika ada bacaan direkod (Iqra'/al-Quran).
+  const withReading = snapshot.attendance.some((a) => hasReading(a.reading));
+  const cols: [string, number][] = withReading
+    ? [
+        ['BIL', 26],
+        ['TARIKH', 66],
+        ['HARI', 52],
+        ['MASA', 58],
+        ['PROGRAM', CW - 26 - 66 - 52 - 58 - 138 - 90],
+        ['BACAAN', 138],
+        ['KEHADIRAN', 90],
+      ]
+    : [
+        ['BIL', 32],
+        ['TARIKH', 78],
+        ['HARI', 64],
+        ['MASA', 66],
+        ['PROGRAM', CW - 32 - 78 - 64 - 66 - 84],
+        ['KEHADIRAN', 84],
+      ];
+  const statusCol = cols.length - 1;
   const tableHeader = () => {
     page.drawRectangle({ x: M, y: y - 8, width: CW, height: 22, color: C.ivory });
     let x = M + 8;
@@ -315,13 +344,22 @@ export async function reportPdf(
       const { day, time } = klParts(a.date);
       const status = attendanceLabels[a.status] || a.status;
       const program = a.class_name.split(' · ').slice(1).join(' · ') || a.class_name;
-      const values = [String(i + 1), dateLabel(a.date), day, time, program, status];
+      const values = [
+        String(i + 1),
+        dateLabel(a.date),
+        day,
+        time,
+        program,
+        ...(withReading ? [readingShort(a.reading) || '—'] : []),
+        status,
+      ];
       let x = M + 8;
       values.forEach((v, k) => {
         const [, w] = cols[k];
-        const clipped = wrap(v, 9.5, k === 5 ? bold : font, w - 10)[0];
+        const size = withReading && k === statusCol - 1 ? 8.5 : 9.5;
+        const clipped = wrap(v, size, k === statusCol ? bold : font, w - 10)[0];
         const color =
-          k === 5
+          k === statusCol
             ? a.status === 'absent'
               ? C.red
               : a.status === 'excused'
@@ -330,7 +368,7 @@ export async function reportPdf(
                   ? C.amber
                   : C.teal
             : C.navy;
-        text(clipped, x, y, 9.5, k === 5 ? bold : font, color);
+        text(clipped, x, y, size, k === statusCol ? bold : font, color);
         x += w;
       });
       page.drawLine({
@@ -672,4 +710,21 @@ export async function embedBrand(
     }
   };
   return { aqr: await safe(bytes.aqr), ito: await safe(bytes.ito) };
+}
+
+export const classReportFileName = (student: string, period: string) =>
+  fileName(['Laporan Kelas', student, monthLabel(period)], 'pdf');
+// Rekod kelas tutor: semua murid tutor dalam satu ZIP (tanpa invois).
+export async function classReportsZip(snapshots: StudentSnapshot[], demo: boolean) {
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+  const used = new Set<string>();
+  for (const snap of snapshots) {
+    let name = classReportFileName(snap.student_name, snap.period);
+    for (let n = 2; used.has(name); n++)
+      name = classReportFileName(`${snap.student_name} (${n})`, snap.period);
+    used.add(name);
+    zip.file(name, await reportPdf(snap, 'tutor', demo));
+  }
+  return zip.generateAsync({ type: 'blob' });
 }

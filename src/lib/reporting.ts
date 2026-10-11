@@ -28,7 +28,7 @@ export type Report = {
 };
 // Elaun automatik (keputusan pengguna Okt 2026): tiada semakan manual. Sesi selesai dibayar
 // sekali mengikut kadar program + tempoh pada tarikh sesi. Hadir, Lewat, Ganti dan Tidak hadir
-// dibayar; Berizin tidak dibayar. Sesi tanpa kadar dipaparkan dengan rate_sen null.
+// dibayar; Cuti bermaklum tidak dibayar. Sesi tanpa kadar dipaparkan dengan rate_sen null.
 export const PAYABLE_ATTENDANCE = ['present', 'late', 'makeup', 'absent'];
 export type AllowanceRow = {
   session: Row;
@@ -81,7 +81,7 @@ export function allowanceRows(data: Dataset, month: string): AllowanceRow[] {
     });
 }
 // Yuran ibu bapa ikut sesi yang dijalankan (sama seperti generate_session_invoices dalam DB):
-// Hadir, Lewat, Ganti dan Tidak hadir dicaj; Berizin tidak. Satu baris bagi murid × program × tempoh.
+// Hadir, Lewat, Ganti dan Tidak hadir dicaj; Cuti bermaklum tidak. Satu baris bagi murid × program × tempoh.
 export const CHARGEABLE_ATTENDANCE = ['present', 'late', 'makeup', 'absent'];
 export type FeeRow = {
   studentId: string;

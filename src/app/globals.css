@@ -2576,3 +2576,94 @@ label {
     grid-template-columns: 1fr;
   }
 }
+
+/* Bacaan sesi (Iqra'/al-Quran) dalam rekod kehadiran */
+.reading-fields {
+  padding: 14px 16px;
+  border: 1px solid #d5e6e1;
+  border-radius: 12px;
+  background: #f6faf8;
+}
+.reading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+.reading-grid .reading-surah {
+  grid-column: 1 / -1;
+}
+.reading-prev {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--slate);
+}
+.reading-prev strong {
+  color: var(--navy);
+}
+.reading-issue {
+  margin: 8px 0 0;
+  color: #a1352a;
+  font-size: 13px;
+  font-weight: 600;
+}
+.delivery-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.delivery-steps li {
+  position: relative;
+  padding: 10px 12px 10px 40px;
+  border-radius: 12px;
+  background: #f6faf8;
+  font-size: 13px;
+  color: var(--slate);
+  counter-increment: step;
+}
+.delivery-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.delivery-steps strong {
+  color: var(--navy);
+}
+.class-report-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.class-report-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.class-report-list li > svg {
+  color: var(--teal);
+}
+.class-report-list span {
+  display: grid;
+}
+.class-report-list small {
+  color: var(--slate);
+}

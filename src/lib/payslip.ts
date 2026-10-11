@@ -19,7 +19,7 @@ export type Payslip = {
 };
 
 // Penyata pendapatan tutor: satu baris bagi setiap program × tempoh yang ada sesi dibayar,
-// dikira daripada elaun automatik (sesi selesai; Berizin tidak dibayar).
+// dikira daripada elaun automatik (sesi selesai; Cuti bermaklum tidak dibayar).
 export function buildPayslip(data: Dataset, tutorId: string, month: string): Payslip {
   const all = (t: string) => data[t] || [];
   const rows = allowanceRows(data, month).filter((r) => r.tutorId === tutorId && r.payable_sen > 0);
@@ -244,7 +244,7 @@ export async function payslipPdf(
   text(`${slip.sessions} sesi dibayar`, rx + 18, y - 84, 9, font, C.muted);
   y -= boxH + 30;
   text(
-    'Elaun dikira automatik daripada sesi yang direkod: Hadir, Lewat, Ganti dan Tidak hadir dibayar; Berizin tidak dibayar.',
+    'Elaun dikira automatik daripada sesi yang direkod: Hadir, Lewat, Ganti dan Tidak hadir dibayar; Cuti bermaklum tidak dibayar.',
     M,
     y,
     8,

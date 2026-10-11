@@ -1,12 +1,20 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { FileText, MessageCircle, Receipt, Send } from 'lucide-react';
+import { FileText, MessageCircle, Receipt, RefreshCw, Send } from 'lucide-react';
 import { Dataset, fileName, formatMoney, monthLabel } from '@/lib/core';
 import { apiFetch, downloadBlob } from '@/lib/transport';
 import { Family, familyBundles, familyMessage, invoiceDetails, whatsappUrl } from '@/lib/delivery';
 import { StudentSnapshot } from '@/lib/student-reports';
 
-type Props = { data: Dataset; month: string; demo: boolean; onData: (data: Dataset) => void };
+type Props = {
+  data: Dataset;
+  month: string;
+  demo: boolean;
+  onData: (data: Dataset) => void;
+  // Jana draf laporan semua murid + invois ikut sesi bagi bulan ini (satu butang).
+  onGenerate?: () => void;
+  busy?: boolean;
+};
 
 // Pelayar telefon boleh berkongsi beberapa PDF terus ke WhatsApp; desktop memuat turun fail.
 const canShareFiles = () => {
@@ -22,7 +30,7 @@ const canShareFiles = () => {
 };
 
 // Admin: satu pakej setiap penjaga (laporan semua anak + invois) dihantar sekali melalui WhatsApp.
-export function GuardianDelivery({ data, month, demo, onData }: Props) {
+export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: saving }: Props) {
   const families = useMemo(() => familyBundles(data, month), [data, month]);
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [busy, setBusy] = useState(''),
@@ -134,7 +142,25 @@ export function GuardianDelivery({ data, month, demo, onData }: Props) {
             dihantar. Adik-beradik digabung dalam satu penghantaran.
           </p>
         </div>
+        {onGenerate && (
+          <button className="primary" disabled={saving} onClick={onGenerate}>
+            <RefreshCw size={16} />
+            {saving ? 'Menjana…' : 'Jana laporan + invois'}
+          </button>
+        )}
       </div>
+      <ol className="delivery-steps">
+        <li>
+          <strong>Jana laporan + invois</strong> — draf laporan setiap murid dan invois ikut sesi
+          yang dijalankan.
+        </li>
+        <li>
+          <strong>Semak & luluskan laporan</strong> di bahagian atas (ikut tutor).
+        </li>
+        <li>
+          <strong>Hantar</strong> — laporan semua anak + invois sekali gus kepada setiap penjaga.
+        </li>
+      </ol>
       {message && <p role="status">{message}</p>}
       {!families.length && (
         <p className="muted">Belum ada penjaga bil. Tutor mengisi penjaga semasa daftar murid.</p>

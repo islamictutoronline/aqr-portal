@@ -214,6 +214,9 @@ const schemas = {
   extend_schedule: z.object({}),
   void_session: z.object({ sid: uuid }),
   remove_tutor: z.object({ staff_id: uuid }),
+  month_package: z.object({
+    billing_period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  }),
   generate_session_invoices: z.object({
     billing_period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   }),
@@ -290,6 +293,36 @@ export async function executeMutation(
       .eq('id', (fields as { id: string }).id)
       .select('id')
       .single();
+  } else if (operation === 'month_package') {
+    // Admin: draf laporan bulanan setiap murid aktif (yang belum diluluskan) + invois ikut sesi.
+    requireRoles(ctx, ['owner', 'admin']);
+    const period = (fields as { billing_period: string }).billing_period;
+    const [students, approved] = await Promise.all([
+      ctx.db.from('students').select('id').eq('organization_id', ctx.org).neq('status', 'archived'),
+      ctx.db
+        .from('monthly_student_reports')
+        .select('student_id')
+        .eq('organization_id', ctx.org)
+        .eq('period', period)
+        .eq('status', 'approved'),
+    ]);
+    if (students.error || approved.error) throw new Error('Senarai murid tidak dapat dibaca');
+    const locked = new Set((approved.data ?? []).map((r) => r.student_id));
+    result = { data: null, error: null } as { data: unknown; error: unknown };
+    for (const st of students.data ?? []) {
+      if (locked.has(st.id)) continue;
+      result = await ctx.db.rpc('prepare_student_report', {
+        org: ctx.org,
+        student: st.id,
+        report_month: period,
+      });
+      if (result.error) break;
+    }
+    if (!result.error)
+      result = await ctx.db.rpc('generate_session_invoices', {
+        org: ctx.org,
+        billing_period: period,
+      });
   } else {
     const rpc: Record<string, string> = {
       prepare_report: 'prepare_student_report',

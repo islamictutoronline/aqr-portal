@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readingLabel, readingSchema } from './quran';
 
 export const ORGANIZATION = 'Akademi Al-Quran Ar-Riyadh (AQR)';
 export type Role = 'owner' | 'admin' | 'tutor' | 'guardian';
@@ -16,7 +17,7 @@ export const statusLabels: Record<string, string> = {
   present: 'Hadir',
   late: 'Lewat',
   absent: 'Tidak hadir',
-  excused: 'Berizin',
+  excused: 'Cuti bermaklum',
   makeup: 'Ganti',
   scheduled: 'Dijadualkan',
   completed: 'Selesai',
@@ -241,6 +242,8 @@ export const assessmentSchema = z.object({
   participation: z.string().optional(),
   focus: z.string().optional(),
   practice: z.string().optional(),
+  // Bacaan sesi (Iqra'/al-Quran) untuk laporan; hanya bagi kelas yang dihadiri.
+  reading: readingSchema.optional(),
 });
 export type Assessment = z.infer<typeof assessmentSchema>;
 export function generateComment(
@@ -250,6 +253,13 @@ export function generateComment(
   customOptions: Row[] = [],
 ) {
   const a = assessmentSchema.parse(input);
+  const reading =
+    ['present', 'late', 'makeup'].includes(attendance) && a.reading ? readingLabel(a.reading) : '';
+  return (
+    baseComment(subject, attendance, a, customOptions) + (reading ? ` Bacaan: ${reading}.` : '')
+  );
+}
+function baseComment(subject: string, attendance: string, a: Assessment, customOptions: Row[]) {
   if (['absent', 'excused'].includes(attendance) || a.mastery === 'not_assessed')
     return 'Tiada penilaian pembelajaran untuk sesi ini.';
   const option = (group: string, code?: string) =>
