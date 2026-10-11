@@ -64,6 +64,8 @@ type Field = {
   name: string;
   label: string;
   type?: string;
+  pattern?: string;
+  placeholder?: string;
   options?: [string, string][];
   optional?: boolean;
   value?: string;
@@ -406,7 +408,22 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'move_session') {
+        else if (operation === 'remove_tutor') {
+          const sid = payload.staff_id;
+          next.staff_profiles.find((x) => x.id === sid)!.active = false;
+          const today = new Date().toISOString().slice(0, 10);
+          next.class_tutors
+            .filter((t) => t.staff_id === sid && !t.ends_on)
+            .forEach((t) => (t.ends_on = today));
+          next.class_sessions
+            .filter(
+              (x) =>
+                x.tutor_id === sid &&
+                x.status === 'scheduled' &&
+                new Date(String(x.starts_at)) > new Date(),
+            )
+            .forEach((x) => (x.status = 'cancelled'));
+        } else if (operation === 'move_session') {
           const sess = next.class_sessions.find((x) => x.id === payload.sid)!;
           const length =
             new Date(String(sess.ends_at)).getTime() - new Date(String(sess.starts_at)).getTime();
@@ -1777,7 +1794,7 @@ export function App({
             ['today', 'Hari ini'] as [string, string],
             ['students', 'Semua murid'] as [string, string],
             ...all('staff_profiles')
-              .filter((t) => t.role === 'tutor')
+              .filter((t) => t.role === 'tutor' && t.active !== false)
               .map((t) => [String(t.id), String(t.display_name)] as [string, string]),
           ].map(([id, label]) => (
             <button
@@ -2221,7 +2238,7 @@ export function App({
                 {[
                   ['all', 'Semua tutor'] as [string, string],
                   ...all('staff_profiles')
-                    .filter((t) => t.role === 'tutor')
+                    .filter((t) => t.role === 'tutor' && t.active !== false)
                     .map((t) => [String(t.id), String(t.display_name)] as [string, string]),
                 ].map(([id, label]) => (
                   <button
@@ -2655,6 +2672,51 @@ export function App({
       </>
     );
   }
+  // Padam tutor dengan pengesahan dua langkah: amaran + menaip nama tutor.
+  const removeTutor = (tutor: Row) => {
+    const name = String(tutor.display_name);
+    const students = new Set(
+      all('enrollments')
+        .filter(
+          (e) =>
+            e.status === 'active' &&
+            all('class_tutors').some(
+              (t) => t.class_id === e.class_id && t.staff_id === tutor.id && !t.ends_on,
+            ),
+        )
+        .map((e) => e.student_id),
+    ).size;
+    setDialog({
+      title: `Padam tutor · ${name}`,
+      operation: 'remove_tutor',
+      fields: [
+        {
+          name: 'confirm',
+          label: `Taip nama tutor untuk mengesahkan: ${name}`,
+          pattern: name.replace(/[\^$.*+?()[\]{}|/]/g, '\\$&'),
+          placeholder: name,
+        },
+      ],
+      extra: (
+        <div className="danger-note">
+          <strong>Tindakan ini tidak boleh dibatalkan sendiri.</strong>
+          <ul>
+            <li>Akses tutor ke portal ditarik serta-merta.</li>
+            <li>
+              {students} murid tidak lagi mempunyai tutor; sesi akan datang yang belum direkod
+              dibatalkan.
+            </li>
+            <li>Rekod kehadiran, laporan dan elaun yang lepas dikekalkan.</li>
+          </ul>
+        </div>
+      ),
+      transform: (v) => {
+        if (v.confirm.trim() !== name) throw new Error('Nama tidak sepadan. Tutor tidak dipadam.');
+        return { staff_id: tutor.id };
+      },
+      after: () => go('tutors'),
+    });
+  };
   // Paparan pentadbir berpusatkan tutor: senarai tutor, kemudian profil dengan murid dan sesi.
   function tutorsScreen() {
     const { start, end } = monthBounds(month);
@@ -2675,7 +2737,7 @@ export function App({
         .filter((s) => s.tutor_id === tid && inMonth(s))
         .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
     const done = (ss: Row[]) => ss.filter((s) => s.status === 'completed').length;
-    const tutors = all('staff_profiles').filter((t) => t.role === 'tutor');
+    const tutors = all('staff_profiles').filter((t) => t.role === 'tutor' && t.active !== false);
     const tutorId = page.split('/')[1];
     const tutor = tutors.find((t) => t.id === tutorId);
     if (tutor) {
@@ -2689,9 +2751,16 @@ export function App({
               <h1>{String(tutor.display_name)}</h1>
               <Badge value={tutor.active ? 'active' : 'archived'} />
             </div>
-            <button className="secondary" onClick={() => go('tutors')}>
-              Semua tutor
-            </button>
+            <div className="button-row">
+              <button className="secondary" onClick={() => go('tutors')}>
+                Semua tutor
+              </button>
+              {academic && (
+                <button className="danger-button" onClick={() => removeTutor(tutor)}>
+                  Padam tutor
+                </button>
+              )}
+            </div>
           </div>
           <div className="metrics">
             {[
@@ -2763,9 +2832,16 @@ export function App({
               `${done(ss)} / ${ss.length}`,
               formatMoney(allowanceOf(t.id)),
               <Badge key="s" value={t.active ? 'active' : 'archived'} />,
-              <button key="o" className="text-link" onClick={() => go(`tutors/${t.id}`)}>
-                Lihat <ChevronRight size={16} />
-              </button>,
+              <div key="o" className="button-row">
+                <button className="text-link" onClick={() => go(`tutors/${t.id}`)}>
+                  Lihat <ChevronRight size={16} />
+                </button>
+                {academic && (
+                  <button className="text-link danger" onClick={() => removeTutor(t)}>
+                    Padam
+                  </button>
+                )}
+              </div>,
             ];
           })}
         />
@@ -3109,6 +3185,9 @@ export function App({
                       required={!f.optional}
                       defaultValue={f.value}
                       min={f.type === 'number' ? 0 : undefined}
+                      pattern={f.pattern}
+                      placeholder={f.placeholder}
+                      title={f.pattern ? 'Taip tepat seperti yang diminta' : undefined}
                     />
                   )}
                 </label>

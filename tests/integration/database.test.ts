@@ -977,6 +977,48 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await db.query('select extend_schedule($1)', [org]);
     expect(await count()).toBe(before);
   });
+  it('admin removes a tutor: access revoked, future sessions cancelled, name kept in history', async () => {
+    await asUser(tutor);
+    await expect(db.query('select remove_tutor($1,$2)', [org, unrelated])).rejects.toThrow();
+    await asUser(academic);
+    await expect(db.query('select remove_tutor($1,$2)', [org, owner])).rejects.toThrow();
+    await expect(db.query('select remove_tutor($1,$2)', [org, academic])).rejects.toThrow();
+    const future = new Date(Date.now() + 5 * 86400000).toISOString();
+    const sid = (
+      await db.query<{ id: string }>('select create_session($1,$2,$3,$4,$5,$6) as id', [
+        org,
+        id(44),
+        unrelated,
+        future,
+        30,
+        '',
+      ])
+    ).rows[0].id;
+    await db.query('select remove_tutor($1,$2)', [org, unrelated]);
+    expect(
+      (await db.query<{ status: string }>('select status from class_sessions where id=$1', [sid]))
+        .rows[0].status,
+    ).toBe('cancelled');
+    const dir = (
+      await db.query<{ id: string; active: boolean }>(
+        'select id,active from staff_directory_v2($1)',
+        [org],
+      )
+    ).rows.find((r) => r.id === unrelated);
+    expect(dir).toMatchObject({ active: false });
+    await asUser(unrelated);
+    expect((await db.query('select id from students')).rows).toHaveLength(0);
+    await expect(
+      db.query('select create_session($1,$2,$3,$4,$5,$6)', [
+        org,
+        id(44),
+        unrelated,
+        future,
+        30,
+        '',
+      ]),
+    ).rejects.toThrow();
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

@@ -2071,3 +2071,25 @@ label {
   color: var(--slate);
   line-height: 1.5;
 }
+
+/* Pengesahan tindakan berbahaya (padam tutor). */
+.danger-note {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fdf1ef;
+  border: 1px solid #f3c9c2;
+  color: #7a271a;
+  font-size: 13px;
+}
+.danger-note ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.danger-button {
+  background: #fff;
+  color: #b42318;
+  border: 1px solid #f3c9c2;
+}
+.danger-button:hover:not(:disabled) {
+  background: #fdf1ef;
+}

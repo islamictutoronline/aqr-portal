@@ -331,3 +331,21 @@ test('Tambah rekod sesi sits at the top of the session screen and supports a pas
   await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
 });
+test('admin removes a tutor only after typing the exact name in the confirmation', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/tutors');
+  const row = page.getByRole('row').filter({ hasText: 'Tutor Contoh 3' });
+  await row.getByRole('button', { name: /Lihat/ }).click();
+  await page.getByRole('button', { name: 'Padam tutor' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Akses tutor ke portal ditarik serta-merta.')).toBeVisible();
+  const input = dialog.getByLabel(/Taip nama tutor/);
+  await input.fill('Tutor Contoh');
+  await dialog.getByRole('button', { name: 'Simpan dalam demo' }).click();
+  await expect(dialog).toBeVisible();
+  await input.fill('Tutor Contoh 3');
+  await dialog.getByRole('button', { name: 'Simpan dalam demo' }).click();
+  await expect(page.getByRole('heading', { name: 'Senarai tutor' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Tutor Contoh 3' })).toHaveCount(0);
+});
