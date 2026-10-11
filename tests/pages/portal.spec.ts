@@ -396,10 +396,16 @@ test('admin saves bank details and downloads tutor payslips; tutor sees own pays
   await page.getByRole('button', { name: 'Elaun tutor', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Muat turun payslip saya' })).toBeVisible();
 });
-test('password is the default sign-in; tutor is reminded to set one and can do so in Settings', async ({
+test('password is the default sign-in and the email-code choice is remembered', async ({
   page,
 }) => {
   await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Selamat kembali ke AQR' })).toBeVisible();
+  // CI membina tanpa sambungan Supabase; borang log masuk hanya wujud apabila dikonfigurasi.
+  test.skip(
+    (await page.getByText('Portal belum dikonfigurasi').count()) > 0,
+    'Supabase tidak dikonfigurasi dalam binaan ini',
+  );
   await expect(page.getByRole('tab', { name: 'Kata laluan' })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -412,6 +418,8 @@ test('password is the default sign-in; tutor is reminded to set one and can do s
     'aria-selected',
     'true',
   );
+});
+test('tutor is reminded to set a password and can change it in Settings', async ({ page }) => {
   await page.goto('/?demo=1#/dashboard');
   await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
   await expect(page.getByRole('heading', { name: 'Tetapkan kata laluan anda' })).toBeVisible();
