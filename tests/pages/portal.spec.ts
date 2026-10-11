@@ -490,16 +490,18 @@ test('admin sends one WhatsApp package per family: all siblings reports + invoic
   await expect(family.locator('.family-docs li')).toHaveCount(4);
   const link = family.locator('a.wa-link');
   await expect(link).toHaveAttribute('href', /^https:\/\/wa\.me\/60110000001\?text=.*DEMO-001/);
-  await family.getByRole('button', { name: 'Sediakan 4 PDF' }).click();
-  const send = family.getByRole('button', { name: /4 PDF/ });
-  await expect(send).toBeVisible();
-  const downloads: string[] = [];
-  page.on('download', (d) => downloads.push(d.suggestedFilename()));
+  await family.getByRole('button', { name: 'Sediakan PDF (laporan + invois)' }).click();
+  // Satu PDF gabungan: laporan semua anak + invois.
+  const dl = page.waitForEvent('download');
+  await family.getByRole('button', { name: 'Muat turun PDF (laporan + invois)' }).click();
+  const file = await dl;
+  expect(file.suggestedFilename()).toMatch(/^Laporan & Invois - Penjaga Contoh 1 - .*\.pdf$/);
+  const merged = await PDFDocument.load(await readFile((await file.path())!));
+  expect(merged.getPageCount()).toBeGreaterThanOrEqual(4);
+  // Komputer: Buka WhatsApp dengan mesej siap ditulis.
   const popup = context.waitForEvent('page');
-  await send.click();
+  await family.getByRole('button', { name: 'Buka WhatsApp' }).click();
   expect((await popup).url()).toContain('wa.me/60110000001');
-  await expect.poll(() => downloads.length).toBe(4);
-  expect(downloads.filter((n) => n.startsWith('Invois'))).toHaveLength(1);
   await family.getByRole('button', { name: 'Tandakan dihantar' }).click();
   await expect(family).toContainText('Dihantar');
 });

@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { FileText, MessageCircle, Receipt, RefreshCw, Send } from 'lucide-react';
+import { Download, FileText, MessageCircle, Receipt, RefreshCw, Send } from 'lucide-react';
 import { Dataset, fileName, formatMoney, monthLabel } from '@/lib/core';
 import { apiFetch, downloadBlob } from '@/lib/transport';
 import { Family, familyBundles, familyMessage, invoiceDetails, whatsappUrl } from '@/lib/delivery';
@@ -16,12 +16,14 @@ type Props = {
   busy?: boolean;
 };
 
-// Pelayar telefon boleh berkongsi beberapa PDF terus ke WhatsApp; desktop memuat turun fail.
+// Kongsi fail terus ke aplikasi WhatsApp hanya di telefon/tablet. Di komputer, kongsi pelayar membuka
+// halaman web WhatsApp yang tidak boleh membawa lampiran — jadi muat turun + buka WhatsApp.
 const canShareFiles = () => {
   try {
     return (
       typeof navigator !== 'undefined' &&
       typeof navigator.canShare === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches &&
       navigator.canShare({ files: [new File(['x'], 'x.pdf', { type: 'application/pdf' })] })
     );
   } catch {
@@ -32,7 +34,8 @@ const canShareFiles = () => {
 // Admin: satu pakej setiap penjaga (laporan semua anak + invois) dihantar sekali melalui WhatsApp.
 export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: saving }: Props) {
   const families = useMemo(() => familyBundles(data, month), [data, month]);
-  const [files, setFiles] = useState<Record<string, File[]>>({});
+  // Satu PDF gabungan setiap keluarga: laporan semua anak diikuti invois.
+  const [files, setFiles] = useState<Record<string, File>>({});
   const [busy, setBusy] = useState(''),
     [message, setMessage] = useState('');
   const shareable = useMemo(canShareFiles, []);
@@ -42,27 +45,15 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
     setBusy(gid);
     setMessage('');
     try {
-      const { reportPdf, reportFileName, financialPdf } = await import('@/lib/student-reports');
-      const out: File[] = [];
-      for (const r of f.reports.filter((x) => x.status === 'approved')) {
-        const snapshot = r.snapshot as StudentSnapshot;
-        out.push(
-          new File(
-            [await reportPdf(snapshot, true, demo)],
-            reportFileName(snapshot.student_name, String(r.period)),
-            { type: 'application/pdf' },
-          ),
-        );
-      }
+      const { reportPdf, financialPdf, mergePdfs } = await import('@/lib/student-reports');
+      const parts: Uint8Array[] = [];
+      for (const r of f.reports.filter((x) => x.status === 'approved'))
+        parts.push(await reportPdf(r.snapshot as StudentSnapshot, true, demo));
       if (f.invoice)
-        out.push(
-          new File(
-            [await financialPdf(f.invoice, 'invoice', demo, invoiceDetails(data, f.invoice))],
-            fileName(['Invois', f.invoice.number, f.guardian.full_name], 'pdf'),
-            { type: 'application/pdf' },
-          ),
-        );
-      setFiles((x) => ({ ...x, [gid]: out }));
+        parts.push(await financialPdf(f.invoice, 'invoice', demo, invoiceDetails(data, f.invoice)));
+      const name = fileName(['Laporan & Invois', f.guardian.full_name, monthLabel(month)], 'pdf');
+      const merged = await mergePdfs(parts, name.replace(/\.pdf$/, ''));
+      setFiles((x) => ({ ...x, [gid]: new File([merged], name, { type: 'application/pdf' }) }));
     } catch {
       setMessage('PDF gagal disediakan. Cuba lagi.');
     } finally {
@@ -106,26 +97,29 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
     if (refresh.ok) onData(await refresh.json());
   }
 
-  // Dipanggil terus daripada klik (fail sudah siap) supaya pelayar membenarkan perkongsian.
-  function send(f: Family) {
-    const list = files[String(f.guardian.id)] || [];
-    const text = familyMessage(f, month, data);
-    if (shareable) {
-      navigator
-        .share({ files: list, text, title: `AQR · ${monthLabel(month)}` })
-        .then(() => markSent(f))
-        .then(() => setMessage(`Dihantar kepada ${String(f.guardian.full_name)}.`))
-        .catch((e: unknown) => {
-          if ((e as Error)?.name !== 'AbortError')
-            setMessage('Perkongsian gagal. Guna "Muat turun" dan lampirkan secara manual.');
-        });
-    } else {
-      list.forEach((file) => downloadBlob(file, file.name));
-      window.open(whatsappUrl(f.guardian.phone, text), '_blank', 'noopener');
-      setMessage(
-        `${list.length} PDF dimuat turun. Lampirkan semuanya dalam WhatsApp yang dibuka, kemudian tekan "Tandakan dihantar".`,
-      );
-    }
+  const download = (f: Family) => {
+    const file = files[String(f.guardian.id)];
+    if (file) downloadBlob(file, file.name);
+  };
+  // Telefon: kongsi PDF terus ke WhatsApp (dipanggil terus daripada klik supaya dibenarkan pelayar).
+  function share(f: Family) {
+    const file = files[String(f.guardian.id)];
+    if (!file) return;
+    navigator
+      .share({ files: [file], text: familyMessage(f, month, data), title: file.name })
+      .then(() => markSent(f))
+      .then(() => setMessage(`Dihantar kepada ${String(f.guardian.full_name)}.`))
+      .catch((e: unknown) => {
+        if ((e as Error)?.name !== 'AbortError')
+          setMessage('Perkongsian gagal. Muat turun PDF dan lampirkan dalam WhatsApp.');
+      });
+  }
+  // Komputer: buka sembang WhatsApp penjaga dengan mesej siap ditulis; lampirkan PDF yang dimuat turun.
+  function openChat(f: Family) {
+    window.open(whatsappUrl(f.guardian.phone, familyMessage(f, month, data)), '_blank', 'noopener');
+    setMessage(
+      `WhatsApp ${String(f.guardian.full_name)} dibuka. Lampirkan PDF yang dimuat turun, kemudian tekan "Tandakan dihantar".`,
+    );
   }
 
   const ready = families.filter((f) => !f.missing.length);
@@ -231,39 +225,50 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
                       onClick={() => void prepare(f)}
                     >
                       <FileText size={16} />
-                      {busy === gid ? 'Menyediakan…' : `Sediakan ${f.children.length + 1} PDF`}
+                      {busy === gid ? 'Menyediakan…' : 'Sediakan PDF (laporan + invois)'}
                     </button>
                   ) : (
-                    <button className="primary" onClick={() => send(f)}>
-                      <Send size={16} />
-                      {shareable
-                        ? `Kongsi ${prepared.length} PDF ke WhatsApp`
-                        : `Muat turun ${prepared.length} PDF & buka WhatsApp`}
-                    </button>
+                    <>
+                      <button className="primary" onClick={() => download(f)}>
+                        <Download size={16} />
+                        Muat turun PDF (laporan + invois)
+                      </button>
+                      {shareable ? (
+                        <button onClick={() => share(f)}>
+                          <Send size={16} />
+                          Kongsi ke WhatsApp
+                        </button>
+                      ) : (
+                        f.guardian.phone && (
+                          <button onClick={() => openChat(f)}>
+                            <MessageCircle size={16} />
+                            Buka WhatsApp
+                          </button>
+                        )
+                      )}
+                    </>
                   )}
-                  {
-                    <button
-                      disabled={!complete || f.sent || !!busy}
-                      onClick={() =>
-                        void markSent(f)
-                          .then(() =>
-                            setMessage(`Ditanda dihantar: ${String(f.guardian.full_name)}.`),
-                          )
-                          .catch((e: Error) => setMessage(e.message))
-                      }
-                    >
-                      {f.sent ? 'Dihantar ✓' : 'Tandakan dihantar'}
-                    </button>
-                  }
+                  <button
+                    disabled={!complete || f.sent || !!busy}
+                    onClick={() =>
+                      void markSent(f)
+                        .then(() =>
+                          setMessage(`Ditanda dihantar: ${String(f.guardian.full_name)}.`),
+                        )
+                        .catch((e: Error) => setMessage(e.message))
+                    }
+                  >
+                    {f.sent ? 'Dihantar ✓' : 'Tandakan dihantar'}
+                  </button>
                 </div>
               </article>
             );
           })}
       </div>
       <p className="footnote">
-        Tekan no. telefon untuk terus membuka WhatsApp penjaga dengan mesej siap ditulis. Di
-        telefon, butang Kongsi menghantar semua PDF sekali gus — pilih WhatsApp, kemudian pilih
-        penjaga.
+        Satu PDF setiap keluarga: laporan semua anak diikuti invois. Di komputer: muat turun PDF,
+        tekan Buka WhatsApp (mesej siap ditulis), lampirkan PDF, kemudian Tandakan dihantar. Di
+        telefon: Kongsi ke WhatsApp dan pilih penjaga.
       </p>
     </section>
   );

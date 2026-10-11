@@ -744,3 +744,16 @@ export async function classReportsZip(snapshots: StudentSnapshot[], demo: boolea
   }
   return zip.generateAsync({ type: 'blob' });
 }
+
+// Gabung beberapa PDF (laporan semua anak + invois) menjadi satu fail untuk ibu bapa.
+export async function mergePdfs(parts: Uint8Array[], title: string) {
+  const { PDFDocument } = await import('pdf-lib');
+  const out = await PDFDocument.create();
+  for (const bytes of parts) {
+    const src = await PDFDocument.load(bytes);
+    for (const page of await out.copyPages(src, src.getPageIndices())) out.addPage(page);
+  }
+  out.setTitle(title);
+  out.setAuthor(ORGANIZATION);
+  return new Uint8Array(await out.save());
+}
