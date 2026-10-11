@@ -43,6 +43,7 @@ export function TutorClassReports({
             {monthLabel(month)} · kehadiran, bacaan dan ulasan setiap kelas yang dijalankan. Tanpa
             invois.
           </p>
+          <p className="tutor-fee-note">Untuk jumlah yuran, ibu bapa boleh rujuk admin AQR.</p>
         </div>
         <button
           className="primary"

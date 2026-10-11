@@ -542,6 +542,7 @@ test('tutor downloads class reports without invoices; admin generates reports + 
   await page.getByRole('button', { name: 'Laporan', exact: true }).click();
   const card = page.locator('.tutor-class-reports');
   await expect(card).toContainText('Laporan kelas murid saya');
+  await expect(card).toContainText('Untuk jumlah yuran, ibu bapa boleh rujuk admin AQR.');
   await expect(page.locator('.family-delivery')).toHaveCount(0);
   const pdfWait = page.waitForEvent('download');
   await card.getByRole('button', { name: 'PDF', exact: true }).first().click();

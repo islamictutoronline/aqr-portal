@@ -2667,3 +2667,12 @@ label {
 .class-report-list small {
   color: var(--slate);
 }
+.tutor-fee-note {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fbf6ea;
+  color: #7a5d22;
+  font-size: 13px;
+}

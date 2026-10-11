@@ -301,6 +301,22 @@ export async function reportPdf(
     y -= 16;
   }
   y -= 10;
+  // Rekod kelas tutor tiada invois: rujuk admin untuk jumlah yuran.
+  if (approved === 'tutor') {
+    ensure(44);
+    page.drawRectangle({ x: M, y: y - 22, width: CW, height: 34, color: C.ivory });
+    page.drawRectangle({ x: M, y: y - 22, width: 3, height: 34, color: C.gold });
+    text('Nota:', M + 14, y - 9, 9.5, bold);
+    text(
+      'Laporan ini merekod kelas yang dijalankan sahaja. Untuk jumlah yuran, sila rujuk admin AQR.',
+      M + 48,
+      y - 9,
+      9.5,
+      font,
+      C.slate,
+    );
+    y -= 46;
+  }
   // --- Jadual kehadiran
   section('Rekod kehadiran');
   // Lajur BACAAN hanya jika ada bacaan direkod (Iqra'/al-Quran).
