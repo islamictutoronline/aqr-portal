@@ -246,6 +246,7 @@ export function App({
   name,
   staffId,
   guardianId,
+  passwordSet = false,
 }: {
   initial: Dataset;
   demo: boolean;
@@ -254,8 +255,10 @@ export function App({
   name: string;
   staffId?: string;
   guardianId?: string;
+  passwordSet?: boolean;
 }) {
   const [data, setData] = useState(initial);
+  const [hasPassword, setHasPassword] = useState(passwordSet);
   const [page, setPage] = useState(path);
   useEffect(() => {
     setData(initial);
@@ -1395,6 +1398,7 @@ export function App({
             alt="Logo Akademi Quran Ar-Riyadh"
           />
         </div>
+        {role === 'tutor' && !hasPassword && passwordCard(true)}
         <div className="metrics">
           {metrics.map(([label, value, hint]) => (
             <div className="metric" key={String(label)}>
@@ -2792,6 +2796,70 @@ export function App({
       setBusy(false);
     }
   }
+  function passwordCard(reminder = false) {
+    return (
+      <Card
+        title={reminder ? 'Tetapkan kata laluan anda' : 'Kata laluan log masuk'}
+        subtitle={
+          reminder
+            ? 'Selepas ini log masuk terus dengan e-mel dan kata laluan, tanpa menunggu kod e-mel'
+            : hasPassword
+              ? 'Kata laluan sudah ditetapkan. Isi di bawah untuk menukarnya.'
+              : 'Log masuk dengan e-mel dan kata laluan, tanpa kod e-mel'
+        }
+      >
+        <form
+          className="invite-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const form = e.currentTarget;
+            const v = new FormData(form);
+            const password = String(v.get('password'));
+            if (password !== String(v.get('confirm')))
+              return setNotice('Kata laluan dan pengesahan tidak sama.');
+            const problem = passwordProblem(password);
+            if (problem) return setNotice(problem);
+            if (demo) return setNotice('Demo: kata laluan tidak disimpan.');
+            setBusy(true);
+            try {
+              const r = await apiFetch('/api/password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password }),
+              });
+              const result = await r.json();
+              if (!r.ok) throw new Error(result.error);
+              form.reset();
+              setHasPassword(true);
+              setNotice(
+                'Kata laluan disimpan. Lain kali log masuk dengan e-mel dan kata laluan — tiada kod e-mel diperlukan.',
+              );
+            } catch (error) {
+              setNotice(error instanceof Error ? error.message : 'Gagal menyimpan');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label>
+            Kata laluan baharu
+            <input name="password" type="password" autoComplete="new-password" required />
+          </label>
+          <label>
+            Ulang kata laluan
+            <input name="confirm" type="password" autoComplete="new-password" required />
+          </label>
+          <button disabled={busy} type="submit">
+            Simpan kata laluan
+          </button>
+        </form>
+        <p className="footnote">
+          Sekurang-kurangnya 10 aksara dengan huruf dan nombor. Jangan gunakan kata laluan yang
+          mudah diteka seperti &quot;admin&quot;.
+        </p>
+      </Card>
+    );
+  }
   function settingsScreen() {
     return (
       <>
@@ -2841,61 +2909,7 @@ export function App({
             </button>
           )}
         </Card>
-        {academic && (
-          <Card
-            title="Kata laluan log masuk"
-            subtitle="Pentadbir boleh log masuk dengan e-mel dan kata laluan, tanpa kod e-mel"
-          >
-            <form
-              className="invite-form"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const form = e.currentTarget;
-                const v = new FormData(form);
-                const password = String(v.get('password'));
-                if (password !== String(v.get('confirm')))
-                  return setNotice('Kata laluan dan pengesahan tidak sama.');
-                const problem = passwordProblem(password);
-                if (problem) return setNotice(problem);
-                if (demo) return setNotice('Demo: kata laluan tidak disimpan.');
-                setBusy(true);
-                try {
-                  const r = await apiFetch('/api/password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password }),
-                  });
-                  const result = await r.json();
-                  if (!r.ok) throw new Error(result.error);
-                  form.reset();
-                  setNotice(
-                    'Kata laluan disimpan. Lain kali pilih "Log masuk dengan kata laluan".',
-                  );
-                } catch (error) {
-                  setNotice(error instanceof Error ? error.message : 'Gagal menyimpan');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label>
-                Kata laluan baharu
-                <input name="password" type="password" autoComplete="new-password" required />
-              </label>
-              <label>
-                Ulang kata laluan
-                <input name="confirm" type="password" autoComplete="new-password" required />
-              </label>
-              <button disabled={busy} type="submit">
-                Simpan kata laluan
-              </button>
-            </form>
-            <p className="footnote">
-              Sekurang-kurangnya 10 aksara dengan huruf dan nombor. Jangan gunakan kata laluan yang
-              mudah diteka seperti &quot;admin&quot;.
-            </p>
-          </Card>
-        )}
+        {role !== 'guardian' && passwordCard()}
         <Card title="Google Sheets" subtitle="Sambungan Google Sheets">
           <GoogleStatus demo={demo} />
           {isStatic() && (

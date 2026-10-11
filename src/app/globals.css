@@ -2395,3 +2395,21 @@ label {
   margin-top: 6px;
   font-size: 14px;
 }
+.auth-hint {
+  margin: -4px 0 0;
+  font-size: 13px;
+  color: var(--slate);
+  line-height: 1.5;
+}
+.auth-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--teal);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}

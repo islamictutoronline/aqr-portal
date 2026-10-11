@@ -57,6 +57,7 @@ export async function getContext() {
         name: profile.display_name as string,
         staffId: profile.id as string,
         guardianId: undefined,
+        passwordSet: Boolean(user.user_metadata?.password_set),
       };
   }
   const claimed = await db.rpc('claim_guardian_access');
@@ -77,6 +78,7 @@ export async function getContext() {
     name: g.full_name as string,
     staffId: undefined,
     guardianId: g.id as string,
+    passwordSet: Boolean(user.user_metadata?.password_set),
   };
 }
 export async function staticTransport(input: string, init?: RequestInit) {
@@ -92,12 +94,13 @@ export async function staticTransport(input: string, init?: RequestInit) {
     if (path === '/api/mutate')
       return Response.json(await executeMutation(ctx, JSON.parse(String(init?.body))));
     if (path === '/api/password') {
-      // Hanya pemilik/admin boleh menggunakan kata laluan; tutor dan ibu bapa kekal dengan kod e-mel.
-      if (!['owner', 'admin'].includes(ctx.role)) throw new Error('Akses tidak dibenarkan');
+      // Pemilik/admin dan tutor boleh menetapkan kata laluan sendiri selepas log masuk pertama dengan kod e-mel.
+      if (!['owner', 'admin', 'tutor'].includes(ctx.role))
+        throw new Error('Akses tidak dibenarkan');
       const { password } = JSON.parse(String(init?.body || '{}')) as { password?: string };
       const problem = passwordProblem(String(password || ''));
       if (problem) throw new Error(problem);
-      const { error } = await db.auth.updateUser({ password });
+      const { error } = await db.auth.updateUser({ password, data: { password_set: true } });
       if (error) throw new Error('Kata laluan tidak dapat disimpan. Cuba log masuk semula.');
       return Response.json({ saved: true });
     }

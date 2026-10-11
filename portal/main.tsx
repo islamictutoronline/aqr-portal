@@ -16,6 +16,14 @@ installTransport(staticTransport);
 // Data rekaan hanya untuk pembangunan dan ujian automatik; binaan terbitan tidak membukanya.
 const demoAllowed = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO === '1';
 type Loaded = { ctx: Awaited<ReturnType<typeof getContext>>; data: Dataset };
+// Kata laluan menjadi cara lalai; kod e-mel untuk kali pertama atau lupa kata laluan.
+function prefersPassword() {
+  try {
+    return localStorage.getItem('aqr.loginMethod') !== 'code';
+  } catch {
+    return true;
+  }
+}
 function Root() {
   const [loaded, setLoaded] = useState<Loaded | null>(null),
     [loading, setLoading] = useState(true),
@@ -26,9 +34,19 @@ function Root() {
     [busy, setBusy] = useState(false),
     [trusted, setTrusted] = useState(localStorage.getItem('aqr.trusted') === 'yes'),
     [register, setRegister] = useState(false),
-    [usePassword, setUsePassword] = useState(false),
+    [usePassword, setUsePassword] = useState(prefersPassword),
     [password, setPassword] = useState(''),
     [signed, setSigned] = useState(false);
+  const pickMethod = (pw: boolean) => {
+    setUsePassword(pw);
+    setSent(false);
+    setMessage('');
+    try {
+      localStorage.setItem('aqr.loginMethod', pw ? 'password' : 'code');
+    } catch {
+      // Storan pelayar disekat: pilihan tidak diingati, log masuk tetap berfungsi.
+    }
+  };
   const demo = demoAllowed && new URLSearchParams(location.search).get('demo') === '1';
   useEffect(() => {
     let alive = true;
@@ -220,20 +238,20 @@ function Root() {
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={!usePassword}
-                    className={!usePassword ? 'active' : ''}
-                    onClick={() => setUsePassword(false)}
+                    aria-selected={usePassword}
+                    className={usePassword ? 'active' : ''}
+                    onClick={() => pickMethod(true)}
                   >
-                    Kod e-mel
+                    Kata laluan
                   </button>
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={usePassword}
-                    className={usePassword ? 'active' : ''}
-                    onClick={() => setUsePassword(true)}
+                    aria-selected={!usePassword}
+                    className={!usePassword ? 'active' : ''}
+                    onClick={() => pickMethod(false)}
                   >
-                    Kata laluan (pentadbir)
+                    Kod e-mel
                   </button>
                 </div>
               )}
@@ -265,6 +283,15 @@ function Root() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </label>
+                )}
+                {usePassword && !register && (
+                  <p className="auth-hint">
+                    Kali pertama log masuk atau lupa kata laluan?{' '}
+                    <button type="button" className="auth-link" onClick={() => pickMethod(false)}>
+                      Guna kod e-mel
+                    </button>
+                    , kemudian tetapkan kata laluan di Tetapan.
+                  </p>
                 )}
                 <label className="check-label">
                   <input
@@ -302,8 +329,9 @@ function Root() {
                 type="button"
                 className="auth-switch"
                 onClick={() => {
+                  // Pendaftaran sentiasa melalui kod e-mel; kembali ke log masuk memulihkan pilihan tersimpan.
+                  setUsePassword(register ? prefersPassword() : false);
                   setRegister(!register);
-                  setUsePassword(false);
                   setSent(false);
                 }}
               >

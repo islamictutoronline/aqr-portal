@@ -396,3 +396,31 @@ test('admin saves bank details and downloads tutor payslips; tutor sees own pays
   await page.getByRole('button', { name: 'Elaun tutor', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Muat turun payslip saya' })).toBeVisible();
 });
+test('password is the default sign-in; tutor is reminded to set one and can do so in Settings', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.getByRole('tab', { name: 'Kata laluan' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByLabel('Kata laluan', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Guna kod e-mel' }).click();
+  await expect(page.getByRole('button', { name: 'Hantar kod log masuk' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'Kod e-mel' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  await expect(page.getByRole('heading', { name: 'Tetapkan kata laluan anda' })).toBeVisible();
+  await page.getByLabel('Kata laluan baharu').fill('pendek');
+  await page.getByLabel('Ulang kata laluan').fill('pendek');
+  await page.getByRole('button', { name: 'Simpan kata laluan' }).click();
+  await expect(page.getByText('sekurang-kurangnya 10 aksara').first()).toBeVisible();
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Tetapan', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Kata laluan log masuk' })).toBeVisible();
+});

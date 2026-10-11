@@ -60,6 +60,7 @@ Ujian pelayar membuka kesemua 10 skrin modul tanpa ralat JavaScript atau overflo
 | WhatsApp tanpa e-mel                                          | Belum dilaksanakan      | Fallback OTP e-mel, seperti pilihan selamat dalam master prompt                                           |
 | Revocation peranti lain / retention automatik / produksi      | Belum dilaksanakan      | Perlu konfigurasi operasi dan semakan staging                                                             |
 | Logo AQR + Islamic Tutor Online (11 Okt)                      | Dilaksanakan, diuji     | PDF laporan/payslip/invois/resit, Excel setiap tab, UI & favicon; CSV teks sahaja (tiada imej)            |
+| Kata laluan tutor (11 Okt)                                    | Dilaksanakan, diuji     | Kod e-mel hanya kali pertama/lupa; diuji setempat (demo), log masuk sebenar perlu disahkan pengguna       |
 
 ## Langkah berikut yang nyata
 
