@@ -1060,6 +1060,58 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await asUser(parent);
     expect((await db.query('select id from tutor_payment_details')).rows).toHaveLength(0);
   });
+  it('session invoices: absent and makeup charged, excused not; unpaid invoice regenerates', async () => {
+    await db.exec(`reset role; insert into program_fee_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from)
+      values('${org}','IQRA',30,1000,'2026-01-01') on conflict do nothing;`);
+    await asUser(tutor);
+    const record = async (iso: string, status: string) => {
+      const sid = (
+        await db.query<{ id: string }>('select create_session($1,$2,$3,$4,$5,$6) as id', [
+          org,
+          id(43),
+          tutor,
+          iso,
+          30,
+          '',
+        ])
+      ).rows[0].id;
+      await db.query('select record_assessment($1,$2,$3,$4,$5,$6)', [
+        org,
+        sid,
+        id(31),
+        status,
+        JSON.stringify({ mastery: 'not_assessed' }),
+        true,
+      ]);
+    };
+    await record('2026-08-03T12:00:00Z', 'absent');
+    await record('2026-08-04T12:00:00Z', 'excused');
+    await asUser(parent);
+    await expect(
+      db.query('select generate_session_invoices($1,$2)', [org, '2026-08']),
+    ).rejects.toThrow();
+    await asUser(academic);
+    await db.query('select generate_session_invoices($1,$2)', [org, '2026-08']);
+    const items = async () =>
+      (
+        await db.query<{ quantity: number; unit_price_sen: string }>(
+          "select ii.quantity,ii.unit_price_sen from invoice_items ii join invoices i on i.id=ii.invoice_id where i.idempotency_key like 'sessions:2026-08:%'",
+        )
+      ).rows.map((r) => ({ quantity: Number(r.quantity), price: Number(r.unit_price_sen) }));
+    expect(await items()).toEqual([{ quantity: 1, price: 1000 }]);
+    await asUser(tutor);
+    await record('2026-08-05T12:00:00Z', 'makeup');
+    await asUser(academic);
+    await db.query('select generate_session_invoices($1,$2)', [org, '2026-08']);
+    expect(await items()).toEqual([{ quantity: 2, price: 1000 }]);
+    expect(
+      (
+        await db.query<{ total_sen: string }>(
+          "select total_sen from invoices where idempotency_key like 'sessions:2026-08:%'",
+        )
+      ).rows.map((r) => Number(r.total_sen)),
+    ).toEqual([2000]);
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

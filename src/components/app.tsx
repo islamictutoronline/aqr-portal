@@ -53,9 +53,12 @@ import {
   Rate,
   statusLabels,
   passwordProblem,
+  feeReference,
+  fileName,
+  monthLabel,
 } from '@/lib/core';
-import { buildReport, allowanceRows } from '@/lib/reporting';
-import { buildPayslip, payslipPdf, payslipsZip } from '@/lib/payslip';
+import { buildReport, allowanceRows, feeRows } from '@/lib/reporting';
+import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/payslip';
 import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
 import { ContactAdmin } from './contact-admin';
@@ -412,7 +415,42 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'save_payment_details') {
+        else if (operation === 'generate_session_invoices') {
+          const rows = feeRows(next, String(payload.billing_period)).filter(
+            (f) => f.guardianId && f.rate_sen !== null,
+          );
+          for (const gid of new Set(rows.map((f) => f.guardianId!))) {
+            const mine = rows.filter((f) => f.guardianId === gid);
+            const key = `sessions:${payload.billing_period}:${gid}`;
+            const existing = next.invoices.find((i) => i.idempotency_key === key);
+            const invId = existing?.id || `${id}-${gid}`;
+            next.invoice_items = next.invoice_items.filter((x) => x.invoice_id !== invId);
+            mine.forEach((f, k) =>
+              next.invoice_items.push({
+                id: `${invId}-${k}`,
+                invoice_id: invId,
+                student_id: f.studentId,
+                description: `${f.student} · ${f.program} (${f.minutes} minit)`,
+                quantity: f.sessions,
+                unit_price_sen: f.rate_sen,
+                discount_sen: 0,
+              }),
+            );
+            const total = mine.reduce((n, f) => n + f.total_sen, 0);
+            if (existing) existing.total_sen = total;
+            else
+              next.invoices.push({
+                id: invId,
+                number: `DEMO-${next.invoices.length + 1}`,
+                guardian_id: gid,
+                total_sen: total,
+                period: payload.billing_period,
+                due_on: `${payload.billing_period}-28`,
+                status: 'issued',
+                idempotency_key: key,
+              });
+          }
+        } else if (operation === 'save_payment_details') {
           next.tutor_payment_details = [
             ...(next.tutor_payment_details || []).filter((x) => x.staff_id !== payload.staff_id),
             { id, ...payload },
@@ -1023,13 +1061,13 @@ export function App({
           const { toXlsx } = await import('@/lib/workbook');
           downloadBlob(
             new Blob([new Uint8Array(await toXlsx(report))]),
-            `AQR_${report.code}_${month}.xlsx`,
+            fileName(['AQR', report.title, monthLabel(month)], 'xlsx'),
           );
         } else {
           const { toCsv } = await import('@/lib/reporting');
           downloadBlob(
             new Blob([toCsv(report)], { type: 'text/csv;charset=utf-8' }),
-            `AQR_${report.code}_${month}.csv`,
+            fileName(['AQR', report.title, monthLabel(month)], 'csv'),
           );
         }
       } catch {
@@ -1059,7 +1097,7 @@ export function App({
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `AQR_${report.code}_${month}.${format}`;
+        a.download = fileName(['AQR', report.title, monthLabel(month)], format);
         a.click();
         URL.revokeObjectURL(a.href);
       }
@@ -1969,13 +2007,63 @@ export function App({
     );
   }
   function financeScreen() {
+    const fees = feeRows(visible, month);
+    const unbilled = fees.filter((f) => !f.guardianId);
+    const noRate = fees.filter((f) => f.rate_sen === null);
+    const feeRates = all('program_fee_rates').length
+      ? all('program_fee_rates')
+      : feeReference.map(([program_code, duration_minutes, amount_sen]) => ({
+          id: `${program_code}-${duration_minutes}`,
+          program_code,
+          duration_minutes,
+          amount_sen,
+        }));
     return (
       <>
-        {demo && (
-          <div className="inline-note">
-            Amaun yuran di bawah ialah contoh pengiraan. Kadar yuran rasmi AQR belum dibekalkan.
-          </div>
-        )}
+        <Card
+          title="Yuran bulan ini"
+          subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Berizin tidak.`}
+          action={
+            academic && (
+              <button
+                className="primary"
+                disabled={busy || !fees.length}
+                onClick={() => void mutate('generate_session_invoices', { billing_period: month })}
+              >
+                <FileText size={16} />
+                Jana / kemas kini invois
+              </button>
+            )
+          }
+        >
+          {(unbilled.length > 0 || noRate.length > 0) && (
+            <div className="inline-note">
+              {unbilled.length > 0 &&
+                `${new Set(unbilled.map((f) => f.studentId)).size} murid tiada penjaga bil — pautkan penjaga di profil murid supaya invois dapat dijana. `}
+              {noRate.length > 0 &&
+                `${noRate.length} baris tiada harga sesi untuk program/tempohnya.`}
+            </div>
+          )}
+          <Table
+            headers={['Murid', 'Program', 'Sesi dicaj', 'Harga sesi', 'Jumlah', 'Penjaga bil']}
+            rows={fees
+              .filter((f) => matches({ id: f.studentId, name: f.student, program: f.program }))
+              .map((f) => [
+                <strong key="n">{f.student}</strong>,
+                `${f.program} (${f.minutes} minit)`,
+                f.sessions,
+                f.rate_sen === null ? 'Tiada harga' : formatMoney(f.rate_sen),
+                formatMoney(f.total_sen),
+                f.guardianId ? lookup('guardians', f.guardianId) : 'Tiada',
+              ])}
+          />
+          {fees.length > 0 && (
+            <p className="tab-total">
+              Jumlah yuran bulan ini:{' '}
+              <strong>{formatMoney(fees.reduce((n, f) => n + f.total_sen, 0))}</strong>
+            </p>
+          )}
+        </Card>
         <div className="metrics">
           {[
             ['Jumlah dibilkan', invoiceTotals.invoiced],
@@ -1989,6 +2077,21 @@ export function App({
             </div>
           ))}
         </div>
+        <details className="more-tools">
+          <summary>Kadar yuran setiap sesi</summary>
+          <Card title="Kadar yuran" subtitle="Harga sesi untuk ibu bapa (Borang Pendaftaran AQR)">
+            <Table
+              headers={['Program', 'Tempoh', 'Harga sesi']}
+              rows={feeRates.map((r) => [
+                String(
+                  all('programs').find((p) => p.code === r.program_code)?.name || r.program_code,
+                ),
+                `${r.duration_minutes} minit`,
+                formatMoney(Number(r.amount_sen)),
+              ])}
+            />
+          </Card>
+        </details>
         <Card
           title="Invois & baki"
           action={
@@ -2026,7 +2129,10 @@ export function App({
                               new Blob([await financialPdf(i, 'invoice', demo)], {
                                 type: 'application/pdf',
                               }),
-                              `AQR_invoice_${i.id}.pdf`,
+                              fileName(
+                                ['Invois', i.number, lookup('guardians', i.guardian_id)],
+                                'pdf',
+                              ),
                             ),
                           )
                           .catch(() => setNotice('Dokumen gagal dijana.'));
@@ -2197,7 +2303,14 @@ export function App({
                           new Blob([await financialPdf(r, 'receipt', demo)], {
                             type: 'application/pdf',
                           }),
-                          `AQR_receipt_${r.id}.pdf`,
+                          fileName(
+                            [
+                              'Resit',
+                              r.number ||
+                                dateLabel(String(r.created_at || new Date().toISOString())),
+                            ],
+                            'pdf',
+                          ),
                         ),
                       )
                       .catch(() => setNotice('Dokumen gagal dijana.'));
@@ -2259,7 +2372,7 @@ export function App({
     const slip = buildPayslip(visible, tid, month);
     downloadBlob(
       new Blob([await payslipPdf(slip, payDate, orgContact())], { type: 'application/pdf' }),
-      `Payslip_${month}_${slip.tutorName.replace(/[^A-Za-z0-9]+/g, '_')}.pdf`,
+      payslipFileName(slip),
     );
   };
   const payslipBar = (tid?: string) => (
@@ -2286,7 +2399,7 @@ export function App({
                   payDate,
                   orgContact(),
                 ),
-                `Payslip_${month}_semua_tutor.zip`,
+                fileName(['Payslip Semua Tutor', monthLabel(month)], 'zip'),
               );
             })()
           }

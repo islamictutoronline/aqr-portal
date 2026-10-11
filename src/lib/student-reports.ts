@@ -1,4 +1,13 @@
-import { Dataset, Row, monthBounds, dateLabel, ORGANIZATION, formatMoney } from './core';
+import {
+  Dataset,
+  Row,
+  monthBounds,
+  dateLabel,
+  ORGANIZATION,
+  formatMoney,
+  monthLabel,
+  fileName,
+} from './core';
 export type StudentSnapshot = {
   student_name: string;
   period: string;
@@ -50,25 +59,8 @@ const attendanceLabels: Record<string, string> = {
   excused: 'Berizin',
   makeup: 'Ganti',
 };
-const malayMonths = [
-  'Januari',
-  'Februari',
-  'Mac',
-  'April',
-  'Mei',
-  'Jun',
-  'Julai',
-  'Ogos',
-  'September',
-  'Oktober',
-  'November',
-  'Disember',
-];
 const malayDays = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
-export const monthLabel = (period: string) => {
-  const [year, month] = period.split('-');
-  return `${malayMonths[Number(month) - 1] || month} ${year}`;
-};
+export { monthLabel };
 // Waktu Malaysia (UTC+8) tanpa bergantung pada zon masa peranti.
 const klParts = (iso: string) => {
   const d = new Date(Date.parse(iso) + 8 * 3600000);
@@ -416,15 +408,20 @@ export async function reportPdf(
   doc.setAuthor(ORGANIZATION);
   return new Uint8Array(await doc.save());
 }
+export const reportFileName = (student: string, period: string) =>
+  fileName(['Laporan Bulanan', student, monthLabel(period)], 'pdf');
 export async function reportsZip(reports: Row[], demo: boolean) {
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
+  const used = new Set<string>();
   for (const r of reports) {
     if (r.status !== 'approved') continue;
-    zip.file(
-      `AQR_${r.period}_${r.student_id}.pdf`,
-      await reportPdf(r.snapshot as StudentSnapshot, true, demo),
-    );
+    const snap = r.snapshot as StudentSnapshot;
+    let name = reportFileName(snap.student_name, String(r.period));
+    for (let n = 2; used.has(name); n++)
+      name = reportFileName(`${snap.student_name} (${n})`, String(r.period));
+    used.add(name);
+    zip.file(name, await reportPdf(snap, true, demo));
   }
   return zip.generateAsync({ type: 'blob' });
 }

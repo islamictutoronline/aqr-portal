@@ -3,6 +3,7 @@ import { Dataset } from './core';
 export const projections: Record<string, string> = {
   monthly_student_reports: 'id,student_id,period,status,snapshot,approved_at,created_at',
   report_deliveries: 'id,report_id,guardian_id,status,note,updated_at,created_at',
+  program_fee_rates: 'id,program_code,duration_minutes,amount_sen,effective_from,effective_to',
   tutor_payment_details: 'id,staff_id,job_title,department,bank_name,account_holder,account_number',
   tutor_applications: 'id,display_name,status,created_at',
   student_guardians: 'id,student_id,guardian_id,portal_allowed,is_billing_contact',

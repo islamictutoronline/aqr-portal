@@ -1,12 +1,13 @@
 'use client';
 import { useState } from 'react';
-import { Dataset, Role, Row, dateLabel } from '@/lib/core';
+import { Dataset, Role, Row, dateLabel, fileName, monthLabel } from '@/lib/core';
 import { apiFetch, downloadBlob } from '@/lib/transport';
 import {
   StudentSnapshot,
   demoSnapshot,
   reportPdf,
   reportsZip,
+  reportFileName,
   whatsappDraft,
 } from '@/lib/student-reports';
 type Props = {
@@ -168,7 +169,7 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
                   new Blob([await reportPdf(snapshot, r.status === 'approved', demo)], {
                     type: 'application/pdf',
                   }),
-                  `AQR_${r.period}_${r.student_id}.pdf`,
+                  reportFileName(snapshot.student_name, String(r.period)),
                 ),
               )
             }
@@ -275,7 +276,10 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
             disabled={busy || !reports.some((r) => r.status === 'approved')}
             onClick={() =>
               void run(async () => {
-                downloadBlob(await reportsZip(reports, demo), `AQR_Laporan_${month}.zip`);
+                downloadBlob(
+                  await reportsZip(reports, demo),
+                  fileName(['Laporan Bulanan', monthLabel(month)], 'zip'),
+                );
                 setMessage('ZIP mengandungi laporan diluluskan sahaja.');
               })
             }
@@ -328,7 +332,7 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
                         void run(async () => {
                           downloadBlob(
                             await reportsZip(g.reports, demo),
-                            `AQR_Laporan_${month}_${g.name.replace(/[^A-Za-z0-9]+/g, '_')}.zip`,
+                            fileName(['Laporan Bulanan', g.name, monthLabel(month)], 'zip'),
                           );
                           setMessage('ZIP mengandungi laporan diluluskan sahaja.');
                         })

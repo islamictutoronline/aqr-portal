@@ -177,7 +177,11 @@ export async function toXlsx(r: Report) {
 
   // --- Satu tab bagi setiap murid, supaya mudah dirujuk; ditambah senarai murid berpautan.
   const groupIdx = headers.findIndex((h) => h === 'Murid · Program' || h === 'Murid');
-  if (groupIdx >= 0 && cells.length) {
+  // Had tab murid supaya fail kekal ringan (≥400 murid masih muat).
+  const MAX_STUDENT_TABS = 500;
+  const groupCount =
+    groupIdx >= 0 ? new Set(cells.map((row) => String(row[groupIdx] ?? '—'))).size : 0;
+  if (groupIdx >= 0 && cells.length && groupCount <= MAX_STUDENT_TABS) {
     const groups = new Map<string, Cell[][]>();
     cells.forEach((row) => {
       const key = String(row[groupIdx] ?? '—');

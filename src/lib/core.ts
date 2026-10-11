@@ -53,6 +53,36 @@ export function passwordProblem(pw: string): string | null {
     return 'Kata laluan terlalu mudah diteka. Pilih yang lain.';
   return null;
 }
+const malayMonths = [
+  'Januari',
+  'Februari',
+  'Mac',
+  'April',
+  'Mei',
+  'Jun',
+  'Julai',
+  'Ogos',
+  'September',
+  'Oktober',
+  'November',
+  'Disember',
+];
+export const monthLabel = (period: string) => {
+  const [year, month] = String(period).split('-');
+  return `${malayMonths[Number(month) - 1] || month} ${year}`;
+};
+// Nama fail muat turun yang jelas: "Laporan Bulanan - Ahmad - Oktober 2026.pdf".
+export function fileName(parts: unknown[], ext: string) {
+  const clean = parts
+    .map((p) =>
+      String(p ?? '')
+        .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .filter(Boolean);
+  return `${clean.join(' - ').slice(0, 150)}.${ext}`;
+}
 export const formatMoney = (sen: number) =>
   new Intl.NumberFormat('ms-MY', { style: 'currency', currency: 'MYR' }).format(sen / 100);
 export const dateLabel = (date: string) =>
@@ -84,6 +114,25 @@ export function integerSen(value: string) {
   if (!Number.isSafeInteger(result)) throw new Error('Amaun terlalu besar');
   return result;
 }
+// Harga sesi untuk ibu bapa (Borang Pendaftaran AQR, Okt 2026): [kod program, minit, sen].
+export const feeReference = [
+  ['IQRA', 20, 800],
+  ['IQRA', 30, 1000],
+  ['KELANCARAN_AQ', 20, 800],
+  ['KELANCARAN_AQ', 30, 1000],
+  ['TAHSIN_AQ', 20, 800],
+  ['TAHSIN_AQ', 30, 1000],
+  ['PRA_TAHFIZ', 30, 1000],
+  ['FARDHU_AIN_KAFA', 30, 1200],
+  ['TAJWID_TP', 30, 1200],
+  ['BAHASA_ARAB', 30, 1500],
+  ['BAHASA_ARAB_KSSM', 30, 1700],
+  ['BAHASA_ARAB_MADINAH', 30, 2000],
+  ['TADABBUR', 30, 2000],
+  ['FARAID', 30, 2500],
+  ['FARDHU_AIN_DEWASA', 30, 2000],
+  ['TARANNUM', 30, 2000],
+] as const;
 export const rateReference = [
   ['IQRA', "Iqra'", 20, 700],
   ['IQRA', "Iqra'", 30, 900],

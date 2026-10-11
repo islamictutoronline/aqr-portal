@@ -381,13 +381,13 @@ test('admin saves bank details and downloads tutor payslips; tutor sees own pays
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Muat turun payslip' }).click(),
   ]);
-  expect(pdf.suggestedFilename()).toMatch(/^Payslip_2026-10_.*\.pdf$/);
+  expect(pdf.suggestedFilename()).toBe('Payslip - Tutor Contoh 2 - Oktober 2026.pdf');
   await page.getByRole('tab', { name: 'Semua tutor' }).click();
   const [zip] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Payslip semua tutor (ZIP)' }).click(),
   ]);
-  expect(zip.suggestedFilename()).toBe('Payslip_2026-10_semua_tutor.zip');
+  expect(zip.suggestedFilename()).toBe('Payslip Semua Tutor - Oktober 2026.zip');
   await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
   await page.goto('/?demo=1#/allowance');
   await page.getByLabel('Pratonton peranan demo').selectOption('tutor');

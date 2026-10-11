@@ -15,13 +15,13 @@ it('creates a real XLSX with metadata, frozen header, literal cells and reconcil
   expect(names.slice(0, 2)).toEqual(['LAPORAN', 'SENARAI MURID']);
   expect(names.slice(-3)).toEqual(['MAKLUMAT_LAPORAN', 'DATA', 'RINGKASAN']);
   // Satu tab bagi setiap murid dalam laporan.
-  const students = new Set(report.rows.map((row) => String(row[3])));
+  const students = new Set(report.rows.map((row) => String(row[2])));
   expect(names.length).toBe(5 + students.size);
   expect(book.getWorksheet('DATA')!.rowCount).toBe(report.rows.length + 1);
   expect(book.getWorksheet('DATA')!.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
   const cell = book
     .getWorksheet('DATA')!
-    .getColumn(4)
+    .getColumn(3)
     .values.find((v) => String(v).includes('HYPERLINK'));
   expect(cell).toBe('\'=HYPERLINK("bad")');
   expect(toCsv(report).startsWith('\uFEFF')).toBe(true);
@@ -31,10 +31,9 @@ it('exports empty reports and 10,000 facts without losing rows', async () => {
   expect(r.rows).toHaveLength(0);
   r.rows = Array.from({ length: 10000 }, (_, i) => [
     '01/12/2026',
-    String(i),
-    'مُرَاجَعَةٌ',
-    'Class',
-    'present',
+    `مُرَاجَعَةٌ ${i}`,
+    'Program',
+    'Hadir',
     '',
   ]);
   const b = new ExcelJS.Workbook();

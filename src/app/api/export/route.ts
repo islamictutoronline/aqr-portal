@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { context, loadData, mutationGuard, errorResponse, AccessError } from '@/lib/server/access';
 import { demoData, scopeDemo } from '@/lib/demo';
-import { REPORTS, ReportCode, allowedReport, dateLabel } from '@/lib/core';
+import { REPORTS, ReportCode, allowedReport, fileName, monthLabel } from '@/lib/core';
 import { buildReport, toCsv } from '@/lib/reporting';
 import { toXlsx } from '@/lib/workbook';
 import { sheetsExport } from '@/lib/server/google';
@@ -80,8 +80,7 @@ async function run(request: Request, sheets = false) {
       if (result.error) throw new Error('Audit gagal');
       return Response.json({ url });
     }
-    const timestamp = dateLabel(new Date().toISOString()).replaceAll('/', '');
-    const filename = `AQR_${code}_${month}_${timestamp}.${format}`;
+    const filename = fileName(['AQR', REPORTS[code], monthLabel(month)], format);
     const body = format === 'xlsx' ? new Uint8Array(await toXlsx(report)) : toCsv(report);
     if (ctx && jobId) {
       const result = await ctx.db
@@ -96,7 +95,7 @@ async function run(request: Request, sheets = false) {
           format === 'xlsx'
             ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             : 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `attachment; filename="${filename.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
         'Cache-Control': 'no-store',
       },
     });

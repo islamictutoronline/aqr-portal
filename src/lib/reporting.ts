@@ -13,6 +13,7 @@ import {
   statusLabel,
   findRate,
   Rate,
+  feeReference,
 } from './core';
 export type Report = {
   code: ReportCode;
@@ -79,6 +80,74 @@ export function allowanceRows(data: Dataset, month: string): AllowanceRow[] {
       };
     });
 }
+// Yuran ibu bapa ikut sesi yang dijalankan (sama seperti generate_session_invoices dalam DB):
+// Hadir, Lewat, Ganti dan Tidak hadir dicaj; Berizin tidak. Satu baris bagi murid × program × tempoh.
+export const CHARGEABLE_ATTENDANCE = ['present', 'late', 'makeup', 'absent'];
+export type FeeRow = {
+  studentId: string;
+  student: string;
+  program: string;
+  minutes: number;
+  sessions: number;
+  rate_sen: number | null;
+  total_sen: number;
+  guardianId: string | null;
+};
+export function feeRows(data: Dataset, month: string): FeeRow[] {
+  const { start, end } = monthBounds(month);
+  const all = (table: string) => data[table] ?? [];
+  const klDay = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
+  const stored = all('program_fee_rates');
+  const rates: Row[] = stored.length
+    ? stored
+    : feeReference.map(([program_code, duration_minutes, amount_sen]) => ({
+        id: `${program_code}-${duration_minutes}`,
+        program_code,
+        duration_minutes,
+        amount_sen,
+        effective_from: '2000-01-01',
+      }));
+  const groups = new Map<string, FeeRow>();
+  for (const a of all('attendance')) {
+    if (!CHARGEABLE_ATTENDANCE.includes(String(a.status))) continue;
+    const s = all('class_sessions').find((x) => x.id === a.session_id);
+    if (!s || s.status !== 'completed') continue;
+    const t = new Date(String(s.starts_at));
+    if (t < new Date(start) || t >= new Date(end)) continue;
+    const cls = all('classes').find((c) => c.id === s.class_id);
+    const program = all('programs').find((p) => p.id === cls?.program_id);
+    const minutes = (new Date(String(s.ends_at)).getTime() - t.getTime()) / 60000;
+    const day = klDay(String(s.starts_at));
+    const rate = rates.find(
+      (r) =>
+        r.program_code === program?.code &&
+        Number(r.duration_minutes) === minutes &&
+        String(r.effective_from) <= day &&
+        (!r.effective_to || String(r.effective_to) >= day),
+    );
+    const key = `${a.student_id}|${program?.id}|${minutes}`;
+    const row = groups.get(key) || {
+      studentId: String(a.student_id),
+      student: String(all('students').find((x) => x.id === a.student_id)?.full_name || '—'),
+      program: String(program?.name || '—'),
+      minutes,
+      sessions: 0,
+      rate_sen: rate ? Number(rate.amount_sen) : null,
+      total_sen: 0,
+      guardianId:
+        String(
+          all('student_guardians').find(
+            (l) => l.student_id === a.student_id && l.is_billing_contact,
+          )?.guardian_id || '',
+        ) || null,
+    };
+    row.sessions += 1;
+    row.total_sen += row.rate_sen || 0;
+    groups.set(key, row);
+  }
+  return [...groups.values()].sort((x, y) => x.student.localeCompare(y.student));
+}
 export function buildReport(
   data: Dataset,
   code: ReportCode,
@@ -101,9 +170,6 @@ export function buildReport(
   let headers: string[] = [],
     rows: (string | number)[][] = [],
     total_sen = 0;
-  // Nama kakitangan, bukan ID dalaman; ID yang tiada profil dipaparkan sebagai kakitangan umum.
-  const staffName = (id: unknown) =>
-    id ? (all('staff_profiles').find((r) => r.id === id)?.display_name ?? 'Kakitangan') : '—';
   const option = (code: unknown) =>
     code == null
       ? '—'
@@ -113,19 +179,7 @@ export function buildReport(
       (p) => p.id === all('classes').find((c) => c.id === s.class_id)?.program_id,
     );
   if (code === 'monthly_teaching') {
-    headers = [
-      'Tarikh',
-      'ID sesi',
-      'Tutor',
-      'Murid',
-      'Program',
-      'Tempoh min',
-      'Kuota dirancang',
-      'Status',
-      'Semakan',
-      'Nota',
-      'Penyemak',
-    ];
+    headers = ['Tarikh', 'Tutor', 'Murid', 'Program', 'Tempoh min', 'Status', 'Nota'];
     rows = sessions.flatMap((s) =>
       all('enrollments')
         .filter(
@@ -137,46 +191,30 @@ export function buildReport(
         )
         .map((e) => [
           dateLabel(String(s.starts_at)),
-          s.id,
           find('staff_profiles', s.tutor_id, 'display_name'),
           find('students', e.student_id, 'full_name'),
           String(sessionProgram(s)?.name ?? '—'),
           (new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000,
-          Number(e.planned_quota ?? 0),
           statusLabel(s.status),
-          statusLabel(s.review_status),
           String(s.topic ?? ''),
-          String(staffName(s.verified_by)),
         ]),
     );
   } else if (code === 'attendance') {
-    headers = ['Tarikh', 'ID sesi', 'Murid', 'Kelas', 'Kehadiran', 'Catatan'];
+    headers = ['Tarikh', 'Murid', 'Program', 'Kehadiran', 'Catatan'];
     rows = all('attendance')
       .filter(inMonth)
       .map((a) => {
         const s = sessions.find((s) => s.id === a.session_id)!;
         return [
           dateLabel(String(s.starts_at)),
-          s.id,
           find('students', a.student_id, 'full_name'),
-          find('classes', s.class_id, 'name'),
+          String(sessionProgram(s)?.name ?? '—'),
           statusLabel(a.status),
           String(a.reason ?? ''),
         ];
       });
   } else if (code === 'student_progress') {
-    headers = [
-      'Tarikh',
-      'ID sesi',
-      'Murid',
-      'Kemahiran',
-      'Skala',
-      'Penglibatan',
-      'Fokus',
-      'Ulasan',
-      'Status',
-      'Versi',
-    ];
+    headers = ['Tarikh', 'Murid', 'Kemahiran', 'Skala', 'Penglibatan', 'Fokus', 'Ulasan', 'Status'];
     rows = all('generated_parent_comments')
       .filter(inMonth)
       .filter((c) => role !== 'guardian' || c.status === 'published')
@@ -184,7 +222,6 @@ export function buildReport(
         const a = c.selections as Record<string, unknown>;
         return [
           dateLabel(String(sessions.find((s) => s.id === c.session_id)!.starts_at)),
-          String(c.session_id),
           find('students', c.student_id, 'full_name'),
           option(a.skill),
           typeof a.mastery === 'number' ? a.mastery : 'Belum dinilai',
@@ -192,7 +229,6 @@ export function buildReport(
           option(a.focus),
           String(c.text),
           statusLabel(c.status),
-          String(c.template_version),
         ];
       });
   } else if (code === 'tutor_workload') {
@@ -240,7 +276,7 @@ export function buildReport(
       ];
     });
   } else if (code === 'tutor_payout') {
-    headers = ['Tutor', 'Bulan', 'Kelompok', 'Amaun (sen)', 'Rujukan', 'Tarikh'];
+    headers = ['Tutor', 'Bulan', 'Jenis', 'Amaun (sen)', 'Rujukan', 'Tarikh'];
     rows = all('tutor_payouts')
       .filter((p) =>
         all('tutor_payout_batches').some((b) => b.id === p.batch_id && b.period === month),
@@ -250,7 +286,7 @@ export function buildReport(
         return [
           find('staff_profiles', p.tutor_id, 'display_name'),
           month,
-          String(p.batch_id),
+          'Bayaran elaun',
           Number(p.amount_sen),
           String(p.reference),
           dateLabel(String(p.paid_at)),
@@ -267,7 +303,7 @@ export function buildReport(
       rows.push([
         find('staff_profiles', adjustment.tutor_id, 'display_name'),
         month,
-        `Pelarasan ${adjustment.id}`,
+        'Pelarasan',
         Number(adjustment.amount_sen),
         String(adjustment.payment_reference),
         dateLabel(String(adjustment.paid_at)),

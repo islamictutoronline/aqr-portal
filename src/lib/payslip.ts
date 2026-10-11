@@ -1,4 +1,4 @@
-import { Dataset, ORGANIZATION, Rate, formatMoney, dateLabel } from './core';
+import { Dataset, ORGANIZATION, Rate, formatMoney, dateLabel, fileName } from './core';
 import { allowanceRows } from './reporting';
 import { monthLabel } from './student-reports';
 
@@ -17,8 +17,8 @@ export type Payslip = {
   total_sen: number;
 };
 
-// Penyata pendapatan tutor: satu baris bagi setiap kadar (program × tempoh), termasuk yang
-// tiada sesi, dikira daripada elaun automatik (sesi selesai; Berizin tidak dibayar).
+// Penyata pendapatan tutor: satu baris bagi setiap program × tempoh yang ada sesi dibayar,
+// dikira daripada elaun automatik (sesi selesai; Berizin tidak dibayar).
 export function buildPayslip(data: Dataset, tutorId: string, month: string): Payslip {
   const all = (t: string) => data[t] || [];
   const rows = allowanceRows(data, month).filter((r) => r.tutorId === tutorId && r.payable_sen > 0);
@@ -63,6 +63,8 @@ export function buildPayslip(data: Dataset, tutorId: string, month: string): Pay
       total_sen: rest.reduce((n, r) => n + r.payable_sen, 0),
     });
   }
+  // Hanya baris yang ada sesi bagi tutor ini (tiada senarai program kosong).
+  const used = lines.filter((l) => l.sessions > 0);
   const details: Record<string, unknown> =
     all('tutor_payment_details').find((d) => d.staff_id === tutorId) || {};
   return {
@@ -74,7 +76,7 @@ export function buildPayslip(data: Dataset, tutorId: string, month: string): Pay
     bankName: String(details.bank_name || ''),
     accountHolder: String(details.account_holder || ''),
     accountNumber: String(details.account_number || ''),
-    lines,
+    lines: used,
     sessions: rows.length,
     total_sen: rows.reduce((n, r) => n + r.payable_sen, 0),
   };
@@ -171,6 +173,10 @@ export async function payslipPdf(
     x += w;
   });
   y -= 26;
+  if (!slip.lines.length) {
+    text('Tiada sesi dibayar bagi bulan ini.', M + 12, y, 10, font, C.slate);
+    y -= 24;
+  }
   slip.lines.forEach((l, i) => {
     if (i % 2) page.drawRectangle({ x: M, y: y - 8, width: CW, height: 24, color: C.zebra });
     const muted = l.sessions === 0;
@@ -257,6 +263,8 @@ export async function payslipPdf(
   return new Uint8Array(await doc.save());
 }
 
+export const payslipFileName = (s: Payslip) =>
+  fileName(['Payslip', s.tutorName, monthLabel(s.month)], 'pdf');
 export async function payslipsZip(
   slips: Payslip[],
   payDate: string,
@@ -264,10 +272,6 @@ export async function payslipsZip(
 ) {
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
-  for (const s of slips)
-    zip.file(
-      `Payslip_${s.month}_${s.tutorName.replace(/[^A-Za-z0-9]+/g, '_')}.pdf`,
-      await payslipPdf(s, payDate, org),
-    );
+  for (const s of slips) zip.file(payslipFileName(s), await payslipPdf(s, payDate, org));
   return zip.generateAsync({ type: 'blob' });
 }

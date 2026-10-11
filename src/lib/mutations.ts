@@ -207,6 +207,9 @@ const schemas = {
   extend_schedule: z.object({}),
   void_session: z.object({ sid: uuid }),
   remove_tutor: z.object({ staff_id: uuid }),
+  generate_session_invoices: z.object({
+    billing_period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  }),
   save_payment_details: z.object({
     staff_id: uuid,
     job_title: z.string().max(80),
@@ -295,6 +298,7 @@ export async function executeMutation(
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',
       remove_tutor: 'remove_tutor',
+      generate_session_invoices: 'generate_session_invoices',
       save_payment_details: 'save_payment_details',
       move_session: 'move_session',
       session: 'create_session',
