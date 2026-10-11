@@ -116,3 +116,50 @@ export function invoiceDetails(data: Dataset, invoice: Row) {
     org: { phone: o.phone ? String(o.phone) : '', address: o.address ? String(o.address) : '' },
   };
 }
+
+// Tutor semasa bagi seorang murid (pendaftaran aktif + tugasan tutor yang belum tamat).
+export function tutorsOfStudent(data: Dataset, studentId: unknown): string[] {
+  const classIds = (data.enrollments || [])
+    .filter((e) => e.student_id === studentId && e.status === 'active')
+    .map((e) => e.class_id);
+  return [
+    ...new Set(
+      (data.class_tutors || [])
+        .filter((t) => classIds.includes(t.class_id) && !t.ends_on)
+        .map((t) => String(t.staff_id)),
+    ),
+  ];
+}
+// Kumpulkan keluarga ikut tutor (keluarga dengan anak di bawah beberapa tutor muncul di setiap tutor).
+export function familiesByTutor(data: Dataset, families: Family[]) {
+  const groups = new Map<string, Family[]>();
+  for (const f of families) {
+    const tutors = [...new Set(f.children.flatMap((c) => tutorsOfStudent(data, c.id)))];
+    for (const t of tutors.length ? tutors : ['']) groups.set(t, [...(groups.get(t) || []), f]);
+  }
+  return [...groups.entries()]
+    .map(([id, list]) => ({
+      id: id || 'none',
+      name: id
+        ? String((data.staff_profiles || []).find((s) => s.id === id)?.display_name || 'Tutor')
+        : 'Tanpa tutor',
+      families: list,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+// Carian: nama penjaga, nama anak atau no. telefon (digit sahaja).
+export function familyMatches(f: Family, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const digits = q.replace(/[^0-9]/g, '');
+  const text = [f.guardian.full_name, ...f.children.map((c) => c.full_name)]
+    .map((x) => String(x).toLowerCase())
+    .join(' ');
+  return (
+    text.includes(q) ||
+    (digits.length >= 3 &&
+      String(f.guardian.phone || '')
+        .replace(/[^0-9]/g, '')
+        .includes(digits))
+  );
+}

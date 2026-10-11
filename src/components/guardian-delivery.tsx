@@ -1,9 +1,17 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Download, FileText, MessageCircle, Receipt, RefreshCw, Send } from 'lucide-react';
+import { Download, FileText, MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
 import { Dataset, fileName, formatMoney, monthLabel } from '@/lib/core';
 import { apiFetch, downloadBlob } from '@/lib/transport';
-import { Family, familyBundles, familyMessage, invoiceDetails, whatsappUrl } from '@/lib/delivery';
+import {
+  Family,
+  familiesByTutor,
+  familyBundles,
+  familyMatches,
+  familyMessage,
+  invoiceDetails,
+  whatsappUrl,
+} from '@/lib/delivery';
 import { StudentSnapshot } from '@/lib/student-reports';
 
 type Props = {
@@ -37,7 +45,9 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
   // Satu PDF gabungan setiap keluarga: laporan semua anak diikuti invois.
   const [files, setFiles] = useState<Record<string, File>>({});
   const [busy, setBusy] = useState(''),
-    [message, setMessage] = useState('');
+    [message, setMessage] = useState(''),
+    [query, setQuery] = useState(''),
+    [filter, setFilter] = useState<'all' | 'ready' | 'missing' | 'sent'>('all');
   const shareable = useMemo(canShareFiles, []);
 
   async function prepare(f: Family) {
@@ -122,9 +132,118 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
     );
   }
 
-  const ready = families.filter((f) => !f.missing.length);
-  const sent = families.filter((f) => f.sent);
-  const order = (f: Family) => (f.sent ? 2 : f.missing.length ? 1 : 0);
+  const stateOf = (f: Family) => (f.sent ? 'sent' : f.missing.length ? 'missing' : 'ready');
+  const counts = {
+    all: families.length,
+    ready: families.filter((f) => stateOf(f) === 'ready').length,
+    missing: families.filter((f) => stateOf(f) === 'missing').length,
+    sent: families.filter((f) => stateOf(f) === 'sent').length,
+  };
+  const visibleFamilies = families.filter(
+    (f) => familyMatches(f, query) && (filter === 'all' || stateOf(f) === filter),
+  );
+  const groups = familiesByTutor(data, visibleFamilies);
+  const searching = !!query.trim() || filter !== 'all';
+  const statusTag = {
+    ready: ['ready', 'Sedia dihantar'],
+    missing: ['neutral', 'Belum lengkap'],
+    sent: ['success', 'Dihantar'],
+  } as const;
+
+  // Satu baris ringkas setiap keluarga: penjaga, tag dokumen, status dan tindakan.
+  const familyRow = (f: Family) => {
+    const gid = String(f.guardian.id);
+    const prepared = files[gid];
+    const complete = !f.missing.length;
+    const [tone, label] = statusTag[stateOf(f)];
+    return (
+      <div className={`family-row is-${stateOf(f)}`} key={gid}>
+        <div className="family-who">
+          <strong>{String(f.guardian.full_name)}</strong>
+          {f.guardian.phone ? (
+            <a
+              className="wa-link"
+              href={whatsappUrl(f.guardian.phone, familyMessage(f, month, data))}
+              target="_blank"
+              rel="noreferrer"
+              title="Buka WhatsApp dengan mesej siap ditulis"
+            >
+              <MessageCircle size={14} aria-hidden="true" />
+              {String(f.guardian.phone)}
+            </a>
+          ) : (
+            <span className="tag warn">Tiada no. WhatsApp</span>
+          )}
+        </div>
+        <div className="family-tags">
+          {f.children.map((c) => {
+            const r = f.reports.find((x) => x.student_id === c.id);
+            const [cls, txt] = !r
+              ? ['muted', 'Tiada laporan']
+              : r.status === 'approved'
+                ? ['ok', 'Diluluskan']
+                : ['warn', 'Draf'];
+            return (
+              <span key={String(c.id)} className={`tag ${cls}`}>
+                <FileText size={12} aria-hidden="true" />
+                {String(c.full_name)} · {txt}
+              </span>
+            );
+          })}
+          <span className={`tag ${f.invoice ? 'ok' : 'muted'}`}>
+            {f.invoice
+              ? `Invois ${String(f.invoice.number)} · ${formatMoney(Number(f.invoice.total_sen))}`
+              : 'Invois belum dijana'}
+          </span>
+        </div>
+        <span className={`badge ${tone}`}>{label}</span>
+        <div className="family-actions">
+          {!prepared ? (
+            <button
+              className="primary"
+              disabled={!complete || !!busy}
+              title={complete ? '' : f.missing.join(' · ')}
+              onClick={() => void prepare(f)}
+            >
+              <FileText size={15} />
+              {busy === gid ? 'Menyediakan…' : 'Sediakan PDF'}
+            </button>
+          ) : (
+            <>
+              <button className="primary" onClick={() => download(f)}>
+                <Download size={15} />
+                Muat turun PDF
+              </button>
+              {shareable ? (
+                <button onClick={() => share(f)}>
+                  <Send size={15} />
+                  Kongsi
+                </button>
+              ) : (
+                f.guardian.phone && (
+                  <button onClick={() => openChat(f)}>
+                    <MessageCircle size={15} />
+                    Buka WhatsApp
+                  </button>
+                )
+              )}
+            </>
+          )}
+          <button
+            disabled={!complete || f.sent || !!busy}
+            onClick={() =>
+              void markSent(f)
+                .then(() => setMessage(`Ditanda dihantar: ${String(f.guardian.full_name)}.`))
+                .catch((e: Error) => setMessage(e.message))
+            }
+          >
+            {f.sent ? 'Dihantar ✓' : 'Tandakan dihantar'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <section className="card family-delivery">
       <div className="card-heading">
@@ -132,8 +251,8 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
           <p className="eyebrow">HANTAR KEPADA PENJAGA</p>
           <h2>Laporan + invois sekeluarga</h2>
           <p>
-            {monthLabel(month)} · {families.length} keluarga · {ready.length} sedia · {sent.length}{' '}
-            dihantar. Adik-beradik digabung dalam satu penghantaran.
+            {monthLabel(month)} · satu PDF setiap keluarga (laporan semua anak + invois).
+            Adik-beradik digabung.
           </p>
         </div>
         {onGenerate && (
@@ -152,123 +271,77 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
           <strong>Semak & luluskan laporan</strong> di bahagian atas (ikut tutor).
         </li>
         <li>
-          <strong>Hantar</strong> — laporan semua anak + invois sekali gus kepada setiap penjaga.
+          <strong>Hantar</strong> — buka tutor, kemudian sediakan PDF dan hantar kepada penjaga.
         </li>
       </ol>
+      <div className="delivery-tools">
+        <label className="delivery-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Cari murid, ibu bapa atau no. telefon"
+            placeholder="Cari murid, ibu bapa atau no. telefon…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <div className="filter-tags" role="tablist" aria-label="Tapis status">
+          {(
+            [
+              ['all', 'Semua'],
+              ['ready', 'Sedia dihantar'],
+              ['missing', 'Belum lengkap'],
+              ['sent', 'Dihantar'],
+            ] as const
+          ).map(([key, text]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={filter === key}
+              className={filter === key ? 'active' : ''}
+              onClick={() => setFilter(key)}
+            >
+              {text} <span>{counts[key]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
       {message && <p role="status">{message}</p>}
       {!families.length && (
         <p className="muted">Belum ada penjaga bil. Tutor mengisi penjaga semasa daftar murid.</p>
       )}
-      <div className="family-list">
-        {[...families]
-          .sort((a, b) => order(a) - order(b))
-          .map((f) => {
-            const gid = String(f.guardian.id);
-            const prepared = files[gid];
-            const text = familyMessage(f, month, data);
-            const complete = !f.missing.length;
-            return (
-              <article className={`family-card${f.sent ? ' is-sent' : ''}`} key={gid}>
-                <header>
-                  <div>
-                    <h3>{String(f.guardian.full_name)}</h3>
-                    {f.guardian.phone ? (
-                      <a
-                        className="wa-link"
-                        href={whatsappUrl(f.guardian.phone, text)}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="Buka WhatsApp dengan mesej siap ditulis"
-                      >
-                        <MessageCircle size={15} aria-hidden="true" />
-                        {String(f.guardian.phone)}
-                      </a>
-                    ) : (
-                      <span className="muted">Tiada no. WhatsApp</span>
-                    )}
-                  </div>
-                  <span className={`badge ${f.sent ? 'success' : complete ? 'ready' : 'neutral'}`}>
-                    {f.sent ? 'Dihantar' : complete ? 'Sedia dihantar' : 'Belum lengkap'}
-                  </span>
-                </header>
-                <ul className="family-docs">
-                  {f.children.map((c) => {
-                    const r = f.reports.find((x) => x.student_id === c.id);
-                    return (
-                      <li key={String(c.id)}>
-                        <FileText size={15} aria-hidden="true" />
-                        <span>Laporan {String(c.full_name)}</span>
-                        <small className={r?.status === 'approved' ? 'ok' : 'warn'}>
-                          {r ? (r.status === 'approved' ? 'Diluluskan' : 'Draf') : 'Tiada'}
-                        </small>
-                      </li>
-                    );
-                  })}
-                  <li>
-                    <Receipt size={15} aria-hidden="true" />
-                    <span>
-                      {f.invoice
-                        ? `Invois ${String(f.invoice.number)} · ${formatMoney(Number(f.invoice.total_sen))}`
-                        : 'Invois'}
-                    </span>
-                    <small className={f.invoice ? 'ok' : 'warn'}>
-                      {f.invoice ? 'Dijana' : 'Belum dijana'}
-                    </small>
-                  </li>
-                </ul>
-                {!complete && <p className="family-missing">{f.missing.join(' · ')}</p>}
-                <div className="button-row">
-                  {!prepared ? (
-                    <button
-                      className="primary"
-                      disabled={!complete || !!busy}
-                      onClick={() => void prepare(f)}
-                    >
-                      <FileText size={16} />
-                      {busy === gid ? 'Menyediakan…' : 'Sediakan PDF (laporan + invois)'}
-                    </button>
-                  ) : (
-                    <>
-                      <button className="primary" onClick={() => download(f)}>
-                        <Download size={16} />
-                        Muat turun PDF (laporan + invois)
-                      </button>
-                      {shareable ? (
-                        <button onClick={() => share(f)}>
-                          <Send size={16} />
-                          Kongsi ke WhatsApp
-                        </button>
-                      ) : (
-                        f.guardian.phone && (
-                          <button onClick={() => openChat(f)}>
-                            <MessageCircle size={16} />
-                            Buka WhatsApp
-                          </button>
-                        )
-                      )}
-                    </>
+      {families.length > 0 && !visibleFamilies.length && (
+        <p className="muted">Tiada keluarga sepadan dengan carian atau tapisan.</p>
+      )}
+      <div className="tutor-groups">
+        {groups.map((g) => {
+          const st = (k: string) => g.families.filter((f) => stateOf(f) === k).length;
+          return (
+            <details
+              className="tutor-group delivery-group"
+              key={`${g.id}-${searching ? 'open' : 'closed'}`}
+              open={searching}
+            >
+              <summary>
+                <span className="tutor-group-name">{g.name}</span>
+                <span className="tutor-group-meta">
+                  <span className="tag">{g.families.length} keluarga</span>
+                  {st('ready') > 0 && <span className="tag ok">{st('ready')} sedia</span>}
+                  {st('missing') > 0 && (
+                    <span className="tag warn">{st('missing')} belum lengkap</span>
                   )}
-                  <button
-                    disabled={!complete || f.sent || !!busy}
-                    onClick={() =>
-                      void markSent(f)
-                        .then(() =>
-                          setMessage(`Ditanda dihantar: ${String(f.guardian.full_name)}.`),
-                        )
-                        .catch((e: Error) => setMessage(e.message))
-                    }
-                  >
-                    {f.sent ? 'Dihantar ✓' : 'Tandakan dihantar'}
-                  </button>
-                </div>
-              </article>
-            );
-          })}
+                  {st('sent') > 0 && <span className="tag sent">{st('sent')} dihantar</span>}
+                </span>
+              </summary>
+              <div className="family-rows">{g.families.map(familyRow)}</div>
+            </details>
+          );
+        })}
       </div>
       <p className="footnote">
-        Satu PDF setiap keluarga: laporan semua anak diikuti invois. Di komputer: muat turun PDF,
-        tekan Buka WhatsApp (mesej siap ditulis), lampirkan PDF, kemudian Tandakan dihantar. Di
-        telefon: Kongsi ke WhatsApp dan pilih penjaga.
+        Di komputer: Sediakan PDF → Muat turun PDF → Buka WhatsApp (mesej siap ditulis) → lampirkan
+        PDF → Tandakan dihantar. Di telefon: Sediakan PDF → Kongsi → pilih WhatsApp dan penjaga.
+        Letak tetikus pada butang kelabu untuk melihat apa yang belum lengkap.
       </p>
     </section>
   );

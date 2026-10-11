@@ -2963,3 +2963,186 @@ label {
     white-space: nowrap;
   }
 }
+
+/* ===== Penghantaran keluarga: carian, tag, kumpulan tutor, baris ringkas (12 Okt) ===== */
+.delivery-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.delivery-search {
+  flex: 1 1 280px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dfe3dc;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--slate);
+}
+.delivery-search:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(58, 115, 105, 0.12);
+}
+.delivery-search input {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+}
+.filter-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.filter-tags button {
+  min-height: 36px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid #e3e6df;
+  background: #fff;
+  color: var(--slate);
+  font-size: 13px;
+  font-weight: 600;
+}
+.filter-tags button span {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f1eee6;
+  color: var(--navy);
+  font-size: 12px;
+}
+.filter-tags button.active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.filter-tags button.active span {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #f1f2ee;
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tag.ok {
+  background: #e8f4ee;
+  color: #1d6b4a;
+}
+.tag.warn {
+  background: #fbf3e2;
+  color: #7a5d22;
+}
+.tag.muted {
+  background: #f1f2ee;
+  color: #8a8f88;
+}
+.tag.sent {
+  background: #e6eef8;
+  color: #2f5a8a;
+}
+.delivery-group .tutor-group-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.family-rows {
+  display: grid;
+  border-top: 1px solid #f0eee8;
+}
+.family-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) 2fr auto auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #f3f1ec;
+}
+.family-row:last-child {
+  border-bottom: 0;
+}
+.family-row.is-sent {
+  background: #fafcfb;
+}
+.family-who {
+  display: grid;
+  gap: 2px;
+}
+.family-who strong {
+  color: var(--navy);
+}
+.family-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.family-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.family-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+@media (max-width: 1100px) {
+  .family-row {
+    grid-template-columns: 1fr auto;
+  }
+  .family-tags,
+  .family-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+.family-row > .badge {
+  justify-self: start;
+}
+@media (max-width: 760px) {
+  .delivery-group > summary {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .delivery-group .tutor-group-name {
+    flex: 1 1 calc(100% - 24px);
+  }
+  .delivery-group .tutor-group-meta {
+    order: 3;
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+  .family-row {
+    padding: 12px 14px;
+  }
+  .family-who {
+    grid-column: 1;
+  }
+  .family-row > .badge {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+}

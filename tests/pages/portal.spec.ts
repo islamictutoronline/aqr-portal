@@ -479,21 +479,33 @@ test('admin sends one WhatsApp package per family: all siblings reports + invoic
   await page.goto('/?demo=1#/reports');
   await page.getByLabel('Bulan laporan').fill('2026-10');
   await page.getByRole('button', { name: 'Sediakan draf bulanan' }).click();
-  for (const summary of await page.locator('.tutor-group > summary').all()) await summary.click();
+  for (const summary of await page.locator('.monthly-reports .tutor-group > summary').all())
+    await summary.click();
   for (const approve of await page.getByRole('button', { name: /Luluskan semua draf/ }).all())
     if (await approve.isEnabled()) await approve.click();
-  const family = page
-    .locator('.family-card')
-    .filter({ has: page.getByRole('heading', { name: 'Penjaga Contoh 1', exact: true }) });
+  // Tutup kumpulan semakan laporan; kumpulan penghantaran tertutup sehingga dicari.
+  const delivery = page.locator('.family-delivery');
+  await expect(delivery.locator('.family-row').first()).toBeHidden();
+  // Tag penapis menunjukkan bilangan; carian membuka kumpulan tutor yang sepadan.
+  await expect(delivery.getByRole('tab', { name: /Sedia dihantar/ })).toContainText(/\d/);
+  await delivery.getByLabel('Cari murid, ibu bapa atau no. telefon').fill('Murid Contoh 06');
+  const family = delivery.locator('.family-row').filter({ hasText: 'Penjaga Contoh 1' }).first();
+  await expect(family).toBeVisible();
+  await expect(delivery.locator('.family-row').filter({ hasText: 'Penjaga Contoh 2' })).toHaveCount(
+    0,
+  );
   await expect(family).toContainText('Sedia dihantar');
-  // Adik-beradik: lebih daripada satu laporan + satu invois dalam kad yang sama.
-  await expect(family.locator('.family-docs li')).toHaveCount(4);
+  // Adik-beradik: tiga tag laporan + satu tag invois dalam baris yang sama.
+  await expect(family.locator('.family-tags .tag')).toHaveCount(4);
+  // Carian no. telefon juga berfungsi.
+  await delivery.getByLabel('Cari murid, ibu bapa atau no. telefon').fill('0001');
+  await expect(family).toBeVisible();
   const link = family.locator('a.wa-link');
   await expect(link).toHaveAttribute('href', /^https:\/\/wa\.me\/60110000001\?text=.*DEMO-001/);
-  await family.getByRole('button', { name: 'Sediakan PDF (laporan + invois)' }).click();
+  await family.getByRole('button', { name: 'Sediakan PDF' }).click();
   // Satu PDF gabungan: laporan semua anak + invois.
   const dl = page.waitForEvent('download');
-  await family.getByRole('button', { name: 'Muat turun PDF (laporan + invois)' }).click();
+  await family.getByRole('button', { name: 'Muat turun PDF' }).click();
   const file = await dl;
   expect(file.suggestedFilename()).toMatch(/^Laporan & Invois - Penjaga Contoh 1 - .*\.pdf$/);
   const merged = await PDFDocument.load(await readFile((await file.path())!));
