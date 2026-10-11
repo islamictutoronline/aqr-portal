@@ -31,6 +31,8 @@ Selepas serahan pertama, pengguna memberi keperluan muktamad (`docs/REQUIREMENTS
 
 **11 Okt — reset untuk ujian kali ke-2:** atas permintaan jelas pengguna, `supabase/reset-test-data.sql` (bukan migrasi) memadam semua data operasi, tutor (profil, keahlian, akaun Auth) dan pemohon; mengekalkan organisasi, program, kurikulum, pilihan, kadar elaun, kadar yuran dan akaun pemilik/admin. Diuji pada PGlite (ujian integrasi terakhir). Sebelum reset (11 Okt): 1 pemilik, 2 tutor (1 tidak aktif), 17 murid, 162 sesi, 596 audit. Pengguna menjalankan skrip sendiri dalam SQL Editor. **Jangan jalankan skrip ini tanpa permintaan pengguna.**
 
+**11 Okt — keputusan kadar:** kadar yuran dalam sistem disahkan sama dengan senarai pengguna. Nama program "Bahasa Arab" dikekalkan (bukan "Bahasa Arab Kafa"). Elaun tutor bagi BA KSSM, BA Madinah, Tadabbur, Faraid dan Tarannum **akan dimaklumkan kemudian oleh pengguna** — jangan teka kadar; sehingga itu elaun sesi program ini RM0. Tahsin al-Quran tiada dalam senarai yuran pengguna tetapi dibiarkan aktif (belum diputuskan).
+
 **Status akhir sesi 10 Okt (malam) — sambung di sini:**
 
 - Pembaikan terakhir dideploy: sesi dibatalkan/dijadual semula dikunci dengan nota (sebelum ini kelihatan boleh diedit tetapi setiap simpanan ditolak — punca aduan "tak dapat simpan" pada sesi QALEESYA yang sudah dipadam), ralat P0001 dipaparkan terus, padam kelas semasa kembali ke senarai.
