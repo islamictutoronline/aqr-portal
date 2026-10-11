@@ -586,3 +586,48 @@ test('one-tap payments: tutor allowance paid (with void kept as history) and inv
   await expect(inv.getByRole('button', { name: 'Yuran telah dibayar' })).toHaveCount(0);
   await expect(inv).toContainText('RM 0.00');
 });
+test('siblings: pick existing guardian or type the same number; "Daftar adik-beradik" prefills the guardian', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).click();
+  // Kakak: penjaga baharu.
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await page.getByLabel('Nama penuh', { exact: true }).fill('Kakak Ujian');
+  await page.getByLabel('Nama penjaga').fill('Puan Rahmah');
+  await page.getByLabel('No. WhatsApp penjaga').fill('019-777 8888');
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
+  await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
+  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
+  await page.getByLabel('Jam').first().fill('20:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  // Taip no. yang sama → amaran adik-beradik terus dipaparkan.
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await page.getByLabel('No. WhatsApp penjaga').fill('0197778888');
+  await expect(page.locator('.sibling-note')).toContainText('Kakak Ujian');
+  await page.getByRole('button', { name: 'Tutup borang' }).click();
+  // Dari profil kakak: Daftar adik-beradik dengan penjaga sudah dipilih.
+  await page
+    .getByRole('row', { name: /Kakak Ujian/ })
+    .getByRole('button', { name: /Lihat profil/ })
+    .click();
+  await page.getByRole('button', { name: 'Daftar adik-beradik' }).click();
+  await expect(page.getByRole('heading', { name: 'Daftar adik-beradik' })).toBeVisible();
+  await expect(page.getByLabel('Nama penjaga')).toHaveValue('Puan Rahmah');
+  await expect(page.getByLabel('No. WhatsApp penjaga')).toHaveValue('197778888');
+  await expect(page.locator('.sibling-note')).toContainText('Kakak Ujian');
+  await page.getByLabel('Nama penuh', { exact: true }).fill('Adik Ujian');
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
+  await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
+  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Selasa' });
+  await page.getByLabel('Jam').first().fill('20:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).first().click();
+  for (const name of ['Kakak Ujian', 'Adik Ujian'])
+    await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText('+60197778888');
+});

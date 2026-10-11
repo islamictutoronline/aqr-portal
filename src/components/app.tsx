@@ -97,6 +97,7 @@ type Field = {
   options?: [string, string][];
   optional?: boolean;
   value?: string;
+  choices?: GuardianChoice[];
 };
 export type Dialog = {
   title: string;
@@ -117,7 +118,15 @@ const weekDays: [string, string][] = [
 ];
 // Slot mingguan: bilangan sesi seminggu menentukan berapa pasangan hari + jam dipaparkan.
 // No. WhatsApp: kod negara + nombor ditaip bebas; pratonton menunjukkan nombor yang akan disimpan.
-function PhoneField({ label, initial }: { label: string; initial?: string }) {
+function PhoneField({
+  label,
+  initial,
+  onPreview,
+}: {
+  label: string;
+  initial?: string;
+  onPreview?: (phone: string | null) => void;
+}) {
   const [start] = useState(() => (initial ? splitPhone(initial) : ['+60', '']));
   const [code, setCode] = useState(start[0]);
   const [num, setNum] = useState(start[1]);
@@ -128,6 +137,7 @@ function PhoneField({ label, initial }: { label: string; initial?: string }) {
   } catch (e) {
     problem = e instanceof Error ? e.message : 'No. tidak sah';
   }
+  useEffect(() => onPreview?.(preview), [preview, onPreview]);
   return (
     <div className="phone-field">
       <label>
@@ -167,6 +177,53 @@ function PhoneField({ label, initial }: { label: string; initial?: string }) {
           'Taip bebas: 012…, 6012…, +6012… — sengkang dan jarak dibuang automatik.'
         )}
       </p>
+    </div>
+  );
+}
+export type GuardianChoice = { id: string; name: string; phone: string; children: string[] };
+// Penjaga semasa daftar murid: pilih penjaga sedia ada (adik-beradik) atau isi penjaga baharu.
+// No. WhatsApp yang sama dengan penjaga sedia ada digabung sebagai adik-beradik (satu invois).
+function GuardianField({ choices, initialId }: { choices: GuardianChoice[]; initialId?: string }) {
+  const [pick, setPick] = useState(initialId || '');
+  const [typed, setTyped] = useState<string | null>(null);
+  const chosen = choices.find((c) => c.id === pick);
+  const match = !chosen && typed ? choices.find((c) => c.phone === typed) : undefined;
+  const siblings = (chosen || match)?.children.join(', ');
+  return (
+    <div className="guardian-field">
+      {choices.length > 0 && (
+        <label>
+          Penjaga
+          <select value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">Penjaga baharu</option>
+            {choices.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} · anak: {c.children.join(', ')}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <label key={`name-${pick}`}>
+        Nama penjaga <small>(pilihan)</small>
+        <input
+          name="guardian_name"
+          defaultValue={chosen?.name ?? ''}
+          placeholder="Kosongkan → Ibu/Bapa (nama murid)"
+        />
+      </label>
+      <PhoneField
+        key={`phone-${pick}`}
+        label="No. WhatsApp penjaga"
+        initial={chosen?.phone}
+        onPreview={setTyped}
+      />
+      {siblings && (
+        <p className="sibling-note" role="status">
+          Adik-beradik: murid ini akan digabung dengan <strong>{siblings}</strong> di bawah penjaga
+          yang sama — satu invois dan satu penghantaran laporan.
+        </p>
+      )}
     </div>
   );
 }
@@ -1108,19 +1165,35 @@ export function App({
     });
   };
   // Tutor mendaftar murid bersama jadual mingguan; sesi dijana terus ke Sesi & kehadiran.
-  const createStudent = () =>
+  // Penjaga sedia ada (yang mempunyai anak aktif) untuk dipilih semasa daftar adik-beradik.
+  const guardianChoices = (): GuardianChoice[] =>
+    all('guardians')
+      .filter((g) => g.phone && g.active !== false)
+      .map((g) => ({
+        id: String(g.id),
+        name: String(g.full_name),
+        phone: String(g.phone),
+        children: all('student_guardians')
+          .filter((l) => l.guardian_id === g.id && l.is_billing_contact)
+          .map((l) => all('students').find((x) => x.id === l.student_id && x.status !== 'archived'))
+          .filter(Boolean)
+          .map((x) => String(x!.full_name)),
+      }))
+      .filter((c) => c.children.length)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  const createStudent = (guardianId?: string) =>
     setDialog({
-      title: 'Daftar murid',
+      title: guardianId ? 'Daftar adik-beradik' : 'Daftar murid',
       operation: 'tutor_enrol',
       fields: [
         { name: 'student_name', label: 'Nama penuh' },
         {
-          name: 'guardian_name',
-          label: 'Nama penjaga',
-          optional: true,
-          placeholder: 'Kosongkan → Ibu/Bapa (nama murid)',
+          name: 'guardian',
+          label: 'Penjaga',
+          type: 'guardian',
+          choices: guardianChoices(),
+          value: guardianId,
         },
-        { name: 'guardian_phone', label: 'No. WhatsApp penjaga', type: 'whatsapp' },
         { name: 'program_id', label: 'Program', options: options('programs', 'name') },
         {
           name: 'minutes',
@@ -1866,11 +1939,19 @@ export function App({
                     <span className="muted">Tiada no. WhatsApp — invois tidak dapat dijana</span>
                   )}
                 </div>
-                {(academic || role === 'tutor') && (
-                  <button onClick={() => editGuardian(id, student.full_name)}>
-                    {g ? 'Kemaskini penjaga' : 'Isi penjaga'}
-                  </button>
-                )}
+                <div className="button-row compact">
+                  {(academic || role === 'tutor') && (
+                    <button onClick={() => editGuardian(id, student.full_name)}>
+                      {g ? 'Kemaskini penjaga' : 'Isi penjaga'}
+                    </button>
+                  )}
+                  {role === 'tutor' && !!g?.phone && (
+                    <button onClick={() => createStudent(String(g.id))}>
+                      <Plus size={15} />
+                      Daftar adik-beradik
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
@@ -1927,7 +2008,7 @@ export function App({
 
         action={
           role === 'tutor' && (
-            <button className="primary" onClick={createStudent}>
+            <button className="primary" onClick={() => createStudent()}>
               <Plus size={16} />
               Daftar murid
             </button>
@@ -3956,6 +4037,8 @@ export function App({
               {dialog.fields.map((f) =>
                 f.type === 'whatsapp' ? (
                   <PhoneField key={f.name} label={f.label} initial={f.value} />
+                ) : f.type === 'guardian' ? (
+                  <GuardianField key={f.name} choices={f.choices || []} initialId={f.value} />
                 ) : (
                   <label key={f.name}>
                     {f.label}

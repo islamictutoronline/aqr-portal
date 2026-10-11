@@ -2717,3 +2717,16 @@ label {
   flex-wrap: wrap;
   align-items: center;
 }
+.guardian-field {
+  display: grid;
+  gap: 12px;
+}
+.sibling-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eef7f2;
+  border: 1px solid #cfe6da;
+  color: #1d6b4a;
+  font-size: 13px;
+}
