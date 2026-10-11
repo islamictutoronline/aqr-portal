@@ -67,9 +67,9 @@ async function main() {
       subject_id: subjects.find(
         (s) =>
           s.slug ===
-          (code.startsWith('FARDHU')
+          (code.startsWith('FARDHU') || code === 'FARAID'
             ? 'fardhu_ain'
-            : code === 'BAHASA_ARAB'
+            : code.startsWith('BAHASA_ARAB')
               ? 'bahasa_arab'
               : 'mengaji'),
       )!.id,

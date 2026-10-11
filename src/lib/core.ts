@@ -146,6 +146,12 @@ export const rateReference = [
   ['FARDHU_AIN_DEWASA', 'Fardhu Ain Dewasa', 30, 1300],
   ['BAHASA_ARAB', 'Bahasa Arab', 30, 1300],
   ['TAJWID_TP', 'Tajwid Teori & Praktikal', 30, 1000],
+  // Program baharu (11 Okt 2026): elaun = yuran sesi − RM2.
+  ['BAHASA_ARAB_KSSM', 'Bahasa Arab KSSM', 30, 1500],
+  ['BAHASA_ARAB_MADINAH', 'Bahasa Arab Madinah', 30, 1800],
+  ['TADABBUR', 'Tadabbur / Tafsir Juz 30', 30, 1800],
+  ['FARAID', 'Faraid Ilmu Pusaka', 30, 2300],
+  ['TARANNUM', 'Tarannum', 30, 1800],
 ] as const;
 export type Rate = {
   program_code: string;

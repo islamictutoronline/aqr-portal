@@ -1347,6 +1347,28 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     ).rows[0].snapshot;
     expect(snap.attendance[0].reading).toEqual({ kind: 'iqra', jilid: 4, page: 2 });
   });
+  it('migration 34 adds allowance = fee − RM2 for the 5 new programs, once', async () => {
+    await db.exec('reset role');
+    const sql = await readFile(
+      'supabase/migrations/202610110034_new_program_allowance.sql',
+      'utf8',
+    );
+    await db.exec(sql);
+    await db.exec(sql);
+    const rows = (
+      await db.query<{ program_code: string; amount_sen: number; n: number }>(
+        "select program_code, max(amount_sen) amount_sen, count(*) n from tutor_allowance_rates where organization_id=$1 and program_code in ('BAHASA_ARAB_KSSM','BAHASA_ARAB_MADINAH','TADABBUR','FARAID','TARANNUM') group by program_code order by program_code",
+        [org],
+      )
+    ).rows.map((r) => [r.program_code, Number(r.amount_sen), Number(r.n)]);
+    expect(rows).toEqual([
+      ['BAHASA_ARAB_KSSM', 1500, 1],
+      ['BAHASA_ARAB_MADINAH', 1800, 1],
+      ['FARAID', 2300, 1],
+      ['TADABBUR', 1800, 1],
+      ['TARANNUM', 1800, 1],
+    ]);
+  });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');
     const programs = Number(
