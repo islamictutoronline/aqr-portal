@@ -11,7 +11,12 @@ it('creates a real XLSX with metadata, frozen header, literal cells and reconcil
   expect(Buffer.from(bytes).subarray(0, 2).toString()).toBe('PK');
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(bytes);
-  expect(book.worksheets.map((s) => s.name)).toEqual(['MAKLUMAT_LAPORAN', 'DATA', 'RINGKASAN']);
+  expect(book.worksheets.map((s) => s.name)).toEqual([
+    'LAPORAN',
+    'MAKLUMAT_LAPORAN',
+    'DATA',
+    'RINGKASAN',
+  ]);
   expect(book.getWorksheet('DATA')!.rowCount).toBe(report.rows.length + 1);
   expect(book.getWorksheet('DATA')!.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
   const cell = book
