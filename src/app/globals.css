@@ -2063,3 +2063,11 @@ label {
   display: inline-block;
   margin-top: 6px;
 }
+
+.review-comment {
+  display: block;
+  max-width: 520px;
+  font-size: 13px;
+  color: var(--slate);
+  line-height: 1.5;
+}

@@ -277,6 +277,7 @@ export function App({
   );
   const [child, setChild] = useState('');
   const [sessionTab, setSessionTab] = useState('today');
+  const [reviewClass, setReviewClass] = useState('');
   const [allowanceTab, setAllowanceTab] = useState('all');
   // Selepas sesi dicipta atau dijadual semula, buka sesi baharu itu sebaik data dimuat semula.
   const [pendingMove, setPendingMove] = useState<{ cid: unknown; start: string } | null>(null);
@@ -1774,6 +1775,7 @@ export function App({
         <div className="subtabs session-tabs" role="tablist" aria-label="Pilih tutor">
           {[
             ['today', 'Hari ini'] as [string, string],
+            ['students', 'Semua murid'] as [string, string],
             ...all('staff_profiles')
               .filter((t) => t.role === 'tutor')
               .map((t) => [String(t.id), String(t.display_name)] as [string, string]),
@@ -1783,7 +1785,10 @@ export function App({
               role="tab"
               aria-selected={sessionTab === id}
               className={sessionTab === id ? 'active' : ''}
-              onClick={() => setSessionTab(id)}
+              onClick={() => {
+                setSessionTab(id);
+                setReviewClass('');
+              }}
             >
               {label}
             </button>
@@ -1814,45 +1819,111 @@ export function App({
           </Card>
         ) : (
           (() => {
-            const mine = live
-              .filter((x) => x.tutor_id === sessionTab)
+            // Semakan mengikut murid: satu baris setiap murid · program, semak semua sesinya sekali gus.
+            const byTutor = sessionTab !== 'students';
+            const scoped = live.filter((x) => !byTutor || x.tutor_id === sessionTab);
+            const classIds = [...new Set(scoped.map((x) => String(x.class_id)))].sort((x, y) =>
+              lookup('classes', x, 'name').localeCompare(lookup('classes', y, 'name')),
+            );
+            const countMarks = (ss: Row[], statuses: string[]) =>
+              ss.filter((x) =>
+                all('attendance').some(
+                  (a) => a.session_id === x.id && statuses.includes(String(a.status)),
+                ),
+              ).length;
+            const review = classIds.includes(reviewClass) ? reviewClass : '';
+            const reviewed = scoped
+              .filter((x) => x.class_id === review)
               .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
+            const commentOf = (sid: unknown) =>
+              String(
+                all('generated_parent_comments').find(
+                  (c) => c.session_id === sid && c.status !== 'retracted',
+                )?.text || '—',
+              );
             return (
-              <Card
-                title={lookup('staff_profiles', sessionTab, 'display_name')}
-                subtitle={`Bulan ${month} · elaun ${formatMoney(allowanceOf(sessionTab))}`}
-                action={
-                  <button className="text-link" onClick={() => go(`tutors/${sessionTab}`)}>
-                    Profil tutor <ChevronRight size={16} />
-                  </button>
-                }
-              >
-                <Table
-                  headers={[
-                    'Tarikh',
-                    'Masa',
-                    'Murid · Program',
-                    'Status',
-                    'Kehadiran',
-                    'Elaun',
-                    '',
-                  ]}
-                  rows={mine.filter(matches).map((x) => {
-                    const r = allowances.find((a) => a.session.id === x.id);
-                    return [
-                      dateLabel(String(x.starts_at)),
-                      timeLabel(String(x.starts_at)),
-                      lookup('classes', x.class_id, 'name'),
-                      <Badge key="s" value={x.status} />,
-                      attendanceOf(x.id),
-                      r ? formatMoney(r.payable_sen) : '—',
-                      <button key="o" className="text-link" onClick={() => go(`sessions/${x.id}`)}>
-                        Lihat <ChevronRight size={16} />
-                      </button>,
-                    ];
-                  })}
-                />
-              </Card>
+              <>
+                <Card
+                  title={
+                    byTutor ? lookup('staff_profiles', sessionTab, 'display_name') : 'Semua murid'
+                  }
+                  subtitle={`Bulan ${month} · tekan Semak untuk melihat semua kelas seorang murid`}
+                  action={
+                    byTutor && (
+                      <button className="text-link" onClick={() => go(`tutors/${sessionTab}`)}>
+                        Profil tutor <ChevronRight size={16} />
+                      </button>
+                    )
+                  }
+                >
+                  <Table
+                    headers={[
+                      'Murid · Program',
+                      ...(byTutor ? [] : ['Tutor']),
+                      'Selesai',
+                      'Hadir',
+                      'Tidak hadir',
+                      'Berizin',
+                      'Elaun',
+                      '',
+                    ]}
+                    rows={classIds
+                      .filter((cid) => matches({ id: cid, name: lookup('classes', cid, 'name') }))
+                      .map((cid) => {
+                        const ss = scoped.filter((x) => x.class_id === cid);
+                        const done = ss.filter((x) => x.status === 'completed').length;
+                        const pay = allowances
+                          .filter((r) => r.session.class_id === cid)
+                          .reduce((n, r) => n + r.payable_sen, 0);
+                        return [
+                          <strong key="n">{lookup('classes', cid, 'name')}</strong>,
+                          ...(byTutor
+                            ? []
+                            : [lookup('staff_profiles', ss[0]?.tutor_id, 'display_name')]),
+                          `${done} / ${ss.length}`,
+                          countMarks(ss, ['present', 'late', 'makeup']),
+                          countMarks(ss, ['absent']),
+                          countMarks(ss, ['excused']),
+                          formatMoney(pay),
+                          <button
+                            key="r"
+                            className={review === cid ? 'primary' : 'secondary'}
+                            onClick={() => setReviewClass(review === cid ? '' : cid)}
+                          >
+                            {review === cid ? 'Tutup' : 'Semak'}
+                          </button>,
+                        ];
+                      })}
+                  />
+                </Card>
+                {review && (
+                  <Card
+                    title={`Semakan: ${lookup('classes', review, 'name')}`}
+                    subtitle={`Semua kelas bulan ${month} · ${reviewed.filter((x) => x.status === 'completed').length} selesai daripada ${reviewed.length}`}
+                    action={
+                      <button className="secondary" onClick={() => setReviewClass('')}>
+                        Tutup semakan
+                      </button>
+                    }
+                  >
+                    <Table
+                      headers={['Tarikh', 'Masa', 'Kehadiran', 'Ulasan tutor', 'Elaun']}
+                      rows={reviewed.map((x) => {
+                        const r = allowances.find((a) => a.session.id === x.id);
+                        return [
+                          `${dateLabel(String(x.starts_at))}`,
+                          timeLabel(String(x.starts_at)),
+                          x.status === 'completed' ? attendanceOf(x.id) : 'Belum direkod',
+                          <span key="c" className="review-comment">
+                            {commentOf(x.id)}
+                          </span>,
+                          r ? formatMoney(r.payable_sen) : '—',
+                        ];
+                      })}
+                    />
+                  </Card>
+                )}
+              </>
             );
           })()
         )}

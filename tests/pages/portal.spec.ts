@@ -205,6 +205,14 @@ test('admin views sessions per tutor tab and automatic allowance without approva
   await expect(page.getByRole('heading', { name: 'Tutor Contoh 1' })).toBeVisible();
   await expect(page.locator('td[data-label="Elaun"]').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Lulus|Sahkan/ })).toHaveCount(0);
+  // Semakan mengikut murid: satu tekan memaparkan semua kelas murid itu.
+  await page.getByRole('button', { name: 'Semak', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: /^Semakan:/ })).toBeVisible();
+  await expect(page.locator('td[data-label="Ulasan tutor"]').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Tutup semakan' }).click();
+  await expect(page.getByRole('heading', { name: /^Semakan:/ })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Semua murid' }).click();
+  await expect(page.locator('td[data-label="Tutor"]').first()).toBeVisible();
   await page.goto('/?demo=1#/allowance');
   await page.reload();
   await expect(page.getByText('Jumlah perlu dibayar').first()).toBeVisible();
