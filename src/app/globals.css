@@ -2730,3 +2730,18 @@ label {
   color: #1d6b4a;
   font-size: 13px;
 }
+.schedule-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.schedule-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f6faf8;
+  border: 1px solid #d5e6e1;
+  color: var(--slate);
+  font-size: 13px;
+}

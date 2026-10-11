@@ -45,6 +45,8 @@ Selepas serahan pertama, pengguna memberi keperluan muktamad (`docs/REQUIREMENTS
 
 **11 Okt (petang) — reset kedua:** atas permintaan pengguna, `reset-test-data.sql` dijalankan semula dan disahkan: 0 murid/penjaga/sesi/laporan/invois/bayaran/elaun dibayar/audit; kekal 1 organisasi, 1 pemilik (akaun log masuk tunggal), 13 program, 16 kadar elaun, 16 kadar yuran. Ujian kali ke-3 bermula dari kosong.
 
+**12 Okt — kemaskini murid & jadual:** migrasi 36 (`202610120036_update_schedule.sql`): `can_manage_class` (admin atau tutor semasa kelas), `update_schedule(org,cid,minutes,slots,effective_from,end_date)` — buang sesi berjadual lama yang belum direkod (bukan tambahan manual, tiada kehadiran/ulasan/elaun) mulai tarikh berkuat kuasa, tamatkan jadual lama sehari sebelumnya, cipta jadual baharu dan jana sesi; `update_student` (nama murid + nama kelas individu). UI profil murid: "Kemaskini murid" (nama) dan "Ubah jadual" pada setiap program aktif (WeeklySlots diisi nilai semasa, tarikh mulai lalai hari ini, tarikh tamat semasa). Diuji PGlite + Playwright.
+
 **Status akhir sesi 10 Okt (malam) — sambung di sini:**
 
 - Pembaikan terakhir dideploy: sesi dibatalkan/dijadual semula dikunci dengan nota (sebelum ini kelihatan boleh diedit tetapi setiap simpanan ditolak — punca aduan "tak dapat simpan" pada sesi QALEESYA yang sudah dipadam), ralat P0001 dipaparkan terus, padam kelas semasa kembali ke senarai.

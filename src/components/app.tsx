@@ -227,8 +227,8 @@ function GuardianField({ choices, initialId }: { choices: GuardianChoice[]; init
     </div>
   );
 }
-function WeeklySlots() {
-  const [count, setCount] = useState(1);
+function WeeklySlots({ initial = [] }: { initial?: { day: number; time: string }[] }) {
+  const [count, setCount] = useState(Math.max(1, initial.length));
   return (
     <>
       <label>
@@ -245,7 +245,11 @@ function WeeklySlots() {
         <div className="slot-row" key={i}>
           <label>
             Sesi {i + 1}: hari
-            <select name={`day_${i + 1}`} required defaultValue="">
+            <select
+              name={`day_${i + 1}`}
+              required
+              defaultValue={initial[i] ? String(initial[i].day) : ''}
+            >
               <option value="" disabled>
                 Pilih…
               </option>
@@ -258,7 +262,12 @@ function WeeklySlots() {
           </label>
           <label>
             Jam
-            <input name={`time_${i + 1}`} type="time" required />
+            <input
+              name={`time_${i + 1}`}
+              type="time"
+              required
+              defaultValue={initial[i]?.time ?? ''}
+            />
           </label>
         </div>
       ))}
@@ -988,6 +997,86 @@ export function App({
                 .forEach((e) => (e.status = 'paid'));
             }
           }
+        } else if (operation === 'update_student') {
+          const st = next.students.find((x) => x.id === payload.student_id)!;
+          const old = String(st.full_name);
+          st.full_name = payload.full_name;
+          const mine = next.enrollments
+            .filter((e) => e.student_id === st.id)
+            .map((e) => e.class_id);
+          next.classes
+            .filter((c) => mine.includes(c.id) && String(c.name).startsWith(`${old} · `))
+            .forEach(
+              (c) => (c.name = `${String(payload.full_name)}${String(c.name).slice(old.length)}`),
+            );
+        } else if (operation === 'update_schedule') {
+          const cid = payload.cid;
+          const eff = String(payload.effective_from);
+          const hhmm = (iso: string) => {
+            const d = new Date(Date.parse(iso) + 8 * 3600000);
+            return {
+              dow: d.getUTCDay(),
+              time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`,
+            };
+          };
+          const oldRules = next.class_schedules.filter(
+            (r) => r.class_id === cid && (!r.effective_to || String(r.effective_to) >= eff),
+          );
+          // Buang slot berjadual lama yang belum direkod; sesi direkod dan tambahan kekal.
+          next.class_sessions = next.class_sessions.filter((x) => {
+            if (x.class_id !== cid || x.status !== 'scheduled') return true;
+            if (klDate(String(x.starts_at)) < eff) return true;
+            if (next.attendance.some((a) => a.session_id === x.id)) return true;
+            const at = hhmm(String(x.starts_at));
+            return !oldRules.some(
+              (r) =>
+                Number(r.day_of_week) === at.dow && String(r.start_time).slice(0, 5) === at.time,
+            );
+          });
+          const dayBefore = new Date(Date.parse(`${eff}T00:00:00Z`) - 86400000)
+            .toISOString()
+            .slice(0, 10);
+          next.class_schedules = next.class_schedules.filter(
+            (r) => !(r.class_id === cid && String(r.effective_from) >= eff),
+          );
+          next.class_schedules
+            .filter((r) => r.class_id === cid && (!r.effective_to || String(r.effective_to) >= eff))
+            .forEach((r) => (r.effective_to = dayBefore));
+          const tutorId =
+            next.class_tutors.find((t) => t.class_id === cid && !t.ends_on)?.staff_id ||
+            activeTutor;
+          (payload.slots as { day: number; time: string }[]).forEach((slot, k) => {
+            next.class_schedules.push({
+              id: `${id}-rule-${k}`,
+              class_id: cid,
+              day_of_week: slot.day,
+              start_time: `${slot.time}:00`,
+              duration_minutes: payload.minutes,
+              effective_from: eff,
+              effective_to: payload.end_date,
+            });
+            for (let d = 0; d < 42; d++) {
+              const day = new Date(Date.parse(`${eff}T00:00:00Z`) + d * 86400000);
+              const iso = day.toISOString().slice(0, 10);
+              if (day.getUTCDay() !== slot.day || iso > String(payload.end_date)) continue;
+              const start = new Date(`${iso}T${slot.time}:00+08:00`);
+              if (
+                next.class_sessions.some(
+                  (x) => x.class_id === cid && Date.parse(String(x.starts_at)) === start.getTime(),
+                )
+              )
+                continue;
+              next.class_sessions.push({
+                id: `${id}-${slot.day}-${d}`,
+                class_id: cid,
+                tutor_id: tutorId,
+                starts_at: start.toISOString(),
+                ends_at: new Date(start.getTime() + Number(payload.minutes) * 60000).toISOString(),
+                status: 'scheduled',
+                review_status: 'reported',
+              });
+            }
+          });
         } else if (operation === 'invoice_paid') {
           const inv = next.invoices.find((x) => x.id === payload.inv)!;
           const due = invoiceBalance(inv, next.payments, next.payment_allocations).outstanding;
@@ -1165,6 +1254,69 @@ export function App({
     });
   };
   // Tutor mendaftar murid bersama jadual mingguan; sesi dijana terus ke Sesi & kehadiran.
+  const editStudent = (student: Row) =>
+    setDialog({
+      title: 'Kemaskini murid',
+      operation: 'update_student',
+      fields: [{ name: 'full_name', label: 'Nama penuh murid', value: String(student.full_name) }],
+      transform: (v) => ({ student_id: student.id, full_name: v.full_name }),
+    });
+  // Ubah hari/jam/minit kelas mulai tarikh dipilih; sesi yang sudah direkod tidak berubah.
+  const editSchedule = (classId: unknown, program: string) => {
+    const today = klDate(new Date().toISOString());
+    const rules = all('class_schedules')
+      .filter((r) => r.class_id === classId && (!r.effective_to || String(r.effective_to) >= today))
+      .sort(
+        (a, b) =>
+          ((Number(a.day_of_week) + 6) % 7) - ((Number(b.day_of_week) + 6) % 7) ||
+          String(a.start_time).localeCompare(String(b.start_time)),
+      );
+    const initial = rules.map((r) => ({
+      day: Number(r.day_of_week),
+      time: String(r.start_time).slice(0, 5),
+    }));
+    setDialog({
+      title: `Ubah jadual · ${program}`,
+      operation: 'update_schedule',
+      fields: [
+        {
+          name: 'minutes',
+          label: 'Minit setiap sesi',
+          options: [
+            ['30', '30 minit'],
+            ['20', '20 minit'],
+          ],
+          value: String(rules[0]?.duration_minutes || 30),
+        },
+        { name: 'effective_from', label: 'Jadual baharu mulai', type: 'date', value: today },
+        {
+          name: 'end_date',
+          label: 'Sehingga tarikh',
+          type: 'date',
+          value: String(rules[0]?.effective_to || '2027-12-31'),
+        },
+      ],
+      extra: (
+        <>
+          <WeeklySlots initial={initial} />
+          <p className="schedule-note">
+            Sesi yang sudah direkod dan sesi tambahan tidak berubah. Sesi akan datang yang belum
+            direkod dijana semula mengikut jadual baharu.
+          </p>
+        </>
+      ),
+      transform: (v) => ({
+        cid: classId,
+        minutes: Number(v.minutes),
+        effective_from: v.effective_from,
+        end_date: v.end_date,
+        slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
+          day: Number(v[`day_${i + 1}`]),
+          time: v[`time_${i + 1}`],
+        })),
+      }),
+    });
+  };
   // Penjaga sedia ada (yang mempunyai anak aktif) untuk dipilih semasa daftar adik-beradik.
   const guardianChoices = (): GuardianChoice[] =>
     all('guardians')
@@ -1867,6 +2019,11 @@ export function App({
             <h1>{String(student.full_name)}</h1>
             <Badge value={student.status} />
           </div>
+          {(academic || role === 'tutor') && (
+            <button className="secondary" onClick={() => editStudent(student)}>
+              Kemaskini murid
+            </button>
+          )}
           {academic && (
             <button
               className="secondary"
@@ -1916,6 +2073,15 @@ export function App({
                     </dd>
                   </div>
                 </dl>
+                {(academic || role === 'tutor') && p.status === 'active' && (
+                  <button
+                    className="schedule-button"
+                    onClick={() => editSchedule(p.classId, p.program)}
+                  >
+                    <CalendarDays size={15} />
+                    Ubah jadual
+                  </button>
+                )}
               </div>
             );
           })}

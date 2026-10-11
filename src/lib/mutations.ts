@@ -211,6 +211,22 @@ const schemas = {
     guardian_phone: z.string().max(30).default(''),
   }),
   remove_student: z.object({ student_id: uuid }),
+  update_student: z.object({ student_id: uuid, full_name: text }),
+  update_schedule: z.object({
+    cid: uuid,
+    minutes: z.union([z.literal(20), z.literal(30)]),
+    slots: z
+      .array(
+        z.object({
+          day: z.number().int().min(0).max(6),
+          time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        }),
+      )
+      .min(1)
+      .max(7),
+    effective_from: z.iso.date(),
+    end_date: z.iso.date(),
+  }),
   extend_schedule: z.object({}),
   void_session: z.object({ sid: uuid }),
   remove_tutor: z.object({ staff_id: uuid }),
@@ -354,6 +370,8 @@ export async function executeMutation(
       tutor_paid: 'mark_tutor_paid',
       void_tutor_paid: 'void_tutor_payment',
       remove_student: 'remove_student',
+      update_student: 'update_student',
+      update_schedule: 'update_schedule',
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',
       remove_tutor: 'remove_tutor',

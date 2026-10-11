@@ -631,3 +631,36 @@ test('siblings: pick existing guardian or type the same number; "Daftar adik-ber
   for (const name of ['Kakak Ujian', 'Adik Ujian'])
     await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText('+60197778888');
 });
+test('student profile: rename student and change weekly schedule (prefilled), sessions follow the new days', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).click();
+  await enrol(page, 'Murid Ubah Jadual', "Iqra'");
+  await page
+    .getByRole('row', { name: /Murid Ubah Jadual/ })
+    .getByRole('button', { name: /Lihat profil/ })
+    .click();
+  // Ubah jadual: nilai semasa diisi.
+  await page.getByRole('button', { name: 'Ubah jadual' }).click();
+  await expect(page.getByRole('combobox', { name: 'Sesi 1: hari' })).toHaveValue('1');
+  await expect(page.getByLabel('Jam').first()).toHaveValue('20:00');
+  await page.getByRole('combobox', { name: 'Sesi seminggu' }).selectOption('2');
+  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Rabu' });
+  await page.getByRole('combobox', { name: 'Sesi 2: hari' }).selectOption({ label: 'Jumaat' });
+  await page.getByLabel('Jam').nth(1).fill('17:30');
+  await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('20');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  const detail = page.locator('.program-detail').first();
+  await expect(detail).toContainText('Rabu 20:00, Jumaat 17:30');
+  await expect(detail).toContainText('20 minit');
+  await expect(detail).toContainText('2 sesi');
+  // Kemaskini nama murid.
+  await page.getByRole('button', { name: 'Kemaskini murid' }).click();
+  await page.getByLabel('Nama penuh murid').fill('Murid Nama Baharu');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Murid Nama Baharu', level: 1 })).toBeVisible();
+});

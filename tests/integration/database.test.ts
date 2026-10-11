@@ -1432,6 +1432,120 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await asUser(unrelated);
     expect((await db.query('select id from tutor_month_payments')).rows).toHaveLength(0);
   });
+  it('schedule change: recorded and manual sessions kept, old unrecorded slots replaced; rename updates class', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6) as id',
+        [
+          org,
+          'Murid Jadual Ubah',
+          id(42),
+          JSON.stringify([{ day: 1, time: '20:00' }]),
+          '2027-12-31',
+          '0135556666',
+        ],
+      )
+    ).rows[0].id;
+    const cid = (
+      await db.query<{ class_id: string }>(
+        "select class_id from enrollments where student_id=$1 and status='active'",
+        [kid],
+      )
+    ).rows[0].class_id;
+    const sessions = async () =>
+      (
+        await db.query<{ id: string; dow: number; d: string; status: string }>(
+          "select id, extract(dow from starts_at at time zone 'Asia/Kuala_Lumpur')::int dow, (starts_at at time zone 'Asia/Kuala_Lumpur')::date::text d, status from class_sessions where class_id=$1 order by starts_at",
+          [cid],
+        )
+      ).rows;
+    const before = await sessions();
+    expect(before.every((x) => x.dow === 1)).toBe(true);
+    // Rekod sesi pertama; tambah sesi manual pada masa hadapan (Sabtu 10:00).
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      before[0].id,
+      kid,
+      'present',
+      JSON.stringify({ mastery: 'not_assessed' }),
+    ]);
+    const future = new Date(Date.now() + 9 * 86400000);
+    while (future.getUTCDay() !== 6) future.setUTCDate(future.getUTCDate() + 1);
+    const manualDay = future.toISOString().slice(0, 10);
+    const manual = (
+      await db.query<{ id: string }>('select create_session($1,$2,$3,$4,30) id', [
+        org,
+        cid,
+        tutor,
+        `${manualDay}T10:00:00+08:00`,
+      ])
+    ).rows[0].id;
+    const today = (
+      await db.query<{ d: string }>("select (now() at time zone 'Asia/Kuala_Lumpur')::date::text d")
+    ).rows[0].d;
+    await expect(
+      db.query('select update_schedule($1,$2,30,$3,$4,$5)', [
+        org,
+        cid,
+        JSON.stringify([{ day: 3, time: '18:00' }]),
+        '2020-01-01',
+        '2027-12-31',
+      ]),
+    ).rejects.toThrow(/berkuat kuasa/);
+    await db.query('select update_schedule($1,$2,20,$3,$4,$5)', [
+      org,
+      cid,
+      JSON.stringify([
+        { day: 3, time: '18:00' },
+        { day: 5, time: '17:30' },
+      ]),
+      today,
+      '2027-06-30',
+    ]);
+    const after = await sessions();
+    // Sesi direkod dan sesi manual kekal.
+    expect(after.some((x) => x.id === before[0].id && x.status === 'completed')).toBe(true);
+    expect(after.some((x) => x.id === manual)).toBe(true);
+    // Tiada lagi slot Isnin belum direkod dari hari ini; slot Rabu/Jumaat dijana.
+    expect(
+      after.filter((x) => x.d >= today && x.dow === 1 && x.status === 'scheduled'),
+    ).toHaveLength(0);
+    expect(after.filter((x) => x.d >= today && [3, 5].includes(x.dow)).length).toBeGreaterThan(0);
+    const rules = (
+      await db.query<{
+        day_of_week: number;
+        duration_minutes: number;
+        effective_to: string | null;
+      }>(
+        "select day_of_week, duration_minutes, to_char(effective_to,'YYYY-MM-DD') effective_to from class_schedules where class_id=$1 order by effective_from, day_of_week",
+        [cid],
+      )
+    ).rows;
+    expect(rules.filter((r) => r.effective_to === '2027-06-30').map((r) => r.day_of_week)).toEqual([
+      3, 5,
+    ]);
+    expect(
+      rules.filter((r) => r.effective_to === '2027-06-30').every((r) => r.duration_minutes === 20),
+    ).toBe(true);
+    // Tutor lain tidak boleh ubah.
+    await asUser(unrelated);
+    await expect(
+      db.query('select update_schedule($1,$2,30,$3,$4,$5)', [
+        org,
+        cid,
+        JSON.stringify([{ day: 2, time: '18:00' }]),
+        today,
+        '2027-12-31',
+      ]),
+    ).rejects.toThrow();
+    // Tukar nama: murid dan nama kelas individu.
+    await asUser(tutor);
+    await db.query('select update_student($1,$2,$3)', [org, kid, 'Murid Jadual Baharu']);
+    const cls = (await db.query<{ name: string }>('select name from classes where id=$1', [cid]))
+      .rows[0];
+    expect(cls.name.startsWith('Murid Jadual Baharu · ')).toBe(true);
+  });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');
     const programs = Number(
