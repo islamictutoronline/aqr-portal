@@ -207,6 +207,14 @@ const schemas = {
   extend_schedule: z.object({}),
   void_session: z.object({ sid: uuid }),
   remove_tutor: z.object({ staff_id: uuid }),
+  save_payment_details: z.object({
+    staff_id: uuid,
+    job_title: z.string().max(80),
+    department: z.string().max(80),
+    bank_name: z.string().max(80),
+    account_holder: z.string().max(120),
+    account_number: z.string().max(40),
+  }),
   move_session: z.object({ sid: uuid, new_start: z.iso.datetime({ offset: true }) }),
   add_program: z.object({ student_id: uuid, program_id: uuid, tutor_id: uuid.optional() }),
   tutor_class: z.object({
@@ -287,6 +295,7 @@ export async function executeMutation(
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',
       remove_tutor: 'remove_tutor',
+      save_payment_details: 'save_payment_details',
       move_session: 'move_session',
       session: 'create_session',
       assessment: 'record_assessment',

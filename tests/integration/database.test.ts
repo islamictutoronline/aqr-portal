@@ -1019,6 +1019,47 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       ]),
     ).rejects.toThrow();
   });
+  it('tutor payment details: own or admin only, never other tutors or guardians', async () => {
+    await asUser(tutor);
+    await db.query('select save_payment_details($1,$2,$3,$4,$5,$6,$7)', [
+      org,
+      tutor,
+      '',
+      '',
+      'Bank Ujian',
+      'Tutor A',
+      '1234 5678 90',
+    ]);
+    await expect(
+      db.query('select save_payment_details($1,$2,$3,$4,$5,$6,$7)', [
+        org,
+        tutor,
+        '',
+        '',
+        'Bank',
+        'X',
+        'ABC123',
+      ]),
+    ).rejects.toThrow();
+    await expect(
+      db.query('select save_payment_details($1,$2,$3,$4,$5,$6,$7)', [
+        org,
+        academic,
+        '',
+        '',
+        'Bank',
+        'X',
+        '123456',
+      ]),
+    ).rejects.toThrow();
+    expect(
+      (await db.query<{ job_title: string }>('select job_title from tutor_payment_details')).rows,
+    ).toEqual([{ job_title: 'Guru Online Part Time' }]);
+    await asUser(academic);
+    expect((await db.query('select id from tutor_payment_details')).rows).toHaveLength(1);
+    await asUser(parent);
+    expect((await db.query('select id from tutor_payment_details')).rows).toHaveLength(0);
+  });
   it('admin registers a student directly into any active class; guardians cannot', async () => {
     await asUser(academic);
     const created = (

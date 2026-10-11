@@ -366,3 +366,33 @@ test('admin approves all drafts of one tutor at once from the tutor group', asyn
   await expect(approveAll).toBeDisabled();
   await expect(group.getByText('DILULUSKAN', { exact: true }).first()).toBeVisible();
 });
+test('admin saves bank details and downloads tutor payslips; tutor sees own payslip', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/allowance');
+  await page.getByRole('tab', { name: 'Tutor Contoh 2' }).click();
+  await page.getByRole('button', { name: 'Maklumat bank tutor' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Nama bank').fill('Bank Contoh');
+  await dialog.getByLabel('Nama pemegang akaun').fill('Tutor Contoh 2');
+  await dialog.getByLabel('No. akaun').fill('0000 1111 2222');
+  await dialog.getByRole('button', { name: 'Simpan dalam demo' }).click();
+  const [pdf] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Muat turun payslip' }).click(),
+  ]);
+  expect(pdf.suggestedFilename()).toMatch(/^Payslip_2026-10_.*\.pdf$/);
+  await page.getByRole('tab', { name: 'Semua tutor' }).click();
+  const [zip] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Payslip semua tutor (ZIP)' }).click(),
+  ]);
+  expect(zip.suggestedFilename()).toBe('Payslip_2026-10_semua_tutor.zip');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  await page.goto('/?demo=1#/allowance');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Elaun tutor', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Muat turun payslip saya' })).toBeVisible();
+});

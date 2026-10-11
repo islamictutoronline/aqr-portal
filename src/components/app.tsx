@@ -55,6 +55,7 @@ import {
   passwordProblem,
 } from '@/lib/core';
 import { buildReport, allowanceRows } from '@/lib/reporting';
+import { buildPayslip, payslipPdf, payslipsZip } from '@/lib/payslip';
 import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
 import { ContactAdmin } from './contact-admin';
@@ -281,6 +282,9 @@ export function App({
   const [sessionTab, setSessionTab] = useState('today');
   const [reviewClass, setReviewClass] = useState('');
   const [allowanceTab, setAllowanceTab] = useState('all');
+  const [payDate, setPayDate] = useState(() =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date()),
+  );
   // Selepas sesi dicipta atau dijadual semula, buka sesi baharu itu sebaik data dimuat semula.
   const [pendingMove, setPendingMove] = useState<{ cid: unknown; start: string } | null>(null);
   useEffect(() => {
@@ -408,7 +412,12 @@ export function App({
         };
         if (table[operation])
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
-        else if (operation === 'remove_tutor') {
+        else if (operation === 'save_payment_details') {
+          next.tutor_payment_details = [
+            ...(next.tutor_payment_details || []).filter((x) => x.staff_id !== payload.staff_id),
+            { id, ...payload },
+          ];
+        } else if (operation === 'remove_tutor') {
           const sid = payload.staff_id;
           next.staff_profiles.find((x) => x.id === sid)!.active = false;
           const today = new Date().toISOString().slice(0, 10);
@@ -2203,6 +2212,96 @@ export function App({
       </>
     );
   }
+  // Payslip (penyata pendapatan) dan maklumat bank tutor.
+  const orgContact = () => {
+    const o = all('organizations')[0] || {};
+    return { phone: o.phone ? String(o.phone) : '', address: o.address ? String(o.address) : '' };
+  };
+  const editPaymentDetails = (tid: string) => {
+    const d: Record<string, unknown> =
+      all('tutor_payment_details').find((x) => x.staff_id === tid) || {};
+    setDialog({
+      title: `Maklumat bayaran · ${lookup('staff_profiles', tid, 'display_name')}`,
+      operation: 'save_payment_details',
+      fields: [
+        {
+          name: 'job_title',
+          label: 'Jawatan',
+          value: String(d.job_title || 'Guru Online Part Time'),
+        },
+        { name: 'department', label: 'Jabatan', value: String(d.department || 'Al-Quran') },
+        { name: 'bank_name', label: 'Nama bank', optional: true, value: String(d.bank_name || '') },
+        {
+          name: 'account_holder',
+          label: 'Nama pemegang akaun',
+          optional: true,
+          value: String(d.account_holder || ''),
+        },
+        {
+          name: 'account_number',
+          label: 'No. akaun',
+          optional: true,
+          value: String(d.account_number || ''),
+          pattern: '[0-9 \\-]{6,40}',
+        },
+      ],
+      transform: (v) => ({
+        staff_id: tid,
+        job_title: v.job_title || '',
+        department: v.department || '',
+        bank_name: v.bank_name || '',
+        account_holder: v.account_holder || '',
+        account_number: v.account_number || '',
+      }),
+    });
+  };
+  const downloadPayslip = async (tid: string) => {
+    const slip = buildPayslip(visible, tid, month);
+    downloadBlob(
+      new Blob([await payslipPdf(slip, payDate, orgContact())], { type: 'application/pdf' }),
+      `Payslip_${month}_${slip.tutorName.replace(/[^A-Za-z0-9]+/g, '_')}.pdf`,
+    );
+  };
+  const payslipBar = (tid?: string) => (
+    <div className="payslip-bar">
+      <label>
+        Tarikh bayaran
+        <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+      </label>
+      {tid ? (
+        <button className="primary" disabled={busy} onClick={() => void downloadPayslip(tid)}>
+          <FileText size={16} />
+          {role === 'tutor' ? 'Muat turun payslip saya' : 'Muat turun payslip'}
+        </button>
+      ) : (
+        <button
+          className="primary"
+          disabled={busy || !allowances.length}
+          onClick={() =>
+            void (async () => {
+              const ids = [...new Set(allowances.map((r) => r.tutorId))];
+              downloadBlob(
+                await payslipsZip(
+                  ids.map((id) => buildPayslip(visible, id, month)),
+                  payDate,
+                  orgContact(),
+                ),
+                `Payslip_${month}_semua_tutor.zip`,
+              );
+            })()
+          }
+        >
+          <FileText size={16} />
+          Payslip semua tutor (ZIP)
+        </button>
+      )}
+      {tid && (
+        <button className="secondary" onClick={() => editPaymentDetails(tid)}>
+          {role === 'tutor' ? 'Maklumat bank saya' : 'Maklumat bank tutor'}
+        </button>
+      )}
+    </div>
+  );
   function allowanceScreen() {
     const total = allowances.reduce((n, r) => n + r.payable_sen, 0);
     const missing = allowances.filter((r) => r.rate_sen === null).length;
@@ -2232,6 +2331,7 @@ export function App({
           title={role === 'tutor' ? 'Elaun saya' : 'Elaun tutor'}
           subtitle="Dikira automatik. Hadir, Lewat, Ganti dan Tidak hadir dibayar; Berizin tidak dibayar."
         >
+          {role === 'tutor' && payslipBar(activeTutor)}
           {role === 'tutor' ? (
             <Table
               headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
@@ -2264,6 +2364,7 @@ export function App({
                   </button>
                 ))}
               </div>
+              {payslipBar(allowanceTab === 'all' ? undefined : allowanceTab)}
               {allowanceTab === 'all' ? (
                 <Table
                   headers={['Tutor', 'Sesi dibayar', 'Jumlah', '']}

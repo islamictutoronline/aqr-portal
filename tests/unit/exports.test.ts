@@ -93,3 +93,15 @@ it('automatic allowance: absent is paid, excused is not, no manual approval need
   data.class_sessions.forEach((x) => (x.review_status = 'reported'));
   expect(allowanceRows(data, '2026-10').length).toBe(rows.length);
 });
+it('payslip totals match the automatic allowance for the tutor', async () => {
+  const { buildPayslip } = await import('../../src/lib/payslip');
+  const data = demoData();
+  const tutorId = String(data.class_sessions[0].tutor_id);
+  const slip = buildPayslip(data, tutorId, '2026-10');
+  const expected = allowanceRows(data, '2026-10')
+    .filter((r) => r.tutorId === tutorId)
+    .reduce((n, r) => n + r.payable_sen, 0);
+  expect(slip.total_sen).toBe(expected);
+  expect(slip.lines.reduce((n, l) => n + l.total_sen, 0)).toBe(expected);
+  expect(slip.lines.reduce((n, l) => n + l.sessions, 0)).toBe(slip.sessions);
+});
