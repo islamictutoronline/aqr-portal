@@ -43,6 +43,8 @@ Selepas serahan pertama, pengguna memberi keperluan muktamad (`docs/REQUIREMENTS
 
 **11 Okt — adik-beradik semasa daftar murid:** borang Daftar murid memakai `GuardianField` (medan `type: 'guardian'`): pilih "Penjaga baharu" atau penjaga sedia ada (`guardianChoices`: penjaga yang mempunyai anak aktif, skop RLS tutor) → nama + no. diisi; jika no. yang ditaip sama dengan penjaga sedia ada, nota "Adik-beradik: … digabung" dipaparkan (`PhoneField.onPreview`). Profil murid (tutor) ada butang "Daftar adik-beradik" (`createStudent(guardianId)`). Pangkalan data tidak berubah: no. sama = penjaga sama (migrasi 32).
 
+**11 Okt (petang) — reset kedua:** atas permintaan pengguna, `reset-test-data.sql` dijalankan semula dan disahkan: 0 murid/penjaga/sesi/laporan/invois/bayaran/elaun dibayar/audit; kekal 1 organisasi, 1 pemilik (akaun log masuk tunggal), 13 program, 16 kadar elaun, 16 kadar yuran. Ujian kali ke-3 bermula dari kosong.
+
 **Status akhir sesi 10 Okt (malam) — sambung di sini:**
 
 - Pembaikan terakhir dideploy: sesi dibatalkan/dijadual semula dikunci dengan nota (sebelum ini kelihatan boleh diedit tetapi setiap simpanan ditolak — punca aduan "tak dapat simpan" pada sesi QALEESYA yang sudah dipadam), ralat P0001 dipaparkan terus, padam kelas semasa kembali ke senarai.
