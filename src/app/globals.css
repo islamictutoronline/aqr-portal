@@ -2482,3 +2482,97 @@ label {
   color: var(--teal);
   font-weight: 600;
 }
+
+/* No. WhatsApp bergaris — tekan untuk terus ke WhatsApp */
+.wa-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #128c4a;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.wa-link:hover {
+  color: #0b6b37;
+}
+
+/* Penghantaran sekeluarga: laporan + invois */
+.family-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.family-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+.family-card.is-sent {
+  background: #f6faf8;
+  border-color: #d5e6e1;
+}
+.family-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.family-card h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.badge.ready {
+  background: #fbf3e2;
+  color: #7a5d22;
+}
+.family-docs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.family-docs li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.family-docs svg {
+  color: var(--teal);
+}
+.family-docs small {
+  font-size: 12px;
+  font-weight: 600;
+}
+.family-docs small.ok {
+  color: #2f7a55;
+}
+.family-docs small.warn {
+  color: #9a6b1f;
+}
+.family-missing {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fbf6ea;
+  color: #7a5d22;
+  font-size: 13px;
+}
+.family-card .button-row {
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .family-list {
+    grid-template-columns: 1fr;
+  }
+}

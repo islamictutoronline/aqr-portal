@@ -45,6 +45,8 @@ export function demoData(): Dataset {
     row(`guardian-${i}`, {
       full_name: `Penjaga Contoh ${i + 1}`,
       email: `penjaga${i + 1}@example.invalid`,
+      // No. rekaan untuk demo sahaja.
+      phone: `+6011000000${i + 1}`,
       active: true,
     }),
   );

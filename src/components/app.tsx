@@ -8,6 +8,8 @@ import {
   downloadBlob,
   assetUrl,
 } from '@/lib/transport';
+import { GuardianDelivery } from './guardian-delivery';
+import { whatsappUrl } from '@/lib/delivery';
 import { MonthlyReports, TutorApplications } from './monthly-reports';
 import {
   LayoutDashboard,
@@ -994,7 +996,6 @@ export function App({
     );
     return link ? all('guardians').find((g) => g.id === link.guardian_id) : undefined;
   };
-  const whatsappLink = (phone: unknown) => `https://wa.me/${String(phone).replace(/[^0-9]/g, '')}`;
   const editGuardian = (studentId: unknown, studentName: unknown) => {
     const g = guardianOf(studentId);
     setDialog({
@@ -1769,7 +1770,12 @@ export function App({
                   <span className="guardian-label">Penjaga (bil & WhatsApp)</span>
                   <strong>{g ? String(g.full_name) : 'Belum diisi'}</strong>
                   {g?.phone ? (
-                    <a href={whatsappLink(g.phone)} target="_blank" rel="noreferrer">
+                    <a
+                      className="wa-link"
+                      href={whatsappUrl(g.phone)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       {String(g.phone)}
                     </a>
                   ) : (
@@ -1862,7 +1868,16 @@ export function App({
                 return g ? (
                   <span key="guardian" className="guardian-cell">
                     {String(g.full_name)}
-                    {g.phone ? <small>{String(g.phone)}</small> : null}
+                    {g.phone ? (
+                      <a
+                        className="wa-link"
+                        href={whatsappUrl(g.phone)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {String(g.phone)}
+                      </a>
+                    ) : null}
                   </span>
                 ) : (
                   <button
@@ -1906,12 +1921,27 @@ export function App({
         }
       >
         <Table
-          headers={['Penjaga', 'E-mel', 'Anak', 'Akses portal']}
+          headers={['Penjaga', 'WhatsApp', 'Anak', 'Akses portal']}
           rows={all('guardians')
             .filter(matches)
             .map((g) => [
-              String(g.full_name),
-              String(g.email || 'Tiada e-mel'),
+              <span key="name" className="guardian-cell">
+                {String(g.full_name)}
+                {g.email ? <small>{String(g.email)}</small> : null}
+              </span>,
+              g.phone ? (
+                <a
+                  key="wa"
+                  className="wa-link"
+                  href={whatsappUrl(g.phone)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {String(g.phone)}
+                </a>
+              ) : (
+                'Tiada'
+              ),
               all('student_guardians')
                 .filter((sg) => sg.guardian_id === g.id)
                 .map((sg) => lookup('students', sg.student_id))
@@ -3532,13 +3562,16 @@ export function App({
           ) : section === 'reports' ? (
             <>
               {academic && (
-                <MonthlyReports
-                  data={visible}
-                  role={role}
-                  month={month}
-                  demo={demo}
-                  onData={setData}
-                />
+                <>
+                  <MonthlyReports
+                    data={visible}
+                    role={role}
+                    month={month}
+                    demo={demo}
+                    onData={setData}
+                  />
+                  <GuardianDelivery data={visible} month={month} demo={demo} onData={setData} />
+                </>
               )}{' '}
               {reportsScreen()}
             </>

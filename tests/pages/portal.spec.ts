@@ -470,3 +470,36 @@ test('tutor enters the guardian while enrolling; blank name defaults to Ibu/Bapa
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.locator('.guardian-line')).toContainText('+6591234567');
 });
+test('admin sends one WhatsApp package per family: all siblings reports + invoice together', async ({
+  page,
+  context,
+}) => {
+  // Jangan hubungi WhatsApp sebenar semasa ujian.
+  await context.route('https://wa.me/**', (r) => r.fulfill({ body: 'WhatsApp' }));
+  await page.goto('/?demo=1#/reports');
+  await page.getByLabel('Bulan laporan').fill('2026-10');
+  await page.getByRole('button', { name: 'Sediakan draf bulanan' }).click();
+  for (const summary of await page.locator('.tutor-group > summary').all()) await summary.click();
+  for (const approve of await page.getByRole('button', { name: /Luluskan semua draf/ }).all())
+    if (await approve.isEnabled()) await approve.click();
+  const family = page
+    .locator('.family-card')
+    .filter({ has: page.getByRole('heading', { name: 'Penjaga Contoh 1', exact: true }) });
+  await expect(family).toContainText('Sedia dihantar');
+  // Adik-beradik: lebih daripada satu laporan + satu invois dalam kad yang sama.
+  await expect(family.locator('.family-docs li')).toHaveCount(4);
+  const link = family.locator('a.wa-link');
+  await expect(link).toHaveAttribute('href', /^https:\/\/wa\.me\/60110000001\?text=.*DEMO-001/);
+  await family.getByRole('button', { name: 'Sediakan 4 PDF' }).click();
+  const send = family.getByRole('button', { name: /4 PDF/ });
+  await expect(send).toBeVisible();
+  const downloads: string[] = [];
+  page.on('download', (d) => downloads.push(d.suggestedFilename()));
+  const popup = context.waitForEvent('page');
+  await send.click();
+  expect((await popup).url()).toContain('wa.me/60110000001');
+  await expect.poll(() => downloads.length).toBe(4);
+  expect(downloads.filter((n) => n.startsWith('Invois'))).toHaveLength(1);
+  await family.getByRole('button', { name: 'Tandakan dihantar' }).click();
+  await expect(family).toContainText('Dihantar');
+});
