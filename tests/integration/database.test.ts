@@ -1179,6 +1179,63 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     await db.query('select claim_guardian_access()');
     expect((await db.query('select id from students')).rows).toEqual([{ id: id(31) }]);
   });
+  it('enrolment saves the billing guardian: default name, phone normalised, siblings share one guardian', async () => {
+    await asUser(tutor);
+    const slots = JSON.stringify([{ day: 2, time: '19:00' }]);
+    const enrol = async (name: string, gname: string | null, phone: string | null) =>
+      (
+        await db.query<{ id: string }>(
+          'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,$6,$7) as id',
+          [org, name, id(42), slots, '2027-12-31', gname, phone],
+        )
+      ).rows[0].id;
+    const guardianOf = async (sid: string) =>
+      (
+        await db.query<{ full_name: string; phone: string; gid: string }>(
+          'select g.full_name, g.phone, g.id gid from student_guardians sg join guardians g on g.id=sg.guardian_id where sg.student_id=$1 and sg.is_billing_contact',
+          [sid],
+        )
+      ).rows;
+    await expect(enrol('Bad phone child', null, '12')).rejects.toThrow(/WhatsApp tidak sah/);
+    const a = await enrol('Aisyah Kakak', null, '012-345 6789');
+    // Tutor boleh melihat penjaga murid sendiri.
+    expect(await guardianOf(a)).toEqual([
+      expect.objectContaining({ full_name: 'Ibu/Bapa Aisyah Kakak', phone: '+60123456789' }),
+    ]);
+    const b = await enrol('Adik Aisyah', 'Puan Salmah', '+60 12-345 6789');
+    const [ga] = await guardianOf(a);
+    const [gb] = await guardianOf(b);
+    expect(gb.gid).toBe(ga.gid);
+    expect(gb.full_name).toBe('Puan Salmah');
+    // Kemas kini penjaga kemudian; tutor lain tidak dibenarkan.
+    await db.query('select save_student_guardian($1,$2,$3,$4)', [
+      org,
+      a,
+      'Encik Ali',
+      '0198887777',
+    ]);
+    expect((await guardianOf(a))[0]).toEqual(
+      expect.objectContaining({ full_name: 'Encik Ali', phone: '+60198887777' }),
+    );
+    expect((await guardianOf(b))[0].phone).toBe('+60123456789');
+    await asUser(unrelated);
+    await expect(
+      db.query('select save_student_guardian($1,$2,$3,$4)', [org, a, 'X', '0111111111']),
+    ).rejects.toThrow();
+    expect(await guardianOf(a)).toHaveLength(0);
+    // Admin boleh menjana invois kerana pautan penjaga bil kini wujud.
+    await db.exec('reset role');
+    expect(
+      Number(
+        (
+          await db.query<{ n: number }>(
+            'select count(*) n from student_guardians where student_id in ($1,$2) and is_billing_contact',
+            [a, b],
+          )
+        ).rows[0].n,
+      ),
+    ).toBe(2);
+  });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');
     const programs = Number(

@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function enrol(page: Page, name: string, program: string) {
   await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
   await page.getByLabel('Nama penuh', { exact: true }).fill(name);
+  await page.getByLabel('No. WhatsApp penjaga').fill('012-345 6789');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: program });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
   await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
@@ -172,6 +173,7 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   await page.getByRole('button', { name: 'Murid', exact: true }).click();
   await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
   await page.getByLabel('Nama penuh', { exact: true }).fill('Murid Jadual');
+  await page.getByLabel('No. WhatsApp penjaga').fill('019-888 7777');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
   await expect(page.getByLabel('Sehingga tarikh')).toHaveValue('2027-12-31');
@@ -431,4 +433,29 @@ test('tutor is reminded to set a password and can change it in Settings', async 
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Tetapan', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Kata laluan log masuk' })).toBeVisible();
+});
+test('tutor enters the guardian while enrolling; blank name defaults to Ibu/Bapa (student)', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).click();
+  await enrol(page, 'Murid Waris Ujian', "Iqra'");
+  await expect(page.getByText('Ibu/Bapa Murid Waris Ujian')).toBeVisible();
+  await expect(page.getByText('+60123456789').first()).toBeVisible();
+  // Kemaskini nama sebenar dari profil murid.
+  await page
+    .getByRole('row', { name: /Murid Waris Ujian/ })
+    .getByRole('button', { name: /Lihat profil/ })
+    .click();
+  await page.getByRole('button', { name: 'Kemaskini penjaga' }).click();
+  await page.getByLabel('Nama penjaga').fill('Puan Aminah');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.locator('.guardian-line')).toContainText('Puan Aminah');
+  await expect(page.locator('.guardian-line a')).toHaveAttribute(
+    'href',
+    'https://wa.me/60123456789',
+  );
 });

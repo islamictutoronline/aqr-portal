@@ -33,6 +33,8 @@ Selepas serahan pertama, pengguna memberi keperluan muktamad (`docs/REQUIREMENTS
 
 **11 Okt — keputusan kadar:** kadar yuran dalam sistem disahkan sama dengan senarai pengguna. Nama program "Bahasa Arab" dikekalkan (bukan "Bahasa Arab Kafa"). Elaun tutor bagi BA KSSM, BA Madinah, Tadabbur, Faraid dan Tarannum **akan dimaklumkan kemudian oleh pengguna** — jangan teka kadar; sehingga itu elaun sesi program ini RM0. Tahsin al-Quran tiada dalam senarai yuran pengguna tetapi dibiarkan aktif (belum diputuskan).
 
+**11 Okt — penjaga semasa daftar murid:** migrasi 32 (`202610110032_enrol_guardian.sql`): `tutor_enrol_student` menerima `guardian_name` (lalai "Ibu/Bapa <nama murid>") dan `guardian_phone` (wajib dalam UI; `private.normalize_phone` → E.164, cth. 012-345 6789 → +60123456789) dalam transaksi yang sama; `save_student_guardian` (admin atau tutor murid itu) untuk kemas kini. No. telefon sama = penjaga sama (adik-beradik satu invois). Penjaga ditanda `is_billing_contact` → `generate_session_invoices` boleh terus menjana invois. RLS baharu: tutor membaca penjaga/pautan murid yang diajarnya. UI: medan penjaga dalam Daftar murid, lajur Penjaga dalam senarai, kotak Penjaga (pautan wa.me) + Kemaskini penjaga dalam profil. **Pages hanya dideploy selepas pengguna menjalankan migrasi 32** (UI baharu menghantar parameter baharu).
+
 **Status akhir sesi 10 Okt (malam) — sambung di sini:**
 
 - Pembaikan terakhir dideploy: sesi dibatalkan/dijadual semula dikunci dengan nota (sebelum ini kelihatan boleh diedit tetapi setiap simpanan ditolak — punca aduan "tak dapat simpan" pada sesi QALEESYA yang sudah dipadam), ralat P0001 dipaparkan terus, padam kelas semasa kembali ke senarai.

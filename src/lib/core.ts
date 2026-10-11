@@ -318,3 +318,14 @@ export function allowedReport(role: Role, code: ReportCode) {
   };
   return allowed[role].includes(code);
 }
+
+// No. WhatsApp Malaysia → E.164 (sama seperti private.normalize_phone): 012-345 6789 → +60123456789.
+export function normalizePhone(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  let d = t.replace(/[^0-9]/g, '');
+  d = t.startsWith('+') ? `+${d}` : d.startsWith('0') ? `+6${d}` : `+${d}`;
+  if (!/^\+[1-9][0-9]{7,14}$/.test(d))
+    throw new Error('No. WhatsApp tidak sah. Contoh: 012-345 6789');
+  return d;
+}

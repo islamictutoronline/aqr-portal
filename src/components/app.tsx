@@ -60,6 +60,7 @@ import {
   Rate,
   statusLabels,
   passwordProblem,
+  normalizePhone,
   feeReference,
   fileName,
   monthLabel,
@@ -573,6 +574,9 @@ export function App({
                 review_status: 'reported',
               });
             }
+          demoGuardian(next, studentId, payload.guardian_name, payload.guardian_phone);
+        } else if (operation === 'save_guardian') {
+          demoGuardian(next, payload.student_id, payload.guardian_name, payload.guardian_phone);
         } else if (operation === 'remove_student') {
           const sid = payload.student_id;
           next.enrollments
@@ -884,6 +888,75 @@ export function App({
       setBusy(false);
     }
   }
+  // Demo: tiru private.save_student_guardian (nama lalai, no. sama = penjaga sama, penjaga bil).
+  function demoGuardian(next: Dataset, studentId: unknown, rawName: unknown, rawPhone: unknown) {
+    const student = next.students.find((x) => x.id === studentId);
+    const typed = String(rawName || '').trim();
+    const name = typed || `Ibu/Bapa ${String(student?.full_name ?? '')}`;
+    const phone = normalizePhone(String(rawPhone || ''));
+    let g = phone ? next.guardians.find((x) => x.phone === phone && x.active !== false) : undefined;
+    if (g) {
+      if (typed && String(g.full_name).startsWith('Ibu/Bapa ')) g.full_name = name;
+    } else {
+      const link = next.student_guardians.find(
+        (l) => l.student_id === studentId && l.is_billing_contact,
+      );
+      const current = link ? next.guardians.find((x) => x.id === link.guardian_id) : undefined;
+      const shared =
+        current && next.student_guardians.filter((l) => l.guardian_id === current.id).length > 1;
+      if (current && !shared) {
+        Object.assign(current, { full_name: name, phone });
+        g = current;
+      } else {
+        g = { id: `guardian-${Date.now()}`, full_name: name, phone, email: null, active: true };
+        next.guardians.push(g);
+      }
+    }
+    const gid = g.id;
+    next.student_guardians.forEach((l) => {
+      if (l.student_id === studentId) l.is_billing_contact = l.guardian_id === gid;
+    });
+    if (!next.student_guardians.some((l) => l.student_id === studentId && l.guardian_id === gid))
+      next.student_guardians.push({
+        id: `link-${Date.now()}`,
+        student_id: studentId,
+        guardian_id: gid,
+        portal_allowed: true,
+        is_billing_contact: true,
+      });
+  }
+  // Penjaga bil murid (untuk invois dan hubungan WhatsApp).
+  const guardianOf = (studentId: unknown) => {
+    const link = all('student_guardians').find(
+      (l) => l.student_id === studentId && l.is_billing_contact,
+    );
+    return link ? all('guardians').find((g) => g.id === link.guardian_id) : undefined;
+  };
+  const whatsappLink = (phone: unknown) => `https://wa.me/${String(phone).replace(/[^0-9]/g, '')}`;
+  const editGuardian = (studentId: unknown, studentName: unknown) => {
+    const g = guardianOf(studentId);
+    setDialog({
+      title: `Penjaga · ${String(studentName)}`,
+      operation: 'save_guardian',
+      fields: [
+        {
+          name: 'guardian_name',
+          label: 'Nama penjaga',
+          optional: true,
+          placeholder: `Ibu/Bapa ${String(studentName)}`,
+          value: g ? String(g.full_name) : '',
+        },
+        {
+          name: 'guardian_phone',
+          label: 'No. WhatsApp penjaga',
+          type: 'tel',
+          placeholder: '012-345 6789',
+          value: g?.phone ? String(g.phone) : '',
+        },
+      ],
+      transform: (v) => ({ student_id: studentId, ...v }),
+    });
+  };
   // Tutor mendaftar murid bersama jadual mingguan; sesi dijana terus ke Sesi & kehadiran.
   const createStudent = () =>
     setDialog({
@@ -891,6 +964,18 @@ export function App({
       operation: 'tutor_enrol',
       fields: [
         { name: 'student_name', label: 'Nama penuh' },
+        {
+          name: 'guardian_name',
+          label: 'Nama penjaga',
+          optional: true,
+          placeholder: 'Kosongkan → Ibu/Bapa (nama murid)',
+        },
+        {
+          name: 'guardian_phone',
+          label: 'No. WhatsApp penjaga',
+          type: 'tel',
+          placeholder: '012-345 6789',
+        },
         { name: 'program_id', label: 'Program', options: options('programs', 'name') },
         {
           name: 'minutes',
@@ -915,6 +1000,8 @@ export function App({
         minutes: Number(v.minutes),
         end_date: v.end_date,
         start_date: v.start_date,
+        guardian_name: v.guardian_name || '',
+        guardian_phone: v.guardian_phone || '',
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],
@@ -1614,6 +1701,29 @@ export function App({
               </div>
             );
           })}
+          {(() => {
+            const g = guardianOf(id);
+            return (
+              <div className="guardian-line">
+                <div>
+                  <span className="guardian-label">Penjaga (bil & WhatsApp)</span>
+                  <strong>{g ? String(g.full_name) : 'Belum diisi'}</strong>
+                  {g?.phone ? (
+                    <a href={whatsappLink(g.phone)} target="_blank" rel="noreferrer">
+                      {String(g.phone)}
+                    </a>
+                  ) : (
+                    <span className="muted">Tiada no. WhatsApp — invois tidak dapat dijana</span>
+                  )}
+                </div>
+                {(academic || role === 'tutor') && (
+                  <button onClick={() => editGuardian(id, student.full_name)}>
+                    {g ? 'Kemaskini penjaga' : 'Isi penjaga'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
           {(academic || role === 'tutor') && (
             <div className="button-row">
               <button onClick={() => addProgram(id)}>Tambah program</button>
@@ -1675,7 +1785,7 @@ export function App({
         }
       >
         <Table
-          headers={['Murid', 'Program', 'Status', '']}
+          headers={['Murid', 'Program', 'Penjaga', 'Status', '']}
           rows={all('students')
             .filter(matches)
             .filter((s) => role !== 'tutor' || s.status === 'active')
@@ -1687,6 +1797,23 @@ export function App({
               programsOf(s.id)
                 .map((p) => p.program)
                 .join(', ') || 'Belum berdaftar',
+              (() => {
+                const g = guardianOf(s.id);
+                return g ? (
+                  <span key="guardian" className="guardian-cell">
+                    {String(g.full_name)}
+                    {g.phone ? <small>{String(g.phone)}</small> : null}
+                  </span>
+                ) : (
+                  <button
+                    key="guardian"
+                    className="text-link"
+                    onClick={() => editGuardian(s.id, s.full_name)}
+                  >
+                    Isi penjaga
+                  </button>
+                );
+              })(),
               <Badge key="status" value={s.status} />,
               <div key="open" className="button-row">
                 <button className="text-link" onClick={() => go(`students/${s.id}`)}>

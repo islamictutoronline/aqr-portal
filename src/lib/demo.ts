@@ -378,11 +378,16 @@ export function scopeDemo(
     role === 'tutor' ? data.tutor_payouts.filter((p) => p.tutor_id === tutor) : [];
   result.tutor_adjustments =
     role === 'tutor' ? data.tutor_adjustments.filter((p) => p.tutor_id === tutor) : [];
-  result.guardians = role === 'guardian' ? data.guardians.filter((g) => g.id === guardian) : [];
+
   result.staff_profiles = role === 'tutor' ? data.staff_profiles.filter((t) => t.id === tutor) : [];
   result.student_guardians = data.student_guardians.filter((l) =>
     role === 'guardian' ? l.guardian_id === guardian : studentIds.includes(l.student_id),
   );
+  // Seperti RLS: tutor melihat penjaga murid yang diajarnya.
+  result.guardians =
+    role === 'guardian'
+      ? data.guardians.filter((g) => g.id === guardian)
+      : data.guardians.filter((g) => result.student_guardians.some((l) => l.guardian_id === g.id));
   result.class_tutors = data.class_tutors.filter((t) => classIds.includes(t.class_id));
   result.class_schedules = data.class_schedules.filter((s) => classIds.includes(s.class_id));
   result.export_jobs = [];

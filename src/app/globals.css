@@ -2413,3 +2413,42 @@ label {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Penjaga dalam profil dan senarai murid */
+.guardian-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f6faf8;
+  border: 1px solid #d5e6e1;
+}
+.guardian-line > div {
+  display: grid;
+  gap: 2px;
+}
+.guardian-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+.guardian-line a {
+  color: var(--teal);
+  font-weight: 600;
+}
+.guardian-line .muted {
+  color: #9a6b1f;
+  font-size: 13px;
+}
+.guardian-cell {
+  display: grid;
+}
+.guardian-cell small {
+  color: var(--slate);
+}
