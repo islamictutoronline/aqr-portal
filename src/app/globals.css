@@ -2745,3 +2745,221 @@ label {
   color: var(--slate);
   font-size: 13px;
 }
+
+/* ===== Profil murid: tajuk, program & jadual, penjaga (12 Okt) ===== */
+.profile-hero {
+  flex-wrap: wrap;
+  padding: 16px 0 24px;
+}
+.profile-id h1 {
+  margin: 0 0 8px;
+  line-height: 1.15;
+}
+.profile-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--slate);
+  font-size: 14px;
+}
+.profile-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.profile-actions button,
+.program-foot button,
+.guardian-line button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.program-list {
+  display: grid;
+  gap: 14px;
+}
+.program-detail {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e3e6df;
+  border-radius: 14px;
+  background: #fff;
+}
+.program-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid #eef0ea;
+  background: linear-gradient(180deg, #f8faf7, #fff);
+}
+.program-head h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--navy);
+}
+.tutor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4f1;
+  color: #2f5d54;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.program-detail .program-stats {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, 1fr);
+  gap: 0;
+  margin: 0;
+}
+.program-stats > div {
+  padding: 14px 18px;
+  border-right: 1px solid #eef0ea;
+}
+.program-stats > div:last-child {
+  border-right: 0;
+}
+.program-stats dt {
+  margin: 0 0 6px;
+  color: var(--slate);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.program-stats dd {
+  margin: 0;
+  text-align: left;
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 15px;
+}
+.slot-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.slot-chip {
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: #fbf6ea;
+  border: 1px solid #efe2c4;
+  color: #6f5520;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.program-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  border-top: 1px solid #eef0ea;
+  background: #fbfaf7;
+}
+.month-progress {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  font-size: 13px;
+  color: var(--slate);
+}
+.month-progress strong {
+  color: var(--navy);
+}
+.progress-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: #e8ece6;
+  overflow: hidden;
+}
+.progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3a7369, #12433d);
+}
+.schedule-button {
+  margin-top: 0;
+}
+.guardian-line {
+  margin: 0;
+}
+.guardian-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.guardian-id > div {
+  display: grid;
+  gap: 2px;
+}
+.guardian-id strong {
+  color: var(--navy);
+  font-size: 15px;
+}
+@media (max-width: 760px) {
+  .program-detail .program-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .program-stats > div {
+    border-right: 0;
+    border-bottom: 1px solid #eef0ea;
+  }
+  .program-stats > div.wide {
+    grid-column: 1 / -1;
+  }
+  .profile-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .month-progress {
+    min-width: 0;
+    width: 100%;
+  }
+}
+.guardian-line > .guardian-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+@media (max-width: 760px) {
+  .program-detail .program-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .program-stats > div {
+    padding: 12px 14px;
+    border-bottom: 0;
+    border-right: 1px solid #eef0ea;
+  }
+  .program-stats > div:last-child {
+    border-right: 0;
+  }
+  .program-stats > div.wide {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 1px solid #eef0ea;
+  }
+  .program-stats dt {
+    font-size: 10.5px;
+  }
+  .program-foot button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+@media (max-width: 760px) {
+  .program-detail .program-stats dd {
+    font-size: 14px;
+    white-space: nowrap;
+  }
+}

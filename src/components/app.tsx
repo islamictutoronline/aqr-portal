@@ -36,6 +36,8 @@ import {
   Clock,
   Send,
   Layers,
+  Pencil,
+  MessageCircle,
 } from 'lucide-react';
 import {
   Dataset,
@@ -2015,99 +2017,152 @@ export function App({
       <>
         <div className="profile-hero">
           <span className="avatar large">{String(student.full_name).slice(0, 1)}</span>
-          <div>
+          <div className="profile-id">
             <h1>{String(student.full_name)}</h1>
-            <Badge value={student.status} />
+            <div className="profile-meta">
+              <Badge value={student.status} />
+              <span>
+                {programsOf(id).length} program
+                {student.registration_date
+                  ? ` · Daftar ${dateLabel(String(student.registration_date))}`
+                  : ''}
+              </span>
+            </div>
           </div>
-          {(academic || role === 'tutor') && (
-            <button className="secondary" onClick={() => editStudent(student)}>
-              Kemaskini murid
-            </button>
-          )}
-          {academic && (
-            <button
-              className="secondary"
-              onClick={() =>
-                setDialog({
-                  title: 'Arkib murid · sejarah kekal',
-                  operation: 'archive',
-                  fields: [],
-                  transform: () => ({ id: student.id }),
-                })
-              }
-            >
-              Arkib murid
-            </button>
-          )}
+          <div className="profile-actions">
+            {(academic || role === 'tutor') && (
+              <button className="secondary" onClick={() => editStudent(student)}>
+                <Pencil size={15} />
+                Kemaskini murid
+              </button>
+            )}
+            {academic && (
+              <button
+                className="secondary"
+                onClick={() =>
+                  setDialog({
+                    title: 'Arkib murid · sejarah kekal',
+                    operation: 'archive',
+                    fields: [],
+                    transform: () => ({ id: student.id }),
+                  })
+                }
+              >
+                Arkib murid
+              </button>
+            )}
+          </div>
         </div>
-        <Card title="Program & penjaga">
-          {programsOf(id).map((p) => {
-            const counts = classCounts(p.classId);
-            return (
-              <div key={p.id} className="program-detail">
-                <p>
-                  <strong>{p.program}</strong>
-                  {p.tutor && ` · Tutor: ${p.tutor}`} · <Badge value={p.status} />
-                </p>
-                <dl>
-                  <div>
-                    <dt>Sesi seminggu</dt>
-                    <dd>{p.slots.length ? `${p.slots.length} sesi` : '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Minit setiap sesi</dt>
-                    <dd>{p.minutes ? `${p.minutes} minit` : '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Hari & jam</dt>
-                    <dd>{p.slots.join(', ') || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Sehingga</dt>
-                    <dd>{p.until || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Bulan {month}</dt>
-                    <dd>
-                      {counts.done} selesai · {counts.left} berbaki
-                    </dd>
-                  </div>
-                </dl>
-                {(academic || role === 'tutor') && p.status === 'active' && (
-                  <button
-                    className="schedule-button"
-                    onClick={() => editSchedule(p.classId, p.program)}
-                  >
-                    <CalendarDays size={15} />
-                    Ubah jadual
-                  </button>
-                )}
-              </div>
-            );
-          })}
+        <Card
+          title="Program & jadual kelas"
+          subtitle="Kelas individu yang sedang berjalan"
+          action={
+            (academic || role === 'tutor') && (
+              <button onClick={() => addProgram(id)}>
+                <Plus size={15} />
+                Tambah program
+              </button>
+            )
+          }
+        >
+          <div className="program-list">
+            {programsOf(id).map((p) => {
+              const counts = classCounts(p.classId);
+              const total = counts.done + counts.left;
+              return (
+                <article key={p.id} className="program-detail">
+                  <header className="program-head">
+                    <div>
+                      <h3>{p.program}</h3>
+                      {p.tutor && (
+                        <span className="tutor-chip">
+                          <GraduationCap size={14} aria-hidden="true" />
+                          {p.tutor}
+                        </span>
+                      )}
+                    </div>
+                    <Badge value={p.status} />
+                  </header>
+                  <dl className="program-stats">
+                    <div className="wide">
+                      <dt>Hari & jam</dt>
+                      <dd className="slot-chips">
+                        {p.slots.length
+                          ? p.slots.map((slot) => (
+                              <span key={slot} className="slot-chip">
+                                {slot}
+                              </span>
+                            ))
+                          : '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Seminggu</dt>
+                      <dd>{p.slots.length ? `${p.slots.length} sesi` : '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Tempoh sesi</dt>
+                      <dd>{p.minutes ? `${p.minutes} minit` : '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Sehingga</dt>
+                      <dd>{p.until || '—'}</dd>
+                    </div>
+                  </dl>
+                  <footer className="program-foot">
+                    <div className="month-progress">
+                      <span>
+                        {monthLabel(month)} · <strong>{counts.done} selesai</strong> · {counts.left}{' '}
+                        berbaki
+                      </span>
+                      <span className="progress-track" aria-hidden="true">
+                        <i style={{ width: `${total ? (counts.done / total) * 100 : 0}%` }} />
+                      </span>
+                    </div>
+                    {(academic || role === 'tutor') && p.status === 'active' && (
+                      <button
+                        className="schedule-button"
+                        onClick={() => editSchedule(p.classId, p.program)}
+                      >
+                        <CalendarDays size={15} />
+                        Ubah jadual
+                      </button>
+                    )}
+                  </footer>
+                </article>
+              );
+            })}
+            {!programsOf(id).length && <Empty text="Belum berdaftar dalam mana-mana program." />}
+          </div>
+        </Card>
+        <Card title="Penjaga" subtitle="Untuk invois, laporan dan WhatsApp">
           {(() => {
             const g = guardianOf(id);
             return (
               <div className="guardian-line">
-                <div>
-                  <span className="guardian-label">Penjaga (bil & WhatsApp)</span>
-                  <strong>{g ? String(g.full_name) : 'Belum diisi'}</strong>
-                  {g?.phone ? (
-                    <a
-                      className="wa-link"
-                      href={whatsappUrl(g.phone)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {String(g.phone)}
-                    </a>
-                  ) : (
-                    <span className="muted">Tiada no. WhatsApp — invois tidak dapat dijana</span>
-                  )}
+                <div className="guardian-id">
+                  <span className="avatar">{g ? String(g.full_name).slice(0, 1) : '?'}</span>
+                  <div>
+                    <strong>{g ? String(g.full_name) : 'Belum diisi'}</strong>
+                    {g?.phone ? (
+                      <a
+                        className="wa-link"
+                        href={whatsappUrl(g.phone)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <MessageCircle size={14} aria-hidden="true" />
+                        {String(g.phone)}
+                      </a>
+                    ) : (
+                      <span className="muted">Tiada no. WhatsApp — invois tidak dapat dijana</span>
+                    )}
+                  </div>
                 </div>
                 <div className="button-row compact">
                   {(academic || role === 'tutor') && (
                     <button onClick={() => editGuardian(id, student.full_name)}>
+                      <Pencil size={15} />
                       {g ? 'Kemaskini penjaga' : 'Isi penjaga'}
                     </button>
                   )}
@@ -2117,45 +2172,44 @@ export function App({
                       Daftar adik-beradik
                     </button>
                   )}
+                  {academic && (
+                    <button
+                      onClick={() =>
+                        setDialog({
+                          title: 'Pautkan penjaga',
+                          operation: 'link',
+                          fields: [
+                            {
+                              name: 'guardian_id',
+                              label: 'Penjaga',
+                              options: options('guardians'),
+                            },
+                            {
+                              name: 'relation',
+                              label: 'Hubungan',
+                              options: [
+                                ['ibu', 'Ibu'],
+                                ['bapa', 'Bapa'],
+                                ['penjaga', 'Penjaga'],
+                              ],
+                            },
+                          ],
+                          transform: (v) => ({
+                            ...v,
+                            student_id: id,
+                            portal_allowed: true,
+                            is_billing_contact: true,
+                          }),
+                        })
+                      }
+                    >
+                      Pautkan penjaga
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })()}
-          {(academic || role === 'tutor') && (
-            <div className="button-row">
-              <button onClick={() => addProgram(id)}>Tambah program</button>
-              {academic && (
-                <button
-                  onClick={() =>
-                    setDialog({
-                      title: 'Pautkan penjaga',
-                      operation: 'link',
-                      fields: [
-                        { name: 'guardian_id', label: 'Penjaga', options: options('guardians') },
-                        {
-                          name: 'relation',
-                          label: 'Hubungan',
-                          options: [
-                            ['ibu', 'Ibu'],
-                            ['bapa', 'Bapa'],
-                            ['penjaga', 'Penjaga'],
-                          ],
-                        },
-                      ],
-                      transform: (v) => ({
-                        ...v,
-                        student_id: id,
-                        portal_allowed: true,
-                        is_billing_contact: true,
-                      }),
-                    })
-                  }
-                >
-                  Pautkan penjaga
-                </button>
-              )}
-            </div>
-          )}
         </Card>
         <Card title="Ulasan pembelajaran">
           {all('generated_parent_comments')

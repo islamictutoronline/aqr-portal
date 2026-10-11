@@ -190,7 +190,7 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   const detail = page.locator('.program-detail').first();
   await expect(detail).toContainText('30 minit');
   await expect(detail).toContainText('2 sesi');
-  await expect(detail).toContainText('Isnin 20:00, Khamis 21:00');
+  await expect(detail.locator('.slot-chip')).toHaveText(['Isnin 20:00', 'Khamis 21:00']);
   await expect(detail).toContainText('31/12/2027');
   if ((page.viewportSize()?.width || 0) <= 700)
     await page.getByRole('button', { name: 'Buka menu' }).click();
@@ -655,7 +655,7 @@ test('student profile: rename student and change weekly schedule (prefilled), se
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('20');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   const detail = page.locator('.program-detail').first();
-  await expect(detail).toContainText('Rabu 20:00, Jumaat 17:30');
+  await expect(detail.locator('.slot-chip')).toHaveText(['Rabu 20:00', 'Jumaat 17:30']);
   await expect(detail).toContainText('20 minit');
   await expect(detail).toContainText('2 sesi');
   // Kemaskini nama murid.
