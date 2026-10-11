@@ -173,7 +173,7 @@ function Empty({
 function Table({ headers, rows }: { headers: string[]; rows: React.ReactNode[][] }) {
   return rows.length ? (
     <div className="table-wrap">
-      <table>
+      <table className="responsive">
         <thead>
           <tr>
             {headers.map((h, i) => (
@@ -187,7 +187,9 @@ function Table({ headers, rows }: { headers: string[]; rows: React.ReactNode[][]
           {rows.map((r, i) => (
             <tr key={i}>
               {r.map((v, j) => (
-                <td key={j}>{v}</td>
+                <td key={j} data-label={headers[j]}>
+                  {v}
+                </td>
               ))}
             </tr>
           ))}
@@ -1283,6 +1285,15 @@ export function App({
               {role === 'guardian' ? 'ibu bapa' : role === 'tutor' ? 'tutor' : 'pentadbir'}
               <span className="gold">.</span>
             </h1>
+            <p className="welcome-date">
+              {new Intl.DateTimeFormat('ms-MY', {
+                timeZone: 'Asia/Kuala_Lumpur',
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              }).format(new Date())}
+            </p>
           </div>
         </div>
         <div className="metrics">
@@ -2188,7 +2199,7 @@ export function App({
           )}
         </Card>
         <Card
-          title="Kadar elaun berversi"
+          title="Kadar elaun"
           subtitle="Kadar mengikut program dan tempoh sesi"
           action={
             finance && (
@@ -2200,15 +2211,20 @@ export function App({
           }
         >
           <Table
-            headers={['Program', 'Tempoh', 'Kadar', 'Mula', 'Tamat', 'Sumber']}
-            rows={all('tutor_allowance_rates').map((r) => [
-              String(r.program_code),
-              `${r.duration_minutes} min`,
-              formatMoney(Number(r.amount_sen)),
-              String(r.effective_from),
-              String(r.effective_to || 'Semasa'),
-              String(r.source),
-            ])}
+            headers={['Program', 'Tempoh', 'Kadar', 'Berkuat kuasa']}
+            rows={all('tutor_allowance_rates')
+              .filter(
+                (r) =>
+                  !r.effective_to || String(r.effective_to) >= klDate(new Date().toISOString()),
+              )
+              .map((r) => [
+                String(
+                  all('programs').find((p) => p.code === r.program_code)?.name || r.program_code,
+                ),
+                `${r.duration_minutes} minit`,
+                formatMoney(Number(r.amount_sen)),
+                `Mulai ${dateLabel(String(r.effective_from))}`,
+              ])}
           />
         </Card>
       </>

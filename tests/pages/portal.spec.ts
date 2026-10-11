@@ -203,7 +203,7 @@ test('admin views sessions per tutor tab and automatic allowance without approva
   await expect(page.getByRole('heading', { name: 'Sesi hari ini' })).toBeVisible();
   await page.getByRole('tab', { name: 'Tutor Contoh 1' }).click();
   await expect(page.getByRole('heading', { name: 'Tutor Contoh 1' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Elaun' })).toBeVisible();
+  await expect(page.locator('td[data-label="Elaun"]').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Lulus|Sahkan/ })).toHaveCount(0);
   await page.goto('/?demo=1#/allowance');
   await page.reload();
@@ -211,7 +211,7 @@ test('admin views sessions per tutor tab and automatic allowance without approva
   await expect(page.getByRole('heading', { name: 'Semakan sesi' })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Tutor Contoh 2' }).click();
   await expect(page.locator('.tab-total')).toContainText('RM');
-  await expect(page.getByRole('columnheader', { name: 'Kehadiran' })).toBeVisible();
+  await expect(page.locator('td[data-label="Kehadiran"]').first()).toBeVisible();
 });
 test('admin dashboard hides the learning sessions list; tutor still sees it', async ({ page }) => {
   await page.goto('/?demo=1#/dashboard');

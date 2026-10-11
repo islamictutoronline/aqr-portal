@@ -152,130 +152,164 @@ function Root() {
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        <p className="eyebrow">AKADEMI AL-QURAN AR-RIYADH</p>
-        <h1>Selamat kembali ke AQR</h1>
-        <p>Laporan anak anda, di mana sahaja. Admin turut berkongsi laporan melalui WhatsApp.</p>
-        {!configured ? (
-          <p role="status">
-            Portal belum dikonfigurasi. Pentadbir perlu menyediakan sambungan Supabase.
-          </p>
-        ) : signed ? (
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              const f = new FormData(e.currentTarget);
-              const r = await db.rpc('request_tutor', {
-                academy_slug: f.get('academy'),
-                applicant_name: f.get('name'),
-              });
-              setMessage(
-                r.error
-                  ? 'Permohonan gagal. Semak kod akademi.'
-                  : 'Permohonan direkod. Akses tutor menunggu kelulusan admin.',
-              );
-              setBusy(false);
-            }}
-          >
-            <h2>Pendaftaran tutor</h2>
-            <p>Ibu bapa: hubungi admin untuk pautan anak. Tutor: mohon akses di bawah.</p>
-            <label>
-              Nama penuh
-              <input name="name" required minLength={2} maxLength={120} />
-            </label>
-            <input type="hidden" name="academy" value="aqr" />
-            <button className="primary" disabled={busy}>
-              Hantar permohonan tutor
-            </button>
-            <button type="button" onClick={() => void db.auth.signOut({ scope: 'local' })}>
-              Log keluar
-            </button>
-          </form>
-        ) : (
-          <>
-            <form onSubmit={login}>
+        {/* Panel jenama (desktop) — gaya dua panel, identiti AQR sendiri. */}
+        <aside className="auth-brand" aria-hidden="true">
+          <span className="auth-logo">
+            AQR<span className="gold">.</span>
+          </span>
+          <p className="auth-brand-name">AKADEMI AL-QURAN AR-RIYADH</p>
+          <h2>Portal pembelajaran individu</h2>
+          <ul>
+            <li>Kehadiran dan ulasan setiap kelas</li>
+            <li>Laporan bulanan untuk ibu bapa</li>
+            <li>Elaun tutor dikira automatik</li>
+          </ul>
+        </aside>
+        <div className="auth-form">
+          <p className="eyebrow">AKADEMI AL-QURAN AR-RIYADH</p>
+          <h1>Selamat kembali ke AQR</h1>
+          <p className="auth-lead">Log masuk untuk melihat kelas, kehadiran dan laporan.</p>
+          {!configured ? (
+            <p role="status">
+              Portal belum dikonfigurasi. Pentadbir perlu menyediakan sambungan Supabase.
+            </p>
+          ) : signed ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                const f = new FormData(e.currentTarget);
+                const r = await db.rpc('request_tutor', {
+                  academy_slug: f.get('academy'),
+                  applicant_name: f.get('name'),
+                });
+                setMessage(
+                  r.error
+                    ? 'Permohonan gagal. Cuba lagi atau hubungi admin.'
+                    : 'Permohonan direkod. Akses tutor menunggu kelulusan admin.',
+                );
+                setBusy(false);
+              }}
+            >
+              <h2>Pendaftaran tutor</h2>
+              <p>Ibu bapa: hubungi admin untuk pautan anak. Tutor: mohon akses di bawah.</p>
               <label>
-                E-mel berdaftar
-                <input
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+                Nama penuh
+                <input name="name" required minLength={2} maxLength={120} />
               </label>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={trusted}
-                  onChange={(e) => setTrusted(e.target.checked)}
-                />
-                Kekalkan sesi pada peranti dipercayai ini
-              </label>
-              {usePassword && (
+              <input type="hidden" name="academy" value="aqr" />
+              <button className="primary" disabled={busy}>
+                Hantar permohonan tutor
+              </button>
+              <button type="button" onClick={() => void db.auth.signOut({ scope: 'local' })}>
+                Log keluar
+              </button>
+            </form>
+          ) : (
+            <>
+              {!register && (
+                <div className="auth-tabs" role="tablist" aria-label="Cara log masuk">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!usePassword}
+                    className={!usePassword ? 'active' : ''}
+                    onClick={() => setUsePassword(false)}
+                  >
+                    Kod e-mel
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={usePassword}
+                    className={usePassword ? 'active' : ''}
+                    onClick={() => setUsePassword(true)}
+                  >
+                    Kata laluan (pentadbir)
+                  </button>
+                </div>
+              )}
+              {register && (
+                <div className="auth-note">
+                  Pendaftaran tutor baharu: kami akan hantar kod pengesahan ke e-mel anda.
+                </div>
+              )}
+              <form onSubmit={login}>
                 <label>
-                  Kata laluan
+                  E-mel
                   <input
-                    type="password"
-                    autoComplete="current-password"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="nama@contoh.com"
                     required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   />
                 </label>
-              )}
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={usePassword}
-                  onChange={(e) => {
-                    setUsePassword(e.target.checked);
-                    if (e.target.checked) setRegister(false);
-                  }}
-                />
-                Log masuk dengan kata laluan (pentadbir)
-              </label>
-              {!usePassword && (
+                {usePassword && !register && (
+                  <label>
+                    Kata laluan
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </label>
+                )}
                 <label className="check-label">
                   <input
                     type="checkbox"
-                    checked={register}
-                    onChange={(e) => setRegister(e.target.checked)}
+                    checked={trusted}
+                    onChange={(e) => setTrusted(e.target.checked)}
                   />
-                  Saya tutor baharu — daftar akaun
+                  Kekalkan log masuk pada peranti ini
                 </label>
-              )}
-              <button className="primary" disabled={busy}>
-                {usePassword
-                  ? 'Log masuk'
-                  : register
-                    ? 'Daftar dengan e-mel'
-                    : 'Hantar kod log masuk'}
-              </button>
-            </form>
-            {sent && (
-              <form onSubmit={verify}>
-                <label>
-                  Kod e-mel (jika diberikan)
-                  <input
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    required
-                  />
-                </label>
-                <button disabled={busy}>Sahkan kod</button>
+                <button className="primary" disabled={busy}>
+                  {register
+                    ? 'Daftar sebagai tutor'
+                    : usePassword
+                      ? 'Log masuk'
+                      : 'Hantar kod log masuk'}
+                </button>
               </form>
-            )}
-          </>
-        )}
-        {message && <p role="status">{message}</p>}
-        {demoAllowed && <a href="?demo=1">Lihat demo rekaan</a>}
-        <p className="footnote">
-          Log masuk dengan kod e-mel, atau kata laluan bagi pentadbir. Hanya akaun berizin boleh
-          melihat data. Log keluar selepas menggunakan peranti berkongsi.
-        </p>
+              {sent && (
+                <form onSubmit={verify} className="auth-code">
+                  <label>
+                    Kod daripada e-mel
+                    <input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <button disabled={busy}>Sahkan kod</button>
+                </form>
+              )}
+              <button
+                type="button"
+                className="auth-switch"
+                onClick={() => {
+                  setRegister(!register);
+                  setUsePassword(false);
+                  setSent(false);
+                }}
+              >
+                {register ? '← Kembali ke log masuk' : 'Tutor baharu? Daftar akaun di sini'}
+              </button>
+            </>
+          )}
+          {message && <p role="status">{message}</p>}
+          {demoAllowed && <a href="?demo=1">Lihat demo rekaan</a>}
+          <p className="footnote">
+            Hanya akaun berizin boleh melihat data. Log keluar selepas menggunakan peranti
+            berkongsi.
+          </p>
+        </div>
       </section>
     </main>
   );
