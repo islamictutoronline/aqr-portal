@@ -4,6 +4,7 @@ import { Dataset, Role, Row, dateLabel, fileName, monthLabel } from '@/lib/core'
 import { apiFetch, downloadBlob } from '@/lib/transport';
 import {
   StudentSnapshot,
+  classReportsZip,
   demoSnapshot,
   reportPdf,
   reportsZip,
@@ -340,6 +341,32 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
                       }
                     >
                       ZIP tutor ini
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          // Laporan kelas gaya tutor (kehadiran, bacaan, ulasan) tanpa invois.
+                          const snapshots = (data.students || [])
+                            .filter(
+                              (s) =>
+                                s.status !== 'archived' &&
+                                tutorOf(s.id) === (g.id === 'none' ? '' : g.id),
+                            )
+                            .sort((x, y) => String(x.full_name).localeCompare(String(y.full_name)))
+                            .map((s) => demoSnapshot(data, s, month))
+                            .filter((s) => s.attendance.length);
+                          if (!snapshots.length)
+                            throw new Error('Tiada kelas direkod bagi tutor ini bulan ini.');
+                          downloadBlob(
+                            await classReportsZip(snapshots, demo),
+                            fileName(['Laporan Kelas', g.name, monthLabel(month)], 'zip'),
+                          );
+                          setMessage(`${snapshots.length} laporan kelas ${g.name} dimuat turun.`);
+                        })
+                      }
+                    >
+                      Laporan kelas tutor (ZIP)
                     </button>
                   </div>
                   <div className="report-list">{g.reports.map(reportRow)}</div>

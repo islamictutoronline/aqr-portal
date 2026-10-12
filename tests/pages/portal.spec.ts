@@ -751,3 +751,143 @@ test('tutor writes own summary (rumusan) for a student; admin sees it in the mon
   await card.getByRole('button', { name: 'Lihat laporan' }).click();
   await expect(page.locator('.remark-quote')).toContainText('Fokus bulan depan ialah mad asli.');
 });
+// Admin mendaftar murid bagi pihak tutor; jadual fleksibel tidak menjana sesi automatik.
+async function adminEnrol(page: Page, name: string, tutor: string, flexible = false) {
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await page.getByLabel('Nama penuh', { exact: true }).fill(name);
+  await page.getByRole('combobox', { name: 'Tutor', exact: true }).selectOption({ label: tutor });
+  await page.getByLabel('No. WhatsApp penjaga').fill('019-555 1212');
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
+  await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
+  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Rabu' });
+  await page.getByLabel('Jam').first().fill('18:15');
+  if (flexible) {
+    await page.getByLabel('Jadual fleksibel').check();
+    await expect(page.getByText(/sesi tidak dijana automatik/)).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+}
+test('admin registers a flexible student for a tutor; the tutor records a class on the real date', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  // Admin melihat semua penjaga yang mempunyai anak aktif.
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  expect(
+    await page.getByRole('combobox', { name: 'Penjaga', exact: true }).locator('option').count(),
+  ).toBeGreaterThan(3);
+  await page.getByRole('button', { name: 'Tutup borang' }).click();
+  await adminEnrol(page, 'Murid Fleksibel', 'Tutor Contoh 1', true);
+  await page
+    .getByRole('row', { name: /Murid Fleksibel/ })
+    .getByRole('button', { name: /Lihat profil/ })
+    .click();
+  const detail = page.locator('.program-detail').first();
+  await expect(detail).toContainText('Tutor Contoh 1');
+  await expect(detail).toContainText('Jadual fleksibel');
+  await expect(detail).toContainText('0 kelas direkod');
+  await expect(detail).not.toContainText('berbaki');
+  await expect(detail.locator('.slot-chip')).toHaveText(['Rabu 18:15']);
+  // Ubah jadual: pilihan fleksibel diisi.
+  await detail.getByRole('button', { name: 'Ubah jadual' }).click();
+  await expect(page.getByLabel('Jadual fleksibel')).toBeChecked();
+  await page.getByRole('button', { name: 'Tutup borang' }).click();
+  // Tutor: tiada sesi dijana, jadi pilih murid membuka Tambah rekod sesi dengan masa pilihan.
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  const pick = page.locator('.student-picker button').filter({ hasText: 'Murid Fleksibel' });
+  await expect(pick).toContainText('Jadual fleksibel · 0 kelas direkod');
+  await pick.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Tambah rekod sesi' })).toBeVisible();
+  await expect(dialog.getByLabel('Jam')).toHaveValue('18:15');
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-07');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByLabel('Tarikh kelas')).toHaveValue('2026-10-07');
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  await expect(page.getByText(/1 kelas direkod · jadual fleksibel/)).toBeVisible();
+});
+test('admin transfers a class to another tutor and sets special fee and tutor allowance rates', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await adminEnrol(page, 'Murid Pindah', 'Tutor Contoh 1');
+  await page
+    .getByRole('row', { name: /Murid Pindah/ })
+    .getByRole('button', { name: /Lihat profil/ })
+    .click();
+  const detail = page.locator('.program-detail').first();
+  await expect(detail.locator('.tutor-chip')).toHaveText('Tutor Contoh 1');
+  // Pindah tutor mulai hari ini.
+  await detail.getByRole('button', { name: 'Pindah tutor' }).click();
+  await expect(page.getByLabel('Berkuat kuasa mulai')).not.toHaveValue('');
+  await page
+    .getByRole('combobox', { name: 'Tutor baharu' })
+    .selectOption({ label: 'Tutor Contoh 2' });
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(detail.locator('.tutor-chip')).toHaveText('Tutor Contoh 2');
+  // Kadar khas: yuran sahaja; elaun kosong = kadar standard.
+  await detail.getByRole('button', { name: 'Kadar khas' }).click();
+  await page.getByLabel('Yuran setiap sesi (RM)').fill('12.50');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(detail).toContainText(/Yuran khas RM\s?12\.50/);
+  await expect(detail).not.toContainText('Elaun khas');
+  await detail.getByRole('button', { name: 'Kadar khas' }).click();
+  await expect(page.getByLabel('Yuran setiap sesi (RM)')).toHaveValue('12.50');
+  await page.getByLabel('Elaun tutor setiap sesi (RM)').fill('7');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(detail).toContainText(/Elaun khas RM\s?7\.00/);
+  // Elaun khas tutor (potongan) dalam Kewangan → Elaun tutor.
+  await page.goto('/?demo=1#/allowance');
+  await page.getByRole('tab', { name: 'Tutor Contoh 2', exact: true }).click();
+  const rate = page.locator('.tutor-rate-row');
+  await expect(rate).toContainText('Tiada (kadar standard)');
+  await rate.getByRole('button', { name: 'Elaun khas tutor' }).click();
+  await page.getByLabel('Tambahan/potongan setiap sesi (RM, boleh negatif)').fill('-1.50');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(rate).toContainText(/−RM\s?1\.50 setiap sesi/);
+});
+test('admin generates reports + invoice for one family at once, then ZIPs a tutor group', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/reports');
+  await page.getByLabel('Bulan laporan').fill('2026-10');
+  const delivery = page.locator('.family-delivery');
+  await delivery.getByLabel('Cari murid, ibu bapa atau no. telefon').fill('Murid Contoh 06');
+  const family = delivery.locator('.family-row').filter({ hasText: 'Penjaga Contoh 1' }).first();
+  await expect(family).toContainText('Belum lengkap');
+  await expect(family.getByRole('button', { name: 'Sediakan PDF', exact: true })).toBeDisabled();
+  await family.getByRole('button', { name: 'Jana & sediakan PDF' }).click();
+  await expect(family.getByRole('button', { name: 'Muat turun PDF' })).toBeVisible();
+  await expect(family).toContainText('Sedia dihantar');
+  await expect(family.getByRole('button', { name: 'Jana & sediakan PDF' })).toHaveCount(0);
+  const dl = page.waitForEvent('download');
+  await family.getByRole('button', { name: 'Muat turun PDF' }).click();
+  const file = await dl;
+  expect(file.suggestedFilename()).toMatch(/^Laporan & Invois - Penjaga Contoh 1 - .*\.pdf$/);
+  const merged = await PDFDocument.load(await readFile((await file.path())!));
+  expect(merged.getPageCount()).toBeGreaterThanOrEqual(4);
+  // ZIP semua PDF keluarga yang lengkap dalam kumpulan tutor ini.
+  const group = delivery.locator('.delivery-group').filter({ hasText: 'Penjaga Contoh 1' }).first();
+  const zipWait = page.waitForEvent('download');
+  await group.getByRole('button', { name: 'Muat turun semua PDF (ZIP)' }).click();
+  const zipFile = await zipWait;
+  expect(zipFile.suggestedFilename()).toMatch(/^Laporan & Invois - .*\.zip$/);
+  const zip = await JSZip.loadAsync(await readFile((await zipFile.path())!));
+  expect(Object.keys(zip.files).some((n) => n.includes('Penjaga Contoh 1'))).toBe(true);
+  // Jana semua keluarga tutor ini sekali gus.
+  await group.getByRole('button', { name: 'Jana semua (tutor ini)' }).click();
+  await expect(delivery.getByRole('status')).toContainText(/PDF keluarga sedia/);
+  // Laporan kelas gaya tutor (tanpa invois) bagi satu kumpulan tutor dalam semakan laporan.
+  await page.locator('.monthly-reports .tutor-group > summary').first().click();
+  const classZip = page.waitForEvent('download');
+  await page
+    .locator('.monthly-reports .tutor-group')
+    .first()
+    .getByRole('button', { name: 'Laporan kelas tutor (ZIP)' })
+    .click();
+  expect((await classZip).suggestedFilename()).toMatch(/^Laporan Kelas .*\.zip$/);
+});
