@@ -3376,7 +3376,7 @@ export function App({
                     />
                   </label>
                 </div>
-                <div className="pay-columns">
+                <div className="pay-columns invoice-columns">
                   <PayColumn
                     title="Belum bayar"
                     tone="due"
@@ -3964,7 +3964,7 @@ export function App({
                     ]);
                   const headers = ['Tutor', 'Sesi dibayar', 'Jumlah', 'Bayaran', ''];
                   return (
-                    <div className="pay-columns">
+                    <div className="pay-columns allowance-columns">
                       <PayColumn
                         title="Belum dibayar"
                         tone="due"
