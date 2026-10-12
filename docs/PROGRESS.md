@@ -8,6 +8,7 @@ Kemasan paparan — 12 Oktober 2026:
 - [x] Carian telefon, menu dengan latar boleh ditutup/Escape, perangkap fokus dan `inert` semasa tertutup; sasaran sentuh butang utama sekurang-kurangnya 44px.
 - [x] Betulkan limpahan ringkasan kewangan, keluarga laporan dan bar navigasi pada telefon 320px. Semakan 7 halaman pada 320/390/768/1440px tanpa limpahan mendatar.
 - [x] Typecheck, lint, build Pages dan Next.js lulus; ujian Pages 56/56, E2E Next.js 8/8. Semakan visual menggunakan fixture rekaan; Parent Portal kekal baca sahaja. Tiada perubahan pangkalan data/cloud atau deploy dalam sesi kemasan ini. Amaran saiz chunk Vite sedia ada masih muncul.
+- [x] Arahan susulan “push dan deploy”: commit UI `5ecb3b6` dipush ke `main`; AQR checks #38223466508 dan Pages #38223480585 berjaya. Laman sebenar HTTP 200, CSS baharu disahkan, log masuk desktop/telefon tanpa ralat, demo terbitan terkunci. Tiada ujian sesi berautentikasi, perubahan data atau migrasi. Catatan selepas deploy hanya mengubah dokumentasi.
 
 - [x] Periksa bahan rujukan: folder asal tiada kod, Node 24/npm 11 tersedia.
 - [x] Semak dokumentasi rasmi Next.js, Supabase SSR, RLS dan Storage.

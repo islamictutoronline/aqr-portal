@@ -12,6 +12,8 @@ Bukti akhir setempat: `npm run typecheck`, `npm run lint`, `npm run build:pages`
 
 Bahagian terdahulu di bawah ialah sejarah pelaksanaan; kenyataan cloud lama mesti dibaca bersama catatan bertarikh terkini.
 
+**Push dan deploy atas arahan pengguna — 12 Oktober 2026:** perubahan UI dipush ke `main` pada commit `5ecb3b6`. Workflow [AQR GitHub Pages #38223480585](https://github.com/islamictutoronline/aqr-portal/actions/runs/38223480585) selesai `success`; workflow AQR checks #38223466508 juga `success`. [Portal sebenar](https://islamictutoronline.github.io/aqr-portal/) disemak tanpa log masuk: HTTP 200, CSS kemasan baharu dimuatkan, halaman log masuk desktop/telefon dipaparkan tanpa ralat pelayar atau respons HTTP gagal, tiada limpahan telefon 390px, dan `?demo=1` tidak membuka demo dalam binaan terbitan. Ini mengesahkan penerbitan dan halaman awam sahaja; sesi berautentikasi serta operasi Supabase tidak diuji semula. Tiada perubahan data atau migrasi dalam deploy ini. Commit catatan serahan selepas deploy hanya mengubah dokumentasi.
+
 ## Permintaan pengguna dan titik sambung
 
 Pengguna meminta “baca dan buat” berdasarkan `/Users/sufyanthawry/Downloads/02_MASTER_PROMPT_CODEX_AQR.md`, kemudian meminta “sediakan context- jika terhenti ai agent lain boleh sambung”. Aplikasi awal telah dibina dalam folder pakej asal.
