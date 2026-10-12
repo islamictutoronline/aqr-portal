@@ -1614,6 +1614,492 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       db.query('select save_tutor_remark($1,$2,$3,$4)', [org, kid, period, 'Ubah selepas lulus']),
     ).rejects.toThrow(/dikunci/);
   });
+  const classOf = async (sid: string) =>
+    (
+      await db.query<{ class_id: string }>(
+        "select class_id from enrollments where student_id=$1 and status='active'",
+        [sid],
+      )
+    ).rows[0].class_id;
+  const countOf = async (sql: string, params: unknown[] = []) =>
+    Number((await db.query<{ n: number }>(sql, params)).rows[0].n);
+  // Tutor B telah dibuang dalam ujian terdahulu; Tutor C ialah tutor aktif kedua.
+  const tutorC = id(18);
+  it('admin enrols a student on behalf of a tutor; tutor cannot enrol for another tutor', async () => {
+    await db.exec(`reset role; insert into auth.users(id) values('${tutorC}') on conflict do nothing;
+      insert into staff_profiles(id,auth_user_id,display_name) values('${tutorC}','${tutorC}','Tutor C') on conflict do nothing;
+      insert into staff_memberships(organization_id,staff_id,role) values('${org}','${tutorC}','tutor') on conflict do nothing;`);
+    const slots = JSON.stringify([{ day: 2, time: '17:00' }]);
+    await asUser(owner);
+    await expect(
+      db.query('select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6) id', [
+        org,
+        'Murid Admin Gagal',
+        id(42),
+        slots,
+        '2027-12-31',
+        '0131112222',
+      ]),
+    ).rejects.toThrow(/Pilih tutor/);
+    await expect(
+      db.query('select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6,$7) id', [
+        org,
+        'Murid Admin Gagal',
+        id(42),
+        slots,
+        '2027-12-31',
+        '0131112222',
+        owner,
+      ]),
+    ).rejects.toThrow(/Pilih tutor/);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6,$7) id',
+        [org, 'Murid Daftar Admin', id(42), slots, '2027-12-31', '0131112222', tutorC],
+      )
+    ).rows[0].id;
+    const cid = await classOf(kid);
+    await db.exec('reset role');
+    expect(
+      (
+        await db.query('select staff_id from class_tutors where class_id=$1 and ends_on is null', [
+          cid,
+        ])
+      ).rows,
+    ).toEqual([{ staff_id: tutorC }]);
+    expect(
+      await countOf('select count(*) n from class_sessions where class_id=$1', [cid]),
+    ).toBeGreaterThan(0);
+    expect(
+      await countOf('select count(*) n from class_sessions where class_id=$1 and tutor_id<>$2', [
+        cid,
+        tutorC,
+      ]),
+    ).toBe(0);
+    expect(
+      await countOf(
+        'select count(*) n from student_guardians where student_id=$1 and is_billing_contact',
+        [kid],
+      ),
+    ).toBe(1);
+    expect(
+      await countOf(
+        "select count(*) n from audit_events where operation='ENROL_FOR_TUTOR' and object_id=$1",
+        [kid],
+      ),
+    ).toBe(1);
+    // Tutor yang dipilih melihat murid itu; tutor lain tidak.
+    await asUser(tutorC);
+    expect(await countOf('select count(*) n from students where id=$1', [kid])).toBe(1);
+    await asUser(tutor);
+    expect(await countOf('select count(*) n from students where id=$1', [kid])).toBe(0);
+    // Tutor tidak boleh mendaftar bagi pihak tutor lain, tetapi boleh menamakan dirinya.
+    await expect(
+      db.query('select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,null,$6) id', [
+        org,
+        'Murid Tutor Lain',
+        id(42),
+        slots,
+        '2027-12-31',
+        tutorC,
+      ]),
+    ).rejects.toThrow();
+    const own = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,null,$6) id',
+        [org, 'Murid Tutor Sendiri', id(42), slots, '2027-12-31', tutor],
+      )
+    ).rows[0].id;
+    expect(await countOf('select count(*) n from students where id=$1', [own])).toBe(1);
+    // Ibu bapa tidak boleh mendaftar.
+    await asUser(parent);
+    await expect(
+      db.query('select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,null,$6) id', [
+        org,
+        'Murid Ibu Bapa',
+        id(42),
+        slots,
+        '2027-12-31',
+        tutor,
+      ]),
+    ).rejects.toThrow();
+  });
+  it('flexible class keeps its weekly rules but generates no sessions, even on extend', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6,null,true) id',
+        [
+          org,
+          'Murid Fleksibel',
+          id(42),
+          JSON.stringify([
+            { day: 1, time: '16:00' },
+            { day: 4, time: '16:00' },
+          ]),
+          '2027-12-31',
+          '0142223333',
+        ],
+      )
+    ).rows[0].id;
+    const cid = await classOf(kid);
+    expect((await db.query('select flexible from classes where id=$1', [cid])).rows).toEqual([
+      { flexible: true },
+    ]);
+    expect(await countOf('select count(*) n from class_schedules where class_id=$1', [cid])).toBe(
+      2,
+    );
+    expect(await countOf('select count(*) n from class_sessions where class_id=$1', [cid])).toBe(0);
+    await db.query('select extend_schedule($1)', [org]);
+    expect(await countOf('select count(*) n from class_sessions where class_id=$1', [cid])).toBe(0);
+    // Sesi manual masih boleh direkod.
+    const future = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    await db.query('select create_session($1,$2,$3,$4,30)', [
+      org,
+      cid,
+      tutor,
+      `${future}T10:00:00+08:00`,
+    ]);
+    expect(await countOf('select count(*) n from class_sessions where class_id=$1', [cid])).toBe(1);
+  });
+  it('update_schedule toggles flexible: on removes unrecorded future slots, off regenerates', async () => {
+    await asUser(tutor);
+    const slots = JSON.stringify([{ day: 3, time: '15:00' }]);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6) id',
+        [org, 'Murid Tukar Fleksibel', id(42), slots, '2027-12-31', '0143334444'],
+      )
+    ).rows[0].id;
+    const cid = await classOf(kid);
+    const today = (
+      await db.query<{ d: string }>("select (now() at time zone 'Asia/Kuala_Lumpur')::date::text d")
+    ).rows[0].d;
+    const upcoming = () =>
+      countOf(
+        "select count(*) n from class_sessions where class_id=$1 and status='scheduled' and (starts_at at time zone 'Asia/Kuala_Lumpur')::date>=$2::date",
+        [cid, today],
+      );
+    const flexible = async () =>
+      (await db.query<{ flexible: boolean }>('select flexible from classes where id=$1', [cid]))
+        .rows[0].flexible;
+    expect(await upcoming()).toBeGreaterThan(0);
+    await db.query('select update_schedule($1,$2,30,$3,$4,$5,true)', [
+      org,
+      cid,
+      slots,
+      today,
+      '2027-12-31',
+    ]);
+    expect(await flexible()).toBe(true);
+    expect(await upcoming()).toBe(0);
+    await db.query('select extend_schedule($1)', [org]);
+    expect(await upcoming()).toBe(0);
+    await db.query('select update_schedule($1,$2,30,$3,$4,$5,false)', [
+      org,
+      cid,
+      slots,
+      today,
+      '2027-12-31',
+    ]);
+    expect(await flexible()).toBe(false);
+    expect(await upcoming()).toBeGreaterThan(0);
+    // Tanpa nilai fleksibel (6 argumen): mod sedia ada dikekalkan.
+    await db.query('select update_schedule($1,$2,30,$3,$4,$5)', [
+      org,
+      cid,
+      slots,
+      today,
+      '2027-12-31',
+    ]);
+    expect(await flexible()).toBe(false);
+  });
+  it('transfer_class moves future unrecorded sessions to the new tutor; recorded stay with the old', async () => {
+    await db.exec('reset role');
+    const d = (
+      await db.query<{ start: string; eff: string; rec: string; before: string }>(
+        'select (current_date-20)::text start,(current_date-5)::text eff,(current_date-3)::text rec,(current_date-8)::text before',
+      )
+    ).rows[0];
+    await asUser(tutor);
+    const daily = JSON.stringify([0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, time: '12:00' })));
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,$6,null,$7) id',
+        [org, 'Murid Pindah Tutor', id(42), daily, '2027-12-31', d.start, '0145556666'],
+      )
+    ).rows[0].id;
+    const cid = await classOf(kid);
+    const sessionOn = async (day: string) =>
+      (
+        await db.query<{ id: string }>(
+          "select id from class_sessions where class_id=$1 and (starts_at at time zone 'Asia/Kuala_Lumpur')::date=$2::date",
+          [cid, day],
+        )
+      ).rows[0].id;
+    const recorded = await sessionOn(d.rec);
+    const early = await sessionOn(d.before);
+    await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+      org,
+      recorded,
+      kid,
+      'present',
+      JSON.stringify({ mastery: 'not_assessed' }),
+    ]);
+    // Hanya pemilik/admin; tutor sama ditolak; tarikh terlalu lama ditolak.
+    await expect(
+      db.query('select transfer_class($1,$2,$3,$4)', [org, cid, tutorC, d.eff]),
+    ).rejects.toThrow();
+    await asUser(finance);
+    await expect(
+      db.query('select transfer_class($1,$2,$3,$4)', [org, cid, tutor, d.eff]),
+    ).rejects.toThrow(/sama/);
+    await expect(
+      db.query('select transfer_class($1,$2,$3,$4)', [org, cid, tutorC, '2020-01-01']),
+    ).rejects.toThrow(/berkuat kuasa/);
+    await expect(
+      db.query('select transfer_class($1,$2,$3,$4)', [org, cid, owner, d.eff]),
+    ).rejects.toThrow(/Pilih tutor/);
+    const moved = Number(
+      (
+        await db.query<{ n: number }>('select transfer_class($1,$2,$3,$4) n', [
+          org,
+          cid,
+          tutorC,
+          d.eff,
+        ])
+      ).rows[0].n,
+    );
+    await db.exec('reset role');
+    const tutorOf = async (sid: string) =>
+      (
+        await db.query<{ tutor_id: string }>('select tutor_id from class_sessions where id=$1', [
+          sid,
+        ])
+      ).rows[0].tutor_id;
+    expect(moved).toBeGreaterThan(0);
+    expect(
+      await countOf('select count(*) n from class_sessions where class_id=$1 and tutor_id=$2', [
+        cid,
+        tutorC,
+      ]),
+    ).toBe(moved);
+    expect(await tutorOf(recorded)).toBe(tutor);
+    expect(await tutorOf(early)).toBe(tutor);
+    expect(
+      await countOf(
+        "select count(*) n from class_sessions where class_id=$1 and status='scheduled' and (starts_at at time zone 'Asia/Kuala_Lumpur')::date>=$2::date and tutor_id<>$3",
+        [cid, d.eff, tutorC],
+      ),
+    ).toBe(0);
+    expect(
+      (
+        await db.query(
+          'select staff_id, ends_on::text ends_on, starts_on::text starts_on from class_tutors where class_id=$1 order by starts_on',
+          [cid],
+        )
+      ).rows,
+    ).toEqual([
+      { staff_id: tutor, ends_on: expect.any(String), starts_on: d.start },
+      { staff_id: tutorC, ends_on: null, starts_on: d.eff },
+    ]);
+    expect(
+      await countOf(
+        "select count(*) n from audit_events where operation='TRANSFER_CLASS' and object_id=$1",
+        [cid],
+      ),
+    ).toBe(1);
+    // Tutor baharu melihat murid dan boleh mengurus kelas; tutor lama tidak lagi.
+    await asUser(tutorC);
+    expect(await countOf('select count(*) n from students where id=$1', [kid])).toBe(1);
+    await asUser(tutor);
+    expect(await countOf('select count(*) n from students where id=$1', [kid])).toBe(0);
+    await expect(
+      db.query('select update_schedule($1,$2,30,$3,$4,$5)', [
+        org,
+        cid,
+        JSON.stringify([{ day: 1, time: '12:00' }]),
+        d.eff,
+        '2027-12-31',
+      ]),
+    ).rejects.toThrow();
+  });
+  it('class fee override changes the invoice unit price; null reverts to the standard rate', async () => {
+    await db.exec(`reset role; insert into program_fee_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from)
+      values('${org}','IQRA',30,1000,'2026-01-01') on conflict do nothing;`);
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,$6,null,$7) id',
+        [
+          org,
+          'Murid Kadar Khas',
+          id(42),
+          JSON.stringify([{ day: 6, time: '09:00' }]),
+          '2027-12-31',
+          '2026-09-01',
+          '0147778888',
+        ],
+      )
+    ).rows[0].id;
+    const cid = await classOf(kid);
+    for (const iso of ['2026-09-03T12:00:00Z', '2026-09-08T12:00:00Z']) {
+      const sid = (
+        await db.query<{ id: string }>('select create_session($1,$2,$3,$4,30) id', [
+          org,
+          cid,
+          tutor,
+          iso,
+        ])
+      ).rows[0].id;
+      await db.query('select record_assessment($1,$2,$3,$4,$5,true)', [
+        org,
+        sid,
+        kid,
+        'present',
+        JSON.stringify({ mastery: 'not_assessed' }),
+      ]);
+    }
+    // Tutor tidak boleh menetapkan kadar.
+    await expect(
+      db.query('select set_class_rates($1,$2,$3,$4,$5)', [org, cid, 1500, null, '2026-09-01']),
+    ).rejects.toThrow();
+    const items = async () => {
+      await asUser(academic);
+      await db.query('select generate_session_invoices($1,$2)', [org, '2026-09']);
+      return (
+        await db.query<{ quantity: number; unit_price_sen: string }>(
+          "select ii.quantity,ii.unit_price_sen from invoice_items ii join invoices i on i.id=ii.invoice_id where i.idempotency_key like 'sessions:2026-09:%' and ii.student_id=$1 order by ii.unit_price_sen",
+          [kid],
+        )
+      ).rows.map((r) => ({ quantity: Number(r.quantity), price: Number(r.unit_price_sen) }));
+    };
+    expect(await items()).toEqual([{ quantity: 2, price: 1000 }]);
+    await asUser(owner);
+    await db.query('select set_class_rates($1,$2,$3,$4,$5)', [org, cid, 1500, 900, '2026-09-01']);
+    expect(await items()).toEqual([{ quantity: 2, price: 1500 }]);
+    // Kembali ke kadar standard mulai 5/9: sesi 3/9 kekal 1500, sesi 8/9 kembali 1000.
+    await asUser(owner);
+    await db.query('select set_class_rates($1,$2,$3,$4,$5)', [org, cid, null, null, '2026-09-05']);
+    expect(await items()).toEqual([
+      { quantity: 1, price: 1000 },
+      { quantity: 1, price: 1500 },
+    ]);
+    // Tutor kelas boleh membaca kadar khas kelasnya; tutor lain dan ibu bapa tidak.
+    await asUser(tutor);
+    expect(
+      await countOf('select count(*) n from class_rate_overrides where class_id=$1', [cid]),
+    ).toBe(2);
+    await asUser(tutorC);
+    expect(
+      await countOf('select count(*) n from class_rate_overrides where class_id=$1', [cid]),
+    ).toBe(0);
+    await asUser(parent);
+    expect(await countOf('select count(*) n from class_rate_overrides')).toBe(0);
+  });
+  it('tutor rate adjustment: admin sets it, tutor sees only own, invalid values rejected', async () => {
+    await asUser(tutor);
+    await expect(
+      db.query('select set_tutor_rate($1,$2,$3,$4)', [org, tutor, 200, '2026-10-01']),
+    ).rejects.toThrow();
+    await asUser(owner);
+    await expect(
+      db.query('select set_tutor_rate($1,$2,$3,$4)', [org, tutor, 200000, '2026-10-01']),
+    ).rejects.toThrow(/Pelarasan elaun/);
+    await expect(
+      db.query('select set_tutor_rate($1,$2,$3,$4)', [org, owner, 200, '2026-10-01']),
+    ).rejects.toThrow(/Tutor tidak ditemui/);
+    await db.query('select set_tutor_rate($1,$2,$3,$4)', [org, tutor, 200, '2026-10-01']);
+    await db.query('select set_tutor_rate($1,$2,$3,$4)', [org, tutorC, -100, '2026-10-01']);
+    await asUser(tutor);
+    expect(
+      (
+        await db.query<{ adjustment_sen: string; effective_from: string }>(
+          'select adjustment_sen, effective_from::text effective_from from tutor_rate_overrides',
+        )
+      ).rows.map((r) => [Number(r.adjustment_sen), r.effective_from]),
+    ).toEqual([[200, '2026-10-01']]);
+    await asUser(academic);
+    expect(await countOf('select count(*) n from tutor_rate_overrides')).toBe(2);
+    await asUser(parent);
+    expect(await countOf('select count(*) n from tutor_rate_overrides')).toBe(0);
+  });
+  it('reopen_student_report returns an approved report to draft so it can be regenerated', async () => {
+    await asUser(tutor);
+    const kid = (
+      await db.query<{ id: string }>(
+        'select tutor_enrol_student($1,$2,$3,30,$4,$5,null,null,$6) id',
+        [
+          org,
+          'Murid Buka Semula',
+          id(42),
+          JSON.stringify([{ day: 5, time: '19:00' }]),
+          '2027-12-31',
+          '0149990000',
+        ],
+      )
+    ).rows[0].id;
+    const period = (
+      await db.query<{ p: string }>(
+        "select to_char(now() at time zone 'Asia/Kuala_Lumpur','YYYY-MM') p",
+      )
+    ).rows[0].p;
+    await db.query('select save_tutor_remark($1,$2,$3,$4)', [org, kid, period, 'Rumusan asal.']);
+    await asUser(owner);
+    const rid = (
+      await db.query<{ id: string }>('select prepare_student_report($1,$2,$3) id', [
+        org,
+        kid,
+        period,
+      ])
+    ).rows[0].id;
+    await expect(db.query('select reopen_student_report($1,$2)', [org, rid])).rejects.toThrow(
+      /belum diluluskan/,
+    );
+    await db.query('select approve_student_report($1,$2)', [org, rid]);
+    await expect(
+      db.query('select prepare_student_report($1,$2,$3)', [org, kid, period]),
+    ).rejects.toThrow(/dikunci/);
+    await asUser(tutor);
+    await expect(db.query('select reopen_student_report($1,$2)', [org, rid])).rejects.toThrow();
+    await asUser(owner);
+    await db.query('select reopen_student_report($1,$2)', [org, rid]);
+    expect(
+      (
+        await db.query(
+          'select status, approved_by, approved_at from monthly_student_reports where id=$1',
+          [rid],
+        )
+      ).rows,
+    ).toEqual([{ status: 'draft', approved_by: null, approved_at: null }]);
+    expect(
+      await countOf(
+        "select count(*) n from audit_events where operation='REOPEN_REPORT' and object_id=$1",
+        [rid],
+      ),
+    ).toBe(1);
+    // Rumusan tutor tidak lagi dikunci; laporan dijana semula dengan rumusan baharu.
+    await asUser(tutor);
+    await db.query('select save_tutor_remark($1,$2,$3,$4)', [org, kid, period, 'Rumusan dibaiki.']);
+    await asUser(owner);
+    expect(
+      (
+        await db.query<{ id: string }>('select prepare_student_report($1,$2,$3) id', [
+          org,
+          kid,
+          period,
+        ])
+      ).rows[0].id,
+    ).toBe(rid);
+    expect(
+      (
+        await db.query<{ snapshot: { tutor_remark: string } }>(
+          'select snapshot from monthly_student_reports where id=$1',
+          [rid],
+        )
+      ).rows[0].snapshot.tutor_remark,
+    ).toBe('Rumusan dibaiki.');
+  });
   it('reset-test-data.sql empties operational data and tutors but keeps admins and settings', async () => {
     await db.exec('reset role');
     const programs = Number(

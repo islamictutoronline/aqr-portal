@@ -6,7 +6,7 @@
 --   pelan yuran, kadar elaun tutor, kadar yuran program, dan akaun pemilik/admin (boleh terus log masuk).
 -- DIPADAM: semua tutor (profil, keahlian dan akaun log masuk), permohonan tutor, murid, penjaga,
 --   kelas/jadual/sesi, kehadiran, penilaian, ulasan, laporan bulanan, invois, bayaran, resit,
---   elaun/payslip/maklumat bank, import, eksport, sambungan Google dan log audit.
+--   elaun/payslip/maklumat bank, kadar khas kelas/tutor, import, eksport, sambungan Google dan log audit.
 begin;
 
 -- 1) Data operasi. Senarai ini merangkumi setiap jadual yang merujuk antara satu sama lain,
@@ -35,6 +35,8 @@ truncate table
   public.invoice_items,
   public.invoices,
   public.fee_assignments,
+  public.class_rate_overrides,
+  public.tutor_rate_overrides,
   public.enrollments,
   public.class_tutors,
   public.class_schedules,
