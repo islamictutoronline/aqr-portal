@@ -5,6 +5,9 @@ export const projections: Record<string, string> = {
   monthly_tutor_remarks: 'id,student_id,period,remark,updated_at',
   report_deliveries: 'id,report_id,guardian_id,status,note,updated_at,created_at',
   program_fee_rates: 'id,program_code,duration_minutes,amount_sen,effective_from,effective_to',
+  // Kadar khas (migrasi 38): sejarah kadar kelas dan pelarasan elaun tutor.
+  class_rate_overrides: 'id,class_id,fee_sen,allowance_sen,effective_from,created_at',
+  tutor_rate_overrides: 'id,staff_id,adjustment_sen,effective_from,created_at',
   tutor_payment_details: 'id,staff_id,job_title,department,bank_name,account_holder,account_number',
   tutor_month_payments:
     'id,staff_id,period,amount_sen,sessions,paid_on,reference,status,void_reason,created_at',
@@ -53,6 +56,7 @@ export const projections: Record<string, string> = {
     'id,reported_name,note,program_code,duration_minutes,reported_date,planned_quota,status,student_id,session_id',
   private_import_batches: 'id,period,reported_count,planned_count,indicative_sen,status',
 };
+const OPTIONAL_TABLES = ['class_rate_overrides', 'tutor_rate_overrides'];
 export async function loadData(ctx: { db: SupabaseClient; org: string }): Promise<Dataset> {
   const pairs = await Promise.all(
     Object.entries(projections).map(async ([table, fields]) => {
@@ -68,6 +72,8 @@ export async function loadData(ctx: { db: SupabaseClient; org: string }): Promis
       const rows = [];
       for (let offset = 0; ; offset += 1000) {
         const { data, error } = await query.range(offset, offset + 999);
+        // Jadual kadar khas belum wujud sebelum migrasi 38 dipasang: anggap kosong.
+        if (error && OPTIONAL_TABLES.includes(table)) break;
         if (error) throw new Error(`Gagal membaca ${table}`);
         rows.push(...(data ?? []));
         if (!data || data.length < 1000) break;

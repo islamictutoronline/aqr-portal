@@ -1,5 +1,5 @@
 'use client';
-import { apiFetch } from '@/lib/transport';
+import { apiFetch, isStatic } from '@/lib/transport';
 import { Dataset, Role, integerSen, formatMoney } from '@/lib/core';
 import type { Dialog } from './app';
 type Props = {
@@ -339,7 +339,8 @@ function ToolsBody({ data, role, section, month, demo, open, mutate }: Props) {
           pembelajaran dan bil keluarga. Penjaga boleh meminta pembetulan atau semakan tempoh
           penyimpanan daripada admin.
         </p>
-        {role === 'owner' && (
+        {/* Muat naik logo memerlukan fungsi pelayan; tiada dalam binaan statik (Pages). */}
+        {role === 'owner' && !isStatic() && (
           <form
             onSubmit={async (e) => {
               e.preventDefault();

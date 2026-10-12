@@ -3500,3 +3500,59 @@ textarea {
     justify-content: center;
   }
 }
+/* Kewangan dua lajur: Belum bayar | Sudah bayar (bertindan di telefon). */
+.pay-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  align-items: start;
+}
+.pay-column {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--white);
+}
+.pay-column.due {
+  border-top: 4px solid var(--gold);
+}
+.pay-column.done {
+  border-top: 4px solid var(--teal);
+}
+.pay-column > header,
+.today-tutor > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.pay-column h3,
+.today-tutor h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.pay-column > header span,
+.today-tutor > header span {
+  color: var(--slate);
+  font-size: 0.86rem;
+}
+.pay-column .empty {
+  padding: 18px 8px;
+}
+/* Sesi hari ini dikumpulkan ikut tutor yang ada sesi sahaja. */
+.today-tutors {
+  display: grid;
+  gap: 18px;
+}
+.today-tutor > header .text-link {
+  margin-left: auto;
+}
+@media (max-width: 760px) {
+  .pay-columns {
+    grid-template-columns: 1fr;
+  }
+}

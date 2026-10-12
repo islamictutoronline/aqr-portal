@@ -109,17 +109,6 @@ export async function staticTransport(input: string, init?: RequestInit) {
         connected: false,
         message: 'Google Sheets memerlukan backend OAuth; XLSX tersedia.',
       });
-    // Privileged file and invitation operations remain server-side in Supabase Edge Functions.
-    if (['/api/upload', '/api/logo', '/api/staff'].includes(path)) {
-      const body =
-        init?.body instanceof FormData
-          ? init.body
-          : { path, ...JSON.parse(String(init?.body || '{}')) };
-      if (body instanceof FormData) body.set('operation', path);
-      const { data, error } = await db.functions.invoke('aqr-admin', { body });
-      if (error) throw new Error('Operasi memerlukan Edge Function aqr-admin yang dikonfigurasi.');
-      return Response.json(data);
-    }
     throw new Error('Operasi ini menggunakan backend legasi. Gunakan eksport XLSX pada Pages.');
   } catch (e) {
     return Response.json(
