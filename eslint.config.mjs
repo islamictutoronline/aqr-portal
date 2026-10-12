@@ -12,5 +12,7 @@ export default defineConfig([
     'playwright-report/**',
     'test-results/**',
     'next-env.d.ts',
+    // Salinan kerja agen sementara (git worktree).
+    '.claude/**',
   ]),
 ]);
