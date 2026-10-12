@@ -12,7 +12,7 @@ alter table public.classes add column if not exists flexible boolean not null de
 
 -- Jana sesi dari tarikh mula jadual (maks 1 tahun ke belakang). Kelas fleksibel tidak dijana.
 create or replace function private.fill_class_sessions(org uuid,cid uuid,until date) returns integer language plpgsql security definer set search_path='' as $$
-declare r public.class_schedules; d date; tutor uuid; t timestamptz; n integer:=0;
+declare r public.class_schedules; d date; tutor uuid; day_tutor uuid; t timestamptz; n integer:=0;
 begin
  if exists(select 1 from public.classes k where k.id=cid and k.organization_id=org and k.flexible) then return 0; end if;
  select staff_id into tutor from public.class_tutors where organization_id=org and class_id=cid and (ends_on is null or ends_on>=current_date) order by starts_on desc limit 1;
@@ -21,8 +21,11 @@ begin
   for d in select g::date from generate_series(greatest(current_date-365,r.effective_from)::timestamp,least(until,coalesce(r.effective_to,until))::timestamp,'1 day') g loop
    if extract(dow from d)=r.day_of_week and not (r.exceptions @> jsonb_build_array(d::text)) then
     t:=(d+r.start_time) at time zone 'Asia/Kuala_Lumpur';
+    -- Tutor yang bertugas pada tarikh sesi (pindah tutor bertarikh hadapan); jika tiada, tutor semasa.
+    select ct.staff_id into day_tutor from public.class_tutors ct where ct.organization_id=org and ct.class_id=cid
+     and ct.starts_on<=d and (ct.ends_on is null or ct.ends_on>=d) order by ct.starts_on desc limit 1;
     insert into public.class_sessions(organization_id,class_id,tutor_id,starts_at,ends_at,topic)
-     values(org,cid,tutor,t,t+make_interval(mins=>r.duration_minutes),'') on conflict(class_id,starts_at) do nothing;
+     values(org,cid,coalesce(day_tutor,tutor),t,t+make_interval(mins=>r.duration_minutes),'') on conflict(class_id,starts_at) do nothing;
     if found then n:=n+1; end if;
    end if;
   end loop;
