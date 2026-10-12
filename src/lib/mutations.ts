@@ -204,6 +204,10 @@ const schemas = {
     start_date: z.iso.date(),
     guardian_name: z.string().max(200).default(''),
     guardian_phone: z.string().max(30).default(''),
+    // Admin mendaftar bagi pihak tutor (wajib untuk admin); tutor menghantar null.
+    tutor_id: uuid.nullable().default(null),
+    // Jadual fleksibel: slot mingguan hanya masa pilihan; sesi tidak dijana automatik.
+    flexible: z.boolean().default(false),
   }),
   save_guardian: z.object({
     student_id: uuid,
@@ -231,7 +235,25 @@ const schemas = {
       .max(7),
     effective_from: z.iso.date(),
     end_date: z.iso.date(),
+    flexible: z.boolean().nullable().default(null),
   }),
+  // Admin: pindah kelas kepada tutor lain mulai tarikh dipilih.
+  transfer_class: z.object({ cid: uuid, new_tutor: uuid, effective_from: z.iso.date() }),
+  // Admin: yuran/elaun khas setiap sesi bagi satu kelas (null = kadar standard).
+  class_rates: z.object({
+    cid: uuid,
+    fee_sen: z.number().int().nonnegative().nullable(),
+    allowance_sen: z.number().int().nonnegative().nullable(),
+    effective_from: z.iso.date(),
+  }),
+  // Admin: tambahan/potongan elaun setiap sesi bagi seorang tutor (boleh negatif).
+  tutor_rate: z.object({
+    staff_id: uuid,
+    adjustment_sen: z.number().int(),
+    effective_from: z.iso.date(),
+  }),
+  // Admin: buka semula laporan yang diluluskan sebagai draf.
+  reopen_report: z.object({ report: uuid }),
   extend_schedule: z.object({}),
   void_session: z.object({ sid: uuid }),
   remove_tutor: z.object({ staff_id: uuid }),
@@ -360,6 +382,8 @@ export async function executeMutation(
         billing_period: period,
       });
   } else {
+    if (['transfer_class', 'class_rates', 'tutor_rate', 'reopen_report'].includes(operation))
+      requireRoles(ctx, ['owner', 'admin']);
     const rpc: Record<string, string> = {
       prepare_report: 'prepare_student_report',
       approve_report: 'approve_student_report',
@@ -401,6 +425,10 @@ export async function executeMutation(
       generate_schedule: 'generate_schedule',
       change_session: 'change_session',
       pay_adjustment: 'pay_adjustment',
+      transfer_class: 'transfer_class',
+      class_rates: 'set_class_rates',
+      tutor_rate: 'set_tutor_rate',
+      reopen_report: 'reopen_student_report',
     };
     result = await ctx.db.rpc(rpc[operation], { org: ctx.org, ...fields });
   }

@@ -185,7 +185,16 @@ function PhoneField({
 export type GuardianChoice = { id: string; name: string; phone: string; children: string[] };
 // Penjaga semasa daftar murid: pilih penjaga sedia ada (adik-beradik) atau isi penjaga baharu.
 // No. WhatsApp yang sama dengan penjaga sedia ada digabung sebagai adik-beradik (satu invois).
-function GuardianField({ choices, initialId }: { choices: GuardianChoice[]; initialId?: string }) {
+function GuardianField({
+  choices,
+  initialId,
+  tutorView = false,
+}: {
+  choices: GuardianChoice[];
+  initialId?: string;
+  // Tutor: laporan tutor kekal berasingan; penggabungan laporan + invois dibuat oleh admin.
+  tutorView?: boolean;
+}) {
   const [pick, setPick] = useState(initialId || '');
   const [typed, setTyped] = useState<string | null>(null);
   const chosen = choices.find((c) => c.id === pick);
@@ -220,12 +229,36 @@ function GuardianField({ choices, initialId }: { choices: GuardianChoice[]; init
         initial={chosen?.phone}
         onPreview={setTyped}
       />
-      {siblings && (
-        <p className="sibling-note" role="status">
-          Adik-beradik: murid ini akan digabung dengan <strong>{siblings}</strong> di bawah penjaga
-          yang sama — satu invois dan satu penghantaran laporan.
-        </p>
-      )}
+      {siblings &&
+        (tutorView ? (
+          <p className="sibling-note" role="status">
+            Adik-beradik: penjaga yang sama. Laporan anda kekal berasingan untuk setiap murid; admin
+            menggabungkan laporan + invois untuk penjaga.{' '}
+            <small>
+              Anak lain penjaga ini: <strong>{siblings}</strong>
+            </small>
+          </p>
+        ) : (
+          <p className="sibling-note" role="status">
+            Adik-beradik: murid ini akan digabung dengan <strong>{siblings}</strong> di bawah
+            penjaga yang sama — satu invois dan satu penghantaran laporan.
+          </p>
+        ))}
+    </div>
+  );
+}
+// Jadual fleksibel: slot mingguan menjadi masa pilihan sahaja; tutor merekod setiap kelas sendiri.
+function FlexibleField({ initial = false }: { initial?: boolean }) {
+  return (
+    <div className="flexible-field">
+      <label className="check-label">
+        <input type="checkbox" name="flexible" defaultChecked={initial} />
+        Jadual fleksibel
+      </label>
+      <p className="schedule-note">
+        Masa kelas tetap diisi sebagai masa pilihan; sesi tidak dijana automatik — rekod setiap
+        kelas dengan Tambah rekod sesi pada tarikh sebenar.
+      </p>
     </div>
   );
 }
@@ -720,6 +753,9 @@ export function App({
         } else if (operation === 'tutor_enrol') {
           const studentId = `${id}-student`;
           const program = next.programs.find((x) => x.id === payload.program_id)!;
+          // Admin mendaftar bagi pihak tutor yang dipilih; tutor mendaftar untuk diri sendiri.
+          const tutorId = payload.tutor_id || activeTutor;
+          if (academic && !payload.tutor_id) throw new Error('Pilih tutor');
           next.students.push({ id: studentId, full_name: payload.student_name, status: 'active' });
           next.classes.push({
             id,
@@ -729,12 +765,13 @@ export function App({
             delivery: 'online',
             max_capacity: 1,
             active: true,
+            flexible: !!payload.flexible,
           });
           const today = new Date().toISOString().slice(0, 10);
           next.class_tutors.push({
             id: `${id}-tutor`,
             class_id: id,
-            staff_id: activeTutor,
+            staff_id: tutorId,
             starts_on: today,
           });
           next.enrollments.push({
@@ -755,8 +792,10 @@ export function App({
               effective_to: payload.end_date,
             }),
           );
-          // Demo: jana empat minggu sesi daripada slot mingguan.
-          for (const slot of payload.slots as { day: number; time: string }[])
+          // Demo: jana empat minggu sesi daripada slot mingguan (kecuali jadual fleksibel).
+          for (const slot of payload.flexible
+            ? []
+            : (payload.slots as { day: number; time: string }[]))
             for (let d = 0; d < 42; d++) {
               const day = new Date(Date.parse(String(payload.start_date || today)) + d * 86400000);
               if (day.getDay() !== slot.day) continue;
@@ -764,7 +803,7 @@ export function App({
               next.class_sessions.push({
                 id: `${id}-${slot.day}-${d}`,
                 class_id: id,
-                tutor_id: activeTutor,
+                tutor_id: tutorId,
                 starts_at: start.toISOString(),
                 ends_at: new Date(start.getTime() + Number(payload.minutes) * 60000).toISOString(),
                 status: 'scheduled',
@@ -1129,6 +1168,9 @@ export function App({
           const tutorId =
             next.class_tutors.find((t) => t.class_id === cid && !t.ends_on)?.staff_id ||
             activeTutor;
+          const cls = next.classes.find((c) => c.id === cid);
+          if (cls && payload.flexible !== null && payload.flexible !== undefined)
+            cls.flexible = !!payload.flexible;
           (payload.slots as { day: number; time: string }[]).forEach((slot, k) => {
             next.class_schedules.push({
               id: `${id}-rule-${k}`,
@@ -1139,7 +1181,8 @@ export function App({
               effective_from: eff,
               effective_to: payload.end_date,
             });
-            for (let d = 0; d < 42; d++) {
+            // Jadual fleksibel: slot disimpan sebagai masa pilihan sahaja; tiada sesi dijana.
+            for (let d = 0; d < (cls?.flexible ? 0 : 42); d++) {
               const day = new Date(Date.parse(`${eff}T00:00:00Z`) + d * 86400000);
               const iso = day.toISOString().slice(0, 10);
               if (day.getUTCDay() !== slot.day || iso > String(payload.end_date)) continue;
@@ -1161,6 +1204,54 @@ export function App({
               });
             }
           });
+        } else if (operation === 'transfer_class') {
+          // Tamatkan tugasan tutor lama, tambah tugasan baharu, pindah sesi berjadual belum direkod.
+          const cid = payload.cid;
+          const eff = String(payload.effective_from);
+          const dayBefore = new Date(Date.parse(`${eff}T00:00:00Z`) - 86400000)
+            .toISOString()
+            .slice(0, 10);
+          next.class_tutors
+            .filter((t) => t.class_id === cid && !t.ends_on)
+            .forEach((t) => (t.ends_on = dayBefore));
+          next.class_tutors.push({
+            id: `${id}-tutor`,
+            class_id: cid,
+            staff_id: payload.new_tutor,
+            starts_on: eff,
+          });
+          next.class_sessions
+            .filter(
+              (x) =>
+                x.class_id === cid &&
+                x.status === 'scheduled' &&
+                klDate(String(x.starts_at)) >= eff &&
+                !next.attendance.some((a) => a.session_id === x.id),
+            )
+            .forEach((x) => (x.tutor_id = payload.new_tutor));
+        } else if (operation === 'class_rates') {
+          (next.class_rate_overrides ||= []).push({
+            id,
+            class_id: payload.cid,
+            fee_sen: payload.fee_sen ?? null,
+            allowance_sen: payload.allowance_sen ?? null,
+            effective_from: payload.effective_from,
+            created_at: new Date().toISOString(),
+          });
+        } else if (operation === 'tutor_rate') {
+          (next.tutor_rate_overrides ||= []).push({
+            id,
+            staff_id: payload.staff_id,
+            adjustment_sen: payload.adjustment_sen,
+            effective_from: payload.effective_from,
+            created_at: new Date().toISOString(),
+          });
+        } else if (operation === 'reopen_report') {
+          const r = (next.monthly_student_reports || []).find((x) => x.id === payload.report);
+          if (!r || r.status !== 'approved')
+            throw new Error('Laporan ini bukan laporan diluluskan');
+          r.status = 'draft';
+          r.approved_at = null;
         } else if (operation === 'invoice_paid') {
           const inv = next.invoices.find((x) => x.id === payload.inv)!;
           const due = invoiceBalance(inv, next.payments, next.payment_allocations).outstanding;
@@ -1227,6 +1318,77 @@ export function App({
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'Permintaan gagal');
       return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  // Admin: jana laporan + invois sekali gus bagi murid dipilih (satu keluarga atau satu tutor).
+  // Laporan diluluskan dibuka semula, disediakan semula daripada rekod terkini dan diluluskan;
+  // kemudian invois ikut sesi dijana. Dibenarkan walaupun kehadiran belum lengkap.
+  // Pulangkan data terkini supaya PDF gabungan dibina daripada rekod baharu.
+  async function generateFamilies(studentIds: string[]): Promise<Dataset | null> {
+    setBusy(true);
+    setNotice('');
+    try {
+      if (demo) {
+        const next = structuredClone(data);
+        next.monthly_student_reports ||= [];
+        for (const sid of studentIds) {
+          const st = next.students.find((x) => x.id === sid);
+          if (!st) continue;
+          const old = next.monthly_student_reports.find(
+            (r) => r.student_id === sid && r.period === month,
+          );
+          const row = {
+            id: old?.id || `demo-report-${sid}-${month}`,
+            student_id: sid,
+            period: month,
+            status: 'approved',
+            approved_at: new Date().toISOString(),
+            snapshot: demoSnapshot(next, st, month),
+          };
+          if (old) Object.assign(old, row);
+          else next.monthly_student_reports.push(row);
+        }
+        demoInvoices(next, month, `demo-${crypto.randomUUID()}`);
+        setData(next);
+        setNotice('Demo: laporan diluluskan dan invois dijana dalam memori tab sahaja.');
+        return next;
+      }
+      const save = async (operation: string, payload: Record<string, unknown>) => {
+        const r = await apiFetch('/api/mutate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operation, payload }),
+        });
+        const result = await r.json();
+        if (!r.ok) throw new Error(result.error);
+        return result as { id: unknown };
+      };
+      let latest: Dataset | null = null;
+      try {
+        for (const sid of studentIds) {
+          const old = (data.monthly_student_reports || []).find(
+            (r) => r.student_id === sid && r.period === month,
+          );
+          if (old?.status === 'approved') await save('reopen_report', { report: old.id });
+          const prepared = await save('prepare_report', { student: sid, report_month: month });
+          await save('approve_report', { report: prepared.id || old?.id });
+        }
+        await save('generate_session_invoices', { billing_period: month });
+      } finally {
+        const refresh = await apiFetch('/api/data', { cache: 'no-store' });
+        // Muat semula walaupun satu langkah gagal, supaya paparan sepadan dengan pangkalan data.
+        if (refresh.ok) {
+          latest = (await refresh.json()) as Dataset;
+          setData(latest);
+        }
+      }
+      setNotice('Laporan diluluskan dan invois dijana.');
+      return latest;
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Penjanaan gagal');
+      return null;
     } finally {
       setBusy(false);
     }
@@ -1381,6 +1543,7 @@ export function App({
       day: Number(r.day_of_week),
       time: String(r.start_time).slice(0, 5),
     }));
+    const flexible = !!all('classes').find((c) => c.id === classId)?.flexible;
     setDialog({
       title: `Ubah jadual · ${program}`,
       operation: 'update_schedule',
@@ -1405,6 +1568,7 @@ export function App({
       extra: (
         <>
           <WeeklySlots initial={initial} />
+          <FlexibleField initial={flexible} />
           <p className="schedule-note">
             Sesi yang sudah direkod dan sesi tambahan tidak berubah. Sesi akan datang yang belum
             direkod dijana semula mengikut jadual baharu.
@@ -1416,6 +1580,7 @@ export function App({
         minutes: Number(v.minutes),
         effective_from: v.effective_from,
         end_date: v.end_date,
+        flexible: v.flexible === 'on',
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],
@@ -1439,12 +1604,19 @@ export function App({
       }))
       .filter((c) => c.children.length)
       .sort((a, b) => a.name.localeCompare(b.name));
+  // Tutor aktif (untuk admin mendaftar murid atau memindah kelas bagi pihak tutor).
+  const activeTutors = (): [string, string][] =>
+    all('staff_profiles')
+      .filter((t) => t.role === 'tutor' && t.active !== false)
+      .map((t) => [String(t.id), String(t.display_name)]);
+  // Admin juga boleh mendaftar murid bagi pihak tutor (tutor wajib dipilih).
   const createStudent = (guardianId?: string) =>
     setDialog({
       title: guardianId ? 'Daftar adik-beradik' : 'Daftar murid',
       operation: 'tutor_enrol',
       fields: [
         { name: 'student_name', label: 'Nama penuh' },
+        ...(academic ? [{ name: 'tutor_id', label: 'Tutor', options: activeTutors() }] : []),
         {
           name: 'guardian',
           label: 'Penjaga',
@@ -1469,7 +1641,12 @@ export function App({
         },
         { name: 'end_date', label: 'Sehingga tarikh', type: 'date', value: '2027-12-31' },
       ],
-      extra: <WeeklySlots />,
+      extra: (
+        <>
+          <WeeklySlots />
+          <FlexibleField />
+        </>
+      ),
       transform: (v) => ({
         student_name: v.student_name,
         program_id: v.program_id,
@@ -1478,6 +1655,8 @@ export function App({
         start_date: v.start_date,
         guardian_name: v.guardian_name || '',
         guardian_phone: joinPhone(v.guardian_cc, v.guardian_phone) ?? '',
+        tutor_id: academic ? v.tutor_id : null,
+        flexible: v.flexible === 'on',
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],
@@ -1509,6 +1688,124 @@ export function App({
       ],
       transform: (v) => ({ ...v, student_id: studentId }),
     });
+  // Kadar khas kelas yang berkuat kuasa hari ini (terkini dengan tarikh mula <= hari ini).
+  const latestRate = (rows: Row[]) => {
+    const today = klDate(new Date().toISOString());
+    return rows
+      .filter((r) => String(r.effective_from) <= today)
+      .sort(
+        (a, b) =>
+          String(b.effective_from).localeCompare(String(a.effective_from)) ||
+          String(b.created_at || '').localeCompare(String(a.created_at || '')),
+      )[0];
+  };
+  const classRates = (cid: unknown) =>
+    latestRate(all('class_rate_overrides').filter((r) => r.class_id === cid)) as
+      { fee_sen?: number | null; allowance_sen?: number | null } | undefined;
+  const tutorRate = (tid: unknown) =>
+    latestRate(all('tutor_rate_overrides').filter((r) => r.staff_id === tid));
+  // Admin: pindah kelas kepada tutor lain mulai tarikh dipilih.
+  const transferClass = (classId: unknown, program: string, currentTutor: string) =>
+    setDialog({
+      title: `Pindah tutor · ${program}`,
+      operation: 'transfer_class',
+      fields: [
+        {
+          name: 'new_tutor',
+          label: 'Tutor baharu',
+          options: activeTutors().filter(([id]) => id !== currentTutor),
+        },
+        {
+          name: 'effective_from',
+          label: 'Berkuat kuasa mulai',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+      ],
+      extra: (
+        <p className="schedule-note">
+          Sesi yang sudah direkod kekal pada tutor asal. Sesi berjadual yang belum direkod mulai
+          tarikh ini dipindah kepada tutor baharu.
+        </p>
+      ),
+      transform: (v) => ({
+        cid: classId,
+        new_tutor: v.new_tutor,
+        effective_from: v.effective_from,
+      }),
+    });
+  // Ringgit pilihan → sen (kosong = kadar standard).
+  const optionalSen = (value: string) => (value.trim() ? integerSen(value.trim()) : null);
+  // Admin: yuran dan elaun khas setiap sesi bagi satu kelas.
+  const classRateForm = (classId: unknown, program: string) => {
+    const current = classRates(classId);
+    const ringgit = (sen: unknown) =>
+      sen === null || sen === undefined ? '' : (Number(sen) / 100).toFixed(2);
+    setDialog({
+      title: `Kadar khas · ${program}`,
+      operation: 'class_rates',
+      fields: [
+        {
+          name: 'fee',
+          label: 'Yuran setiap sesi (RM)',
+          optional: true,
+          placeholder: 'Kosongkan → kadar standard',
+          value: ringgit(current?.fee_sen),
+        },
+        {
+          name: 'allowance',
+          label: 'Elaun tutor setiap sesi (RM)',
+          optional: true,
+          placeholder: 'Kosongkan → kadar standard',
+          value: ringgit(current?.allowance_sen),
+        },
+        {
+          name: 'effective_from',
+          label: 'Berkuat kuasa mulai',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+      ],
+      transform: (v) => ({
+        cid: classId,
+        fee_sen: optionalSen(v.fee || ''),
+        allowance_sen: optionalSen(v.allowance || ''),
+        effective_from: v.effective_from,
+      }),
+    });
+  };
+  // Admin: tambahan/potongan elaun setiap sesi bagi seorang tutor (nilai negatif = potongan).
+  const tutorRateForm = (tid: string) => {
+    const current = tutorRate(tid);
+    setDialog({
+      title: `Elaun khas tutor · ${lookup('staff_profiles', tid, 'display_name')}`,
+      operation: 'tutor_rate',
+      fields: [
+        {
+          name: 'adjustment',
+          label: 'Tambahan/potongan setiap sesi (RM, boleh negatif)',
+          pattern: '-?\\d+(\\.\\d{1,2})?',
+          placeholder: 'cth. 2.00 atau -1.50',
+          value: current ? (Number(current.adjustment_sen) / 100).toFixed(2) : '',
+        },
+        {
+          name: 'effective_from',
+          label: 'Berkuat kuasa mulai',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+      ],
+      transform: (v) => {
+        const raw = v.adjustment.trim();
+        const sign = raw.startsWith('-') ? -1 : 1;
+        return {
+          staff_id: tid,
+          adjustment_sen: sign * integerSen(raw.replace(/^[-+]/, '')),
+          effective_from: v.effective_from,
+        };
+      },
+    });
+  };
   // Program aktif murid dan tutornya (kelas individu disembunyikan daripada pengguna).
   const programsOf = (studentId: unknown) =>
     all('enrollments')
@@ -1532,11 +1829,17 @@ export function App({
               ((Number(a.day_of_week) + 6) % 7) - ((Number(b.day_of_week) + 6) % 7) ||
               String(a.start_time).localeCompare(String(b.start_time)),
           );
+        const rates = classRates(e.class_id);
         return {
           id: String(e.id),
           classId: e.class_id,
           program,
           tutor: tutorName === '—' ? '' : tutorName,
+          tutorId: t ? String(t.staff_id) : '',
+          // Lajur `flexible` dibaca secara defensif (mungkin belum ada dalam data lama).
+          flexible: !!c?.flexible,
+          feeSen: rates?.fee_sen ?? null,
+          allowanceSen: rates?.allowance_sen ?? null,
           status: e.status,
           slots: rules.map(
             (r) => `${dayNames[Number(r.day_of_week)]} ${String(r.start_time).slice(0, 5)}`,
@@ -1706,6 +2009,8 @@ export function App({
   const openStudentSession = async (cid: unknown) => {
     const found = bestSession(cid);
     if (found) return go(`sessions/${found.id}`);
+    // Jadual fleksibel: tiada sesi dijana — tutor memilih tarikh sebenar kelas.
+    if (all('classes').find((c) => c.id === cid)?.flexible) return addSessionFor(cid);
     const start = new Date(Math.floor(Date.now() / 300000) * 300000).toISOString();
     const minutes = Number(
       all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
@@ -1731,18 +2036,28 @@ export function App({
       left: inMonth.filter((s) => s.status !== 'completed').length,
     };
   };
-  // Tambah rekod sesi terus dari skrin rekod: tarikh & jam lalai sekarang, boleh backdated.
+  // Tambah rekod sesi terus dari skrin rekod: tarikh lalai hari ini, boleh backdated. Jam diisi
+  // daripada masa pilihan kelas (slot hari ini jika ada, jika tidak slot pertama), atau jam sekarang.
   const addSessionFor = (cid: unknown) => {
     const now = new Date();
     const date = klDate(now.toISOString());
-    const time = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(now);
+    const rules = all('class_schedules').filter(
+      (r) => r.class_id === cid && (!r.effective_to || String(r.effective_to) >= date),
+    );
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    const preferred = rules.find((r) => Number(r.day_of_week) === weekday) || rules[0];
+    const time = preferred
+      ? String(preferred.start_time).slice(0, 5)
+      : new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Kuala_Lumpur',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(now);
     const minutes = String(
-      all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
+      preferred?.duration_minutes ||
+        all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes ||
+        30,
     );
     setDialog({
       title: 'Tambah rekod sesi',
@@ -1807,7 +2122,11 @@ export function App({
         )}
         <Card
           title="Kelas telah dilaksanakan"
-          subtitle={`Bulan ${month}: ${counts.done} selesai · ${counts.left} sesi berbaki`}
+          subtitle={
+            all('classes').find((c) => c.id === current.class_id)?.flexible
+              ? `Bulan ${month}: ${counts.done} kelas direkod · jadual fleksibel`
+              : `Bulan ${month}: ${counts.done} selesai · ${counts.left} sesi berbaki`
+          }
         >
           <Table
             headers={['Tarikh', 'Masa', 'Kehadiran', '']}
@@ -2187,18 +2506,29 @@ export function App({
                   <header className="program-head">
                     <div>
                       <h3>{p.program}</h3>
-                      {p.tutor && (
-                        <span className="tutor-chip">
-                          <GraduationCap size={14} aria-hidden="true" />
-                          {p.tutor}
-                        </span>
-                      )}
+                      <div className="program-tags">
+                        {p.tutor && (
+                          <span className="tutor-chip">
+                            <GraduationCap size={14} aria-hidden="true" />
+                            {p.tutor}
+                          </span>
+                        )}
+                        {p.flexible && <span className="tag warn">Jadual fleksibel</span>}
+                        {p.feeSen !== null && (
+                          <span className="tag ok">Yuran khas {formatMoney(Number(p.feeSen))}</span>
+                        )}
+                        {p.allowanceSen !== null && (
+                          <span className="tag ok">
+                            Elaun khas {formatMoney(Number(p.allowanceSen))}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <Badge value={p.status} />
                   </header>
                   <dl className="program-stats">
                     <div className="wide">
-                      <dt>Hari & jam</dt>
+                      <dt>{p.flexible ? 'Masa pilihan' : 'Hari & jam'}</dt>
                       <dd className="slot-chips">
                         {p.slots.length
                           ? p.slots.map((slot) => (
@@ -2224,23 +2554,51 @@ export function App({
                   </dl>
                   <footer className="program-foot">
                     <div className="month-progress">
-                      <span>
-                        {monthLabel(month)} · <strong>{counts.done} selesai</strong> · {counts.left}{' '}
-                        berbaki
-                      </span>
-                      <span className="progress-track" aria-hidden="true">
-                        <i style={{ width: `${total ? (counts.done / total) * 100 : 0}%` }} />
-                      </span>
+                      {p.flexible ? (
+                        <span>
+                          {monthLabel(month)} · <strong>{counts.done} kelas direkod</strong>
+                        </span>
+                      ) : (
+                        <>
+                          <span>
+                            {monthLabel(month)} · <strong>{counts.done} selesai</strong> ·{' '}
+                            {counts.left} berbaki
+                          </span>
+                          <span className="progress-track" aria-hidden="true">
+                            <i style={{ width: `${total ? (counts.done / total) * 100 : 0}%` }} />
+                          </span>
+                        </>
+                      )}
                     </div>
-                    {(academic || role === 'tutor') && p.status === 'active' && (
-                      <button
-                        className="schedule-button"
-                        onClick={() => editSchedule(p.classId, p.program)}
-                      >
-                        <CalendarDays size={15} />
-                        Ubah jadual
-                      </button>
-                    )}
+                    <div className="button-row compact">
+                      {(academic || role === 'tutor') && p.status === 'active' && (
+                        <button
+                          className="schedule-button"
+                          onClick={() => editSchedule(p.classId, p.program)}
+                        >
+                          <CalendarDays size={15} />
+                          Ubah jadual
+                        </button>
+                      )}
+                      {academic && p.status === 'active' && (
+                        <button
+                          className="schedule-button"
+                          onClick={() => transferClass(p.classId, p.program, p.tutorId)}
+                        >
+                          <GraduationCap size={15} />
+                          Pindah tutor
+                        </button>
+                      )}
+                      {academic && p.status === 'active' && (
+                        <button
+                          className="schedule-button"
+                          onClick={() => classRateForm(p.classId, p.program)}
+                        >
+                          <Wallet size={15} />
+                          Kadar khas
+                        </button>
+                      )}
+                    </div>
                   </footer>
                 </article>
               );
@@ -2279,7 +2637,7 @@ export function App({
                       {g ? 'Kemaskini penjaga' : 'Isi penjaga'}
                     </button>
                   )}
-                  {role === 'tutor' && !!g?.phone && (
+                  {(role === 'tutor' || academic) && !!g?.phone && (
                     <button onClick={() => createStudent(String(g.id))}>
                       <Plus size={15} />
                       Daftar adik-beradik
@@ -2340,7 +2698,7 @@ export function App({
         title="Direktori murid"
 
         action={
-          role === 'tutor' && (
+          (role === 'tutor' || academic) && (
             <button className="primary" onClick={() => createStudent()}>
               <Plus size={16} />
               Daftar murid
@@ -2555,8 +2913,10 @@ export function App({
                   <span>
                     <strong>{lookup('students', e.student_id)}</strong>
                     <small>
-                      {lookup('programs', c?.program_id, 'name')} · Selesai{' '}
-                      {classCounts(e.class_id).done} · Berbaki {classCounts(e.class_id).left}
+                      {lookup('programs', c?.program_id, 'name')} ·{' '}
+                      {c?.flexible
+                        ? `Jadual fleksibel · ${classCounts(e.class_id).done} kelas direkod`
+                        : `Selesai ${classCounts(e.class_id).done} · Berbaki ${classCounts(e.class_id).left}`}
                     </small>
                   </span>
                   <ChevronRight size={18} />
@@ -3639,6 +3999,26 @@ export function App({
                     </span>
                     {tutorPayStatus(allowanceTab)}
                   </div>
+                  {/* Elaun khas tutor: tambahan/potongan setiap sesi atas kadar standard. */}
+                  <div className="pay-row tutor-rate-row">
+                    <span>
+                      Elaun khas tutor:{' '}
+                      <strong>
+                        {(() => {
+                          const r = tutorRate(allowanceTab);
+                          if (!r || !Number(r.adjustment_sen)) return 'Tiada (kadar standard)';
+                          const sen = Number(r.adjustment_sen);
+                          return `${sen > 0 ? '+' : '−'}${formatMoney(Math.abs(sen))} setiap sesi mulai ${dateLabel(String(r.effective_from))}`;
+                        })()}
+                      </strong>
+                    </span>
+                    {finance && (
+                      <button onClick={() => tutorRateForm(allowanceTab)}>
+                        <Pencil size={15} />
+                        Elaun khas tutor
+                      </button>
+                    )}
+                  </div>
                   {tutorPaymentHistory(allowanceTab)}
                   <Table
                     headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
@@ -4495,6 +4875,7 @@ export function App({
                     onData={setData}
                     busy={busy}
                     onGenerate={() => void mutate('month_package', { billing_period: month })}
+                    onGenerateFamilies={generateFamilies}
                   />
                 </>
               )}
@@ -4606,7 +4987,12 @@ export function App({
                 f.type === 'whatsapp' ? (
                   <PhoneField key={f.name} label={f.label} initial={f.value} />
                 ) : f.type === 'guardian' ? (
-                  <GuardianField key={f.name} choices={f.choices || []} initialId={f.value} />
+                  <GuardianField
+                    key={f.name}
+                    choices={f.choices || []}
+                    initialId={f.value}
+                    tutorView={role === 'tutor'}
+                  />
                 ) : f.type === 'textarea' ? (
                   <label key={f.name}>
                     {f.label}

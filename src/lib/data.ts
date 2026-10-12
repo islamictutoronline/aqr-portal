@@ -21,7 +21,7 @@ export const projections: Record<string, string> = {
   subjects: 'id,slug,name',
   programs: 'id,subject_id,code,name,curriculum_version',
   curriculum_units: 'id,program_id,code,name,outcome,sort_order',
-  classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active',
+  classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible',
   class_tutors: 'id,class_id,staff_id,starts_on,ends_on',
   class_schedules:
     'id,class_id,day_of_week,start_time,duration_minutes,effective_from,effective_to',

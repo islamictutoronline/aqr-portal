@@ -1,6 +1,15 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Download, FileText, MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
+import {
+  Download,
+  FileArchive,
+  FileText,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 import { Dataset, fileName, formatMoney, monthLabel } from '@/lib/core';
 import { apiFetch, downloadBlob } from '@/lib/transport';
 import {
@@ -21,6 +30,9 @@ type Props = {
   onData: (data: Dataset) => void;
   // Jana draf laporan semua murid + invois ikut sesi bagi bulan ini (satu butang).
   onGenerate?: () => void;
+  // Jana laporan (buka semula jika perlu, sediakan, luluskan) + invois bagi murid dipilih;
+  // memulangkan data terkini (atau null jika gagal).
+  onGenerateFamilies?: (studentIds: string[]) => Promise<Dataset | null>;
   busy?: boolean;
 };
 
@@ -40,7 +52,15 @@ const canShareFiles = () => {
 };
 
 // Admin: satu pakej setiap penjaga (laporan semua anak + invois) dihantar sekali melalui WhatsApp.
-export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: saving }: Props) {
+export function GuardianDelivery({
+  data,
+  month,
+  demo,
+  onData,
+  onGenerate,
+  onGenerateFamilies,
+  busy: saving,
+}: Props) {
   const families = useMemo(() => familyBundles(data, month), [data, month]);
   // Satu PDF gabungan setiap keluarga: laporan semua anak diikuti invois.
   const [files, setFiles] = useState<Record<string, File>>({});
@@ -50,22 +70,86 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
     [filter, setFilter] = useState<'all' | 'ready' | 'missing' | 'sent'>('all');
   const shareable = useMemo(canShareFiles, []);
 
+  // Bina PDF gabungan satu keluarga daripada data dipilih (data terkini selepas penjanaan).
+  async function build(f: Family, source: Dataset = data) {
+    const { reportPdf, financialPdf, mergePdfs } = await import('@/lib/student-reports');
+    const parts: Uint8Array[] = [];
+    for (const r of f.reports.filter((x) => x.status === 'approved'))
+      parts.push(await reportPdf(r.snapshot as StudentSnapshot, true, demo));
+    if (f.invoice)
+      parts.push(await financialPdf(f.invoice, 'invoice', demo, invoiceDetails(source, f.invoice)));
+    if (!parts.length) throw new Error('Tiada laporan diluluskan atau invois');
+    const name = fileName(['Laporan & Invois', f.guardian.full_name, monthLabel(month)], 'pdf');
+    const merged = await mergePdfs(parts, name.replace(/\.pdf$/, ''));
+    return new File([merged], name, { type: 'application/pdf' });
+  }
   async function prepare(f: Family) {
     const gid = String(f.guardian.id);
     setBusy(gid);
     setMessage('');
     try {
-      const { reportPdf, financialPdf, mergePdfs } = await import('@/lib/student-reports');
-      const parts: Uint8Array[] = [];
-      for (const r of f.reports.filter((x) => x.status === 'approved'))
-        parts.push(await reportPdf(r.snapshot as StudentSnapshot, true, demo));
-      if (f.invoice)
-        parts.push(await financialPdf(f.invoice, 'invoice', demo, invoiceDetails(data, f.invoice)));
-      const name = fileName(['Laporan & Invois', f.guardian.full_name, monthLabel(month)], 'pdf');
-      const merged = await mergePdfs(parts, name.replace(/\.pdf$/, ''));
-      setFiles((x) => ({ ...x, [gid]: new File([merged], name, { type: 'application/pdf' }) }));
+      const file = await build(f);
+      setFiles((x) => ({ ...x, [gid]: file }));
     } catch {
       setMessage('PDF gagal disediakan. Cuba lagi.');
+    } finally {
+      setBusy('');
+    }
+  }
+  // Jana laporan + invois bagi keluarga dipilih, kemudian sediakan PDF gabungan setiap keluarga.
+  async function generate(key: string, list: Family[]) {
+    if (!onGenerateFamilies) return;
+    setBusy(key);
+    setMessage('');
+    try {
+      const ids = [...new Set(list.flatMap((f) => f.children.map((c) => String(c.id))))];
+      const next = await onGenerateFamilies(ids);
+      if (!next) throw new Error('Penjanaan laporan + invois gagal. Semak makluman di atas.');
+      const fresh = familyBundles(next, month);
+      const built: Record<string, File> = {};
+      for (const f of list) {
+        const nf = fresh.find((x) => x.guardian.id === f.guardian.id);
+        if (nf) built[String(f.guardian.id)] = await build(nf, next);
+      }
+      setFiles((x) => ({ ...x, ...built }));
+      setMessage(
+        list.length === 1
+          ? `Laporan diluluskan, invois dijana dan PDF ${String(list[0].guardian.full_name)} sedia.`
+          : `${Object.keys(built).length} PDF keluarga sedia (laporan diluluskan + invois).`,
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'PDF gagal disediakan. Cuba lagi.');
+    } finally {
+      setBusy('');
+    }
+  }
+  // Satu ZIP: PDF gabungan setiap keluarga yang lengkap dalam kumpulan tutor.
+  async function zipGroup(name: string, list: Family[]) {
+    setBusy(`zip-${name}`);
+    setMessage('');
+    try {
+      const ready = list.filter((f) => !f.missing.length);
+      if (!ready.length) throw new Error('Tiada keluarga yang lengkap untuk dimuat turun.');
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const used = new Set<string>();
+      const built: Record<string, File> = {};
+      for (const f of ready) {
+        const gid = String(f.guardian.id);
+        const file = files[gid] || (built[gid] = await build(f));
+        let entry = file.name;
+        for (let n = 2; used.has(entry); n++) entry = file.name.replace(/\.pdf$/, ` (${n}).pdf`);
+        used.add(entry);
+        zip.file(entry, new Uint8Array(await file.arrayBuffer()));
+      }
+      setFiles((x) => ({ ...x, ...built }));
+      downloadBlob(
+        await zip.generateAsync({ type: 'blob' }),
+        fileName(['Laporan & Invois', name, monthLabel(month)], 'zip'),
+      );
+      setMessage(`ZIP mengandungi ${ready.length} PDF keluarga yang lengkap.`);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'ZIP gagal disediakan. Cuba lagi.');
     } finally {
       setBusy('');
     }
@@ -143,6 +227,9 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
     (f) => familyMatches(f, query) && (filter === 'all' || stateOf(f) === filter),
   );
   const groups = familiesByTutor(data, visibleFamilies);
+  // Tindakan kumpulan meliputi semua keluarga tutor itu, walaupun carian/tapisan sedang aktif.
+  const tutorFamilies = useMemo(() => familiesByTutor(data, families), [data, families]);
+  const familiesOf = (id: string) => tutorFamilies.find((x) => x.id === id)?.families || [];
   const searching = !!query.trim() || filter !== 'all';
   const statusTag = {
     ready: ['ready', 'Sedia dihantar'],
@@ -198,6 +285,17 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
         </div>
         <span className={`badge ${tone}`}>{label}</span>
         <div className="family-actions">
+          {!complete && onGenerateFamilies && (
+            <button
+              className="primary"
+              disabled={!!busy || saving}
+              title="Luluskan laporan semua anak (walaupun kehadiran belum lengkap), jana invois dan sediakan PDF"
+              onClick={() => void generate(gid, [f])}
+            >
+              <Sparkles size={15} />
+              {busy === gid ? 'Menjana…' : 'Jana & sediakan PDF'}
+            </button>
+          )}
           {!prepared ? (
             <button
               className="primary"
@@ -333,6 +431,24 @@ export function GuardianDelivery({ data, month, demo, onData, onGenerate, busy: 
                   {st('sent') > 0 && <span className="tag sent">{st('sent')} dihantar</span>}
                 </span>
               </summary>
+              <div className="button-row delivery-group-actions">
+                {onGenerateFamilies && (
+                  <button
+                    disabled={!!busy || saving}
+                    onClick={() => void generate(`group-${g.id}`, familiesOf(g.id))}
+                  >
+                    <Sparkles size={15} />
+                    {busy === `group-${g.id}` ? 'Menjana…' : 'Jana semua (tutor ini)'}
+                  </button>
+                )}
+                <button
+                  disabled={!!busy || !familiesOf(g.id).some((f) => !f.missing.length)}
+                  onClick={() => void zipGroup(g.name, familiesOf(g.id))}
+                >
+                  <FileArchive size={15} />
+                  {busy === `zip-${g.name}` ? 'Menyediakan…' : 'Muat turun semua PDF (ZIP)'}
+                </button>
+              </div>
               <div className="family-rows">{g.families.map(familyRow)}</div>
             </details>
           );

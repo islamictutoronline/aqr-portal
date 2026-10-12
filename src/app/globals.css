@@ -3556,3 +3556,44 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+/* ===== Alat admin: jadual fleksibel, kadar khas, jana sekali gus (13 Okt) ===== */
+.flexible-field {
+  display: grid;
+  gap: 8px;
+}
+.modal .check-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-weight: 600;
+}
+.modal .check-label input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.program-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.program-foot .button-row.compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.delivery-group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.tutor-rate-row {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.tutor-rate-row strong {
+  color: var(--navy);
+}
