@@ -19,6 +19,36 @@ test('static entrance is locked and does not default to an admin demo', async ({
   await expect(page.getByLabel('Pratonton peranan demo')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Daftar murid', exact: true })).toHaveCount(0);
 });
+test('mobile search remains usable and the menu traps and restores keyboard focus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?demo=1#/students');
+  const search = page.getByRole('textbox', { name: 'Cari rekod' });
+  await expect(search).toBeVisible();
+  await search.fill('Murid Contoh 01');
+  await expect(page.locator('table').getByText('Murid Contoh 01', { exact: true })).toBeVisible();
+  await expect(page.locator('table').getByText('Murid Contoh 02', { exact: true })).toHaveCount(0);
+  const toggle = page.getByRole('button', { name: 'Buka menu', exact: true });
+  await toggle.click();
+  const menu = page.getByRole('dialog', { name: 'Menu utama' });
+  const close = menu.getByRole('button', { name: 'Tutup menu', exact: true });
+  await expect(close).toBeFocused();
+  await close.press('Shift+Tab');
+  await expect(menu.locator('nav button').last()).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.sidebar')).toHaveAttribute('inert', '');
+  await toggle.click();
+  await page.getByRole('button', { name: 'Tutup latar menu', exact: true }).click({
+    position: { x: 370, y: 200 },
+  });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+});
 test('all existing modules work as static pages with hash navigation and no local APIs', async ({
   page,
 }) => {
@@ -48,6 +78,18 @@ test('all existing modules work as static pages with hash navigation and no loca
   }
   expect(errors).toEqual([]);
   expect(apis).toEqual([]);
+});
+test('compact phones retain search and keep reports and money summaries inside the viewport', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 850 });
+  for (const screen of ['dashboard', 'students', 'reports', 'finance', 'allowance']) {
+    await page.goto(`/?demo=1#/${screen}`);
+    await expect(page.getByRole('textbox', { name: 'Cari rekod' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+      false,
+    );
+  }
 });
 test('admin approves a report, downloads actual PDF and ZIP, then parent sees only own approved report', async ({
   page,

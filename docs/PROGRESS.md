@@ -2,6 +2,13 @@
 
 Mula: 10 Oktober 2026, Asia/Kuala_Lumpur.
 
+Kemasan paparan — 12 Oktober 2026:
+
+- [x] UI hijau/emas lebih seragam: kad, angka ringkasan, tipografi, tab, butang dan log masuk; ringkasan perhatian pentadbir dalam tiga ruang pada desktop.
+- [x] Carian telefon, menu dengan latar boleh ditutup/Escape, perangkap fokus dan `inert` semasa tertutup; sasaran sentuh butang utama sekurang-kurangnya 44px.
+- [x] Betulkan limpahan ringkasan kewangan, keluarga laporan dan bar navigasi pada telefon 320px. Semakan 7 halaman pada 320/390/768/1440px tanpa limpahan mendatar.
+- [x] Typecheck, lint, build Pages dan Next.js lulus; ujian Pages 56/56, E2E Next.js 8/8. Semakan visual menggunakan fixture rekaan; Parent Portal kekal baca sahaja. Tiada perubahan pangkalan data/cloud atau deploy dalam sesi kemasan ini. Amaran saiz chunk Vite sedia ada masih muncul.
+
 - [x] Periksa bahan rujukan: folder asal tiada kod, Node 24/npm 11 tersedia.
 - [x] Semak dokumentasi rasmi Next.js, Supabase SSR, RLS dan Storage.
 - [x] Skema berbilang organisasi, RLS, transaksi kewangan dan ujian PostgreSQL.

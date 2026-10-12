@@ -1,6 +1,16 @@
 # Konteks serahan agen — AQR
 
-Kemas kini: 10 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+Kemas kini: 12 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+
+## Kemasan paparan terkini — 12 Oktober 2026
+
+Permintaan pengguna: “cantikkan paparan dan perkemaskan”. Perubahan setempat dalam `src/app/globals.css` dan `src/components/app.tsx`: identiti hijau/emas dikekalkan dengan latar lebih tenang, bayang ringan, kad dan tipografi seragam; menu AQR dengan penanda halaman aktif; penerangan ringkas halaman; carian kini tersedia pada telefon; ringkasan “Perlu perhatian” pentadbir dalam tiga ruang pada desktop; tab, butang penghantaran dan bayaran mempunyai sasaran sentuh sekurang-kurangnya 44px. Pautan demo pada log masuk diasingkan secara visual daripada pendaftaran tutor. Tiada perubahan skema atau pengiraan kewangan.
+
+Menu telefon mempunyai latar yang boleh ditekan untuk menutup, sokongan Escape, perangkap fokus Tab/Shift+Tab dan pemulangan fokus; menu tertutup menggunakan `inert`, dan skrol latar dikunci sementara menu terbuka. Ujian regresi ditambah di `tests/pages/portal.spec.ts` untuk carian/menu dan paparan 320px. Parent Portal kekal baca sahaja dengan skop akses asal.
+
+Bukti akhir setempat: `npm run typecheck`, `npm run lint`, `npm run build:pages`, `npm run build` lulus; `npm run test:pages` **56/56**, `npm run test:e2e` **8/8**. Semakan pelayar tambahan merangkumi 7 halaman × lebar 320/390/768/1440px tanpa limpahan mendatar; tangkapan skrin dashboard, direktori murid, laporan dan log masuk diperiksa secara visual, serta pratonton tutor/penjaga diperiksa. Binaan Vite masih memberi amaran saiz chunk yang sedia ada. Tiada deploy, perubahan data cloud, reset atau ujian integrasi Supabase sebenar dalam sesi ini. Server pratonton Vite pada `http://127.0.0.1:4173/` (jika sudah berhenti, jalankan `npm run dev:pages`; `?demo=1` menggunakan fixture rekaan dalam pembangunan sahaja).
+
+Bahagian terdahulu di bawah ialah sejarah pelaksanaan; kenyataan cloud lama mesti dibaca bersama catatan bertarikh terkini.
 
 ## Permintaan pengguna dan titik sambung
 

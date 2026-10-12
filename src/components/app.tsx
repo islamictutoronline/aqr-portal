@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   apiFetch,
   navigatePath,
@@ -357,14 +357,16 @@ function Card({
   subtitle,
   children,
   action,
+  className = '',
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="card">
+    <section className={`card ${className}`}>
       <div className="card-heading">
         <div>
           <h2>{title}</h2>
@@ -432,6 +434,50 @@ export function App({
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [mobileNavigation, setMobileNavigation] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const changed = () => {
+      setMobileNavigation(media.matches);
+      setDrawer(false);
+    };
+    changed();
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, []);
+  useEffect(() => {
+    if (!drawer || !mobileNavigation) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const controls = () =>
+      Array.from(sidebarRef.current?.querySelectorAll<HTMLButtonElement>('button') || []);
+    controls()[0]?.focus();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setDrawer(false);
+      } else if (event.key === 'Tab') {
+        const items = controls();
+        const first = items[0];
+        const last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('keydown', close);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [drawer, mobileNavigation]);
   const [selectedSession, setSelectedSession] = useState(
     path.startsWith('sessions/') ? path.split('/')[1] : '',
   );
@@ -1959,43 +2005,51 @@ export function App({
               </div>
             </Card>
           )}
-          <Card title="Perlu perhatian" subtitle="Utamakan tindakan hari ini">
-            <div className="attention">
-              <Clock />
-              <div>
-                <strong>
-                  {formatMoney(allowances.reduce((n, r) => n + r.payable_sen, 0))} elaun tutor
-                </strong>
-                <p>Dikira automatik daripada sesi yang direkod bulan ini.</p>
-              </div>
-            </div>
-            {finance && (
+          <Card
+            title="Perlu perhatian"
+            subtitle="Utamakan tindakan hari ini"
+            className={academic ? 'attention-card' : ''}
+            action={
+              <button
+                className="text-link"
+                onClick={() =>
+                  go(role === 'guardian' ? 'parent' : finance ? 'allowance' : 'calendar')
+                }
+              >
+                Buka ruang kerja <ArrowUpRight size={16} aria-hidden="true" />
+              </button>
+            }
+          >
+            <div className="attention-items">
               <div className="attention">
-                <Wallet />
+                <Clock />
                 <div>
-                  <strong>{formatMoney(invoiceTotals.outstanding)} baki belum bayar</strong>
-                  <p>Bayaran belum disahkan tidak dikira.</p>
+                  <strong>
+                    {formatMoney(allowances.reduce((n, r) => n + r.payable_sen, 0))} elaun tutor
+                  </strong>
+                  <p>Dikira automatik daripada sesi yang direkod bulan ini.</p>
                 </div>
               </div>
-            )}
-            <div className="attention">
-              <FileText />
-              <div>
-                <strong>
-                  {all('generated_parent_comments').filter((c) => c.status === 'draft').length}{' '}
-                  ulasan draf
-                </strong>
-                <p>Hanya ulasan diterbitkan dapat dilihat ibu bapa.</p>
+              {finance && (
+                <div className="attention">
+                  <Wallet />
+                  <div>
+                    <strong>{formatMoney(invoiceTotals.outstanding)} baki belum bayar</strong>
+                    <p>Bayaran belum disahkan tidak dikira.</p>
+                  </div>
+                </div>
+              )}
+              <div className="attention">
+                <FileText />
+                <div>
+                  <strong>
+                    {all('generated_parent_comments').filter((c) => c.status === 'draft').length}{' '}
+                    ulasan draf
+                  </strong>
+                  <p>Hanya ulasan diterbitkan dapat dilihat ibu bapa.</p>
+                </div>
               </div>
             </div>
-            <button
-              className="secondary wide"
-              onClick={() =>
-                go(role === 'guardian' ? 'parent' : finance ? 'allowance' : 'calendar')
-              }
-            >
-              Buka ruang kerja <ArrowUpRight size={16} />
-            </button>
           </Card>
         </div>
         <div className="dashboard-grid">
@@ -4000,7 +4054,23 @@ export function App({
       <a className="skip-link" href="#main">
         Langkau ke kandungan
       </a>
-      <aside className={`sidebar ${drawer ? 'open' : ''}`}>
+      {drawer && (
+        <button
+          className="drawer-backdrop"
+          aria-label="Tutup latar menu"
+          onClick={() => setDrawer(false)}
+          tabIndex={-1}
+        />
+      )}
+      <aside
+        ref={sidebarRef}
+        id="main-navigation"
+        className={`sidebar ${drawer ? 'open' : ''}`}
+        inert={mobileNavigation && !drawer}
+        role={mobileNavigation && drawer ? 'dialog' : undefined}
+        aria-modal={mobileNavigation && drawer ? true : undefined}
+        aria-label="Menu utama"
+      >
         <div className="sidebar-brand">
           {all('organizations')[0]?.logo_url ? (
             <img
@@ -4013,10 +4083,11 @@ export function App({
               <img src={assetUrl('brand/aqr-emblem.png')} alt="" />
             </span>
           )}
-          <span>
-            AKADEMI AL-QURAN
-            <br />
-            AR-RIYADH
+          <span className="sidebar-brand-copy">
+            <strong>
+              AQR<span className="gold">.</span>
+            </strong>
+            <small>Akademi Al-Quran Ar-Riyadh</small>
           </span>
           <button
             className="mobile-only icon-button"
@@ -4026,16 +4097,18 @@ export function App({
             <X />
           </button>
         </div>
+        <p className="nav-caption">RUANG ANDA</p>
         <nav aria-label="Navigasi utama">
           {groups.map(({ id, label, Icon, members }) => (
             <button
               key={id}
               className={group?.id === id ? 'active' : ''}
+              aria-current={group?.id === id ? 'page' : undefined}
               onClick={() => go(members[0])}
             >
-              <Icon size={19} />
+              <Icon size={19} aria-hidden="true" />
               <span>{label}</span>
-              {group?.id === id && <span className="active-dot" />}
+              {group?.id === id && <span className="active-dot" aria-hidden="true" />}
             </button>
           ))}
         </nav>
@@ -4055,7 +4128,10 @@ export function App({
           <div className="breadcrumb">
             <button
               className="mobile-only icon-button"
+              id="menu-toggle"
               aria-label="Buka menu"
+              aria-controls="main-navigation"
+              aria-expanded={drawer}
               onClick={() => setDrawer(true)}
             >
               <Menu />
@@ -4065,6 +4141,12 @@ export function App({
             <strong>{title}</strong>
           </div>
           <div className="topbar-controls">
+            {!demo && (
+              <span className="workspace-role">
+                <ShieldCheck size={16} aria-hidden="true" />
+                {roleLabels[role]}
+              </span>
+            )}
             {demo && (
               <label className="role-select">
                 <span className="sr-only">Pratonton peranan demo</span>
@@ -4102,6 +4184,23 @@ export function App({
           <div className="page-tools">
             <div>
               <h2>{group && group.members.length > 1 ? group.label : title}</h2>
+              <p className="page-description">
+                {section === 'dashboard'
+                  ? 'Ringkasan akademi, dalam satu pandangan.'
+                  : section === 'parent'
+                    ? 'Ikuti kehadiran dan perkembangan anak anda.'
+                    : section === 'students' || section === 'guardians' || section === 'classes'
+                      ? 'Maklumat murid, penjaga dan pembelajaran.'
+                      : section === 'calendar' || section === 'sessions'
+                        ? 'Jadual kelas dan rekod pembelajaran.'
+                        : section === 'reports'
+                          ? 'Laporan dan rumusan pembelajaran bulanan.'
+                          : section === 'finance' || section === 'allowance'
+                            ? 'Semak rekod dan status bayaran bulan ini.'
+                            : section === 'tutors'
+                              ? 'Maklumat dan pengurusan tutor akademi.'
+                              : 'Urus akaun dan pilihan akademi.'}
+              </p>
               {group && group.members.length > 1 && (
                 <div className="subtabs" role="tablist" aria-label={group.label}>
                   {group.members.map((m) => (
@@ -4120,7 +4219,7 @@ export function App({
             </div>
             <div className="filters">
               <label className="search">
-                <Search size={16} />
+                <Search size={16} aria-hidden="true" />
                 <input
                   aria-label="Cari rekod"
                   placeholder="Cari rekod…"
@@ -4129,7 +4228,7 @@ export function App({
                 />
               </label>
               <label className="month-filter">
-                <CalendarDays size={16} />
+                <CalendarDays size={16} aria-hidden="true" />
                 <input
                   aria-label="Bulan laporan"
                   type="month"
