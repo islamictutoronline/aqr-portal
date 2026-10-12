@@ -29,6 +29,45 @@ export type Report = {
 // Elaun automatik (keputusan pengguna Okt 2026): tiada semakan manual. Sesi selesai dibayar
 // sekali mengikut kadar program + tempoh pada tarikh sesi. Hadir, Lewat, Ganti dan Tidak hadir
 // dibayar; Cuti bermaklum tidak dibayar. Sesi tanpa kadar dipaparkan dengan rate_sen null.
+// Kadar khas (migrasi 38). Baris sejarah dengan effective_from terbesar <= tarikh sesi (KL)
+// terpakai; seri dipecahkan oleh created_at terkini. Medan null = guna kadar standard.
+function latestEffective(rows: Row[], day: string) {
+  return rows
+    .filter((r) => String(r.effective_from) <= day)
+    .sort(
+      (a, b) =>
+        String(b.effective_from).localeCompare(String(a.effective_from)) ||
+        String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')),
+    )[0];
+}
+export function classRateOverride(data: Dataset, classId: unknown, day: string) {
+  const row = latestEffective(
+    (data.class_rate_overrides ?? []).filter((r) => r.class_id === classId),
+    day,
+  );
+  const sen = (v: unknown) => (v == null || v === '' ? null : Number(v));
+  return { fee_sen: sen(row?.fee_sen), allowance_sen: sen(row?.allowance_sen) };
+}
+export function tutorRateAdjustment(data: Dataset, staffId: unknown, day: string) {
+  const row = latestEffective(
+    (data.tutor_rate_overrides ?? []).filter((r) => r.staff_id === staffId),
+    day,
+  );
+  return row ? Number(row.adjustment_sen) || 0 : 0;
+}
+// Elaun sesi: kadar kelas khas jika ada; jika tidak, kadar standard + pelarasan tutor (minimum 0).
+export function effectiveAllowance(
+  data: Dataset,
+  standard: number | null,
+  classId: unknown,
+  staffId: unknown,
+  day: string,
+) {
+  const override = classRateOverride(data, classId, day).allowance_sen;
+  if (override != null) return override;
+  if (standard == null) return null;
+  return Math.max(0, standard + tutorRateAdjustment(data, staffId, day));
+}
 export const PAYABLE_ATTENDANCE = ['present', 'late', 'makeup', 'absent'];
 export type AllowanceRow = {
   session: Row;
@@ -58,14 +97,14 @@ export function allowanceRows(data: Dataset, month: string): AllowanceRow[] {
         (new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000;
       const marks = all('attendance').filter((a) => a.session_id === s.id);
       const paid = marks.some((a) => PAYABLE_ATTENDANCE.includes(String(a.status)));
-      let rate: number | null = null;
+      const day = klDay(String(s.starts_at));
+      let standard: number | null = null;
       try {
-        rate = Number(
-          findRate(rates, String(program?.code), minutes, klDay(String(s.starts_at))).amount_sen,
-        );
+        standard = Number(findRate(rates, String(program?.code), minutes, day).amount_sen);
       } catch {
-        rate = null;
+        standard = null;
       }
+      const rate = effectiveAllowance(data, standard, s.class_id, s.tutor_id, day);
       return {
         session: s,
         tutorId: String(s.tutor_id),
@@ -126,14 +165,17 @@ export function feeRows(data: Dataset, month: string): FeeRow[] {
         String(r.effective_from) <= day &&
         (!r.effective_to || String(r.effective_to) >= day),
     );
-    const key = `${a.student_id}|${program?.id}|${minutes}`;
+    // Kadar kelas khas mengatasi kadar program (juga apabila tiada kadar standard).
+    const fee =
+      classRateOverride(data, s.class_id, day).fee_sen ?? (rate ? Number(rate.amount_sen) : null);
+    const key = `${a.student_id}|${program?.id}|${minutes}|${fee}`;
     const row = groups.get(key) || {
       studentId: String(a.student_id),
       student: String(all('students').find((x) => x.id === a.student_id)?.full_name || '—'),
       program: String(program?.name || '—'),
       minutes,
       sessions: 0,
-      rate_sen: rate ? Number(rate.amount_sen) : null,
+      rate_sen: fee,
       total_sen: 0,
       guardianId:
         String(

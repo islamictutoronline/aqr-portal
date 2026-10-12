@@ -322,6 +322,8 @@ export function demoData(): Dataset {
     private_import_rows: [],
     tutor_month_payments: [],
     monthly_tutor_remarks: [],
+    class_rate_overrides: [],
+    tutor_rate_overrides: [],
   };
 }
 export function scopeDemo(
@@ -408,6 +410,13 @@ export function scopeDemo(
     role === 'tutor'
       ? (data.monthly_tutor_remarks || []).filter((r) => studentIds.includes(r.student_id))
       : [];
+  // Kadar khas: tutor melihat kadar kelasnya dan pelarasan dirinya sahaja; penjaga tiada.
+  result.class_rate_overrides =
+    role === 'tutor'
+      ? (data.class_rate_overrides || []).filter((r) => classIds.includes(r.class_id))
+      : [];
+  result.tutor_rate_overrides =
+    role === 'tutor' ? (data.tutor_rate_overrides || []).filter((r) => r.staff_id === tutor) : [];
   result.tutor_applications = [];
   result.audit_events = [];
   result.private_import_rows = [];

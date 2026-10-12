@@ -247,6 +247,8 @@ test('admin views sessions per tutor tab and automatic allowance without approva
 }) => {
   await page.goto('/?demo=1#/calendar');
   await expect(page.getByRole('heading', { name: 'Sesi hari ini' })).toBeVisible();
+  // Tab Hari ini hanya menyenaraikan tutor yang ada sesi hari ini; semua tutor ada di tab lain.
+  await page.getByRole('tab', { name: 'Semua murid' }).click();
   await page.getByRole('tab', { name: 'Tutor Contoh 1' }).click();
   await expect(page.getByRole('heading', { name: 'Tutor Contoh 1' })).toBeVisible();
   await expect(page.locator('td[data-label="Elaun"]').first()).toBeVisible();
@@ -267,14 +269,16 @@ test('admin views sessions per tutor tab and automatic allowance without approva
   await expect(page.locator('.tab-total')).toContainText('RM');
   await expect(page.locator('td[data-label="Kehadiran"]').first()).toBeVisible();
 });
-test('admin dashboard hides the learning sessions list; tutor still sees it', async ({ page }) => {
+test('admin and tutor dashboards hide the learning sessions list', async ({ page }) => {
   await page.goto('/?demo=1#/dashboard');
   await expect(page.getByRole('heading', { name: 'Perlu perhatian' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toHaveCount(0);
   const tile = page.locator('.metric').filter({ hasText: 'Tutor aktif' });
   await expect(tile).toContainText('3');
   await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
-  await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Perlu perhatian' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesi pembelajaran' })).toHaveCount(0);
+  await expect(page.getByText('Jadual dan tindakan tutor')).toHaveCount(0);
   await expect(page.locator('.metric').filter({ hasText: 'Tutor aktif' })).toHaveCount(0);
 });
 test('tutor edits a recorded attendance, sees remaining sessions and voids a class', async ({
@@ -750,4 +754,115 @@ test('tutor writes own summary (rumusan) for a student; admin sees it in the mon
   await expect(card).toContainText('rumusan tutor ✓');
   await card.getByRole('button', { name: 'Lihat laporan' }).click();
   await expect(page.locator('.remark-quote')).toContainText('Fokus bulan depan ialah mad asli.');
+});
+test('finance invoices: search by parent, student, tutor or number in two paid/unpaid columns', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/finance');
+  const due = page.getByRole('region', { name: 'Belum bayar' });
+  const done = page.getByRole('region', { name: 'Sudah bayar' });
+  await expect(due).toContainText('DEMO-001');
+  await expect(due).toContainText('DEMO-003');
+  // Draf kekal dalam Belum bayar dengan lencana Draf.
+  await expect(due.getByRole('row').filter({ hasText: 'DEMO-004' })).toContainText('Draf');
+  await expect(done).toContainText('DEMO-002');
+  await expect(done).not.toContainText('DEMO-001');
+  await expect(due).toContainText('3 invois');
+  await expect(done).toContainText('1 invois');
+  // Tindakan per invois dikekalkan.
+  await expect(
+    due.getByRole('row').filter({ hasText: 'DEMO-003' }).getByRole('button', {
+      name: 'Yuran telah dibayar',
+    }),
+  ).toBeVisible();
+  await expect(done.getByRole('link', { name: 'Cetak / PDF' })).toBeVisible();
+  const search = page.getByRole('searchbox', { name: 'Cari invois' });
+  await search.fill('Murid Contoh 03');
+  await expect(due).toContainText('DEMO-003');
+  await expect(due).not.toContainText('DEMO-001');
+  await expect(done).toContainText('Tiada padanan.');
+  await search.fill('penjaga contoh 2');
+  await expect(done).toContainText('DEMO-002');
+  await expect(due).not.toContainText('DEMO-');
+  await search.fill('Tutor Contoh 3');
+  await expect(due).toContainText('DEMO-003');
+  await expect(done).toContainText('DEMO-002');
+  await expect(due).not.toContainText('DEMO-001');
+  await search.fill('demo-004');
+  await expect(due).toContainText('DEMO-004');
+  await expect(due).not.toContainText('DEMO-003');
+  // Bayar: invois berpindah ke lajur Sudah bayar.
+  await search.fill('');
+  await due
+    .getByRole('row')
+    .filter({ hasText: 'DEMO-003' })
+    .getByRole('button', { name: 'Yuran telah dibayar' })
+    .click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(done).toContainText('DEMO-003');
+  await expect(due).not.toContainText('DEMO-003');
+  if ((page.viewportSize()?.width || 0) <= 760) {
+    const [a, b] = [await due.boundingBox(), await done.boundingBox()];
+    expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1);
+  } else {
+    const [a, b] = [await due.boundingBox(), await done.boundingBox()];
+    expect(Math.abs(a!.y - b!.y)).toBeLessThan(2);
+    expect(b!.x).toBeGreaterThan(a!.x);
+  }
+});
+test('tutor allowance: unpaid and paid tutors in two columns; paying moves the tutor across', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/allowance');
+  const unpaid = page.getByRole('region', { name: 'Belum dibayar' });
+  const paid = page.getByRole('region', { name: 'Sudah dibayar' });
+  await expect(unpaid).toContainText('Tutor Contoh 1');
+  await expect(paid).toContainText('Belum ada elaun dibayar bulan ini.');
+  await expect(unpaid).toContainText(/\d tutor · baki RM/);
+  const row = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  await row.getByRole('button', { name: 'Elaun telah dibayar' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  const moved = paid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  await expect(moved).toContainText('Dibayar ·');
+  await expect(unpaid).not.toContainText('Tutor Contoh 1');
+  await expect(paid).toContainText('1 tutor');
+  await moved.getByRole('button', { name: /Butiran/ }).click();
+  await expect(page.locator('.tab-total')).toContainText('RM');
+});
+test('admin Hari ini lists only tutors with a session today (KL date)', async ({ page }) => {
+  // Tarikh tetap tanpa sesi demo; tutor 1 menambah satu sesi hari ini.
+  await page.clock.setFixedTime(new Date('2026-10-13T09:00:00+08:00'));
+  await page.goto('/?demo=1#/calendar');
+  await expect(page.getByRole('heading', { name: 'Sesi hari ini' })).toBeVisible();
+  await expect(page.getByText('Tiada sesi hari ini.')).toBeVisible();
+  await expect(page.getByRole('tab', { name: /^Tutor Contoh/ })).toHaveCount(0);
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await page.locator('.student-picker button').first().click();
+  await page.locator('.card').first().getByRole('button', { name: 'Tambah rekod sesi' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-13');
+  await dialog.getByLabel('Jam').fill('20:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByLabel('Tarikh kelas')).toHaveValue('2026-10-13');
+  await page.getByLabel('Pratonton peranan demo').selectOption('owner');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Hari ini' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tab', { name: 'Tutor Contoh 1' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Tutor Contoh 2' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Tutor Contoh 3' })).toHaveCount(0);
+  const block = page.getByRole('region', { name: 'Tutor Contoh 1' });
+  await expect(block).toContainText('1 sesi');
+  await expect(block.locator('td[data-label="Masa"]')).toHaveCount(1);
+  // Tab lain masih memaparkan semua tutor.
+  await page.getByRole('tab', { name: 'Semua murid' }).click();
+  await expect(page.getByRole('tab', { name: 'Tutor Contoh 2' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Tutor Contoh 3' })).toBeVisible();
 });

@@ -32,13 +32,16 @@ export function buildPayslip(data: Dataset, tutorId: string, month: string): Pay
     (r) =>
       String(r.effective_from) <= lastDay && (!r.effective_to || r.effective_to >= `${month}-01`),
   );
+  const counted = new Set<unknown>();
   const lines: PayslipLine[] = rates.map((rate) => {
     const program = all('programs').find((p) => p.code === rate.program_code);
     const matched = rows.filter(
       (r) =>
         programOf(r.session.class_id)?.code === rate.program_code &&
-        r.minutes === rate.duration_minutes,
+        r.minutes === rate.duration_minutes &&
+        r.rate_sen === Number(rate.amount_sen),
     );
+    matched.forEach((r) => counted.add(r));
     return {
       label: `${String(program?.name || rate.program_code)} (${rate.duration_minutes} minit)`,
       rate_sen: Number(rate.amount_sen),
@@ -46,24 +49,19 @@ export function buildPayslip(data: Dataset, tutorId: string, month: string): Pay
       total_sen: matched.reduce((n, r) => n + r.payable_sen, 0),
     };
   });
-  // Sesi berbayar yang kadarnya tiada dalam senarai semasa (cth. kadar lama) dikumpulkan sebagai Lain-lain.
-  const counted = lines.reduce((n, l) => n + l.sessions, 0);
-  if (counted < rows.length) {
-    const rest = rows.filter(
-      (r) =>
-        !rates.some(
-          (rate) =>
-            programOf(r.session.class_id)?.code === rate.program_code &&
-            r.minutes === rate.duration_minutes,
-        ),
-    );
-    lines.push({
-      label: 'Lain-lain',
-      rate_sen: 0,
-      sessions: rest.length,
-      total_sen: rest.reduce((n, r) => n + r.payable_sen, 0),
-    });
+  // Sesi berbayar dengan kadar khas (kelas/tutor, migrasi 38) atau kadar lama yang tiada dalam
+  // senarai semasa: satu baris bagi setiap program × tempoh × kadar sebenar.
+  const extra = new Map<string, PayslipLine>();
+  for (const r of rows.filter((r) => !counted.has(r))) {
+    const program = programOf(r.session.class_id);
+    const label = `${String(program?.name || 'Lain-lain')} (${r.minutes} minit) · kadar khas`;
+    const key = `${label}|${r.rate_sen}`;
+    const line = extra.get(key) || { label, rate_sen: r.rate_sen ?? 0, sessions: 0, total_sen: 0 };
+    line.sessions += 1;
+    line.total_sen += r.payable_sen;
+    extra.set(key, line);
   }
+  lines.push(...extra.values());
   // Hanya baris yang ada sesi bagi tutor ini (tiada senarai program kosong).
   const used = lines.filter((l) => l.sessions > 0);
   const details: Record<string, unknown> =

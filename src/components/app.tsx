@@ -352,6 +352,28 @@ function Table({ headers, rows }: { headers: string[]; rows: React.ReactNode[][]
     <Empty />
   );
 }
+// Satu lajur dalam paparan dua lajur Kewangan (Belum / Sudah bayar), dengan bilangan dan jumlah.
+function PayColumn({
+  title,
+  summary,
+  tone,
+  children,
+}: {
+  title: string;
+  summary: string;
+  tone: 'due' | 'done';
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`pay-column ${tone}`} aria-label={title}>
+      <header>
+        <h3>{title}</h3>
+        <span>{summary}</span>
+      </header>
+      {children}
+    </section>
+  );
+}
 function Card({
   title,
   subtitle,
@@ -485,6 +507,7 @@ export function App({
   const [sessionTab, setSessionTab] = useState('today');
   const [reviewClass, setReviewClass] = useState('');
   const [allowanceTab, setAllowanceTab] = useState('all');
+  const [invoiceQuery, setInvoiceQuery] = useState('');
   const [payDate, setPayDate] = useState(() =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date()),
   );
@@ -1501,7 +1524,8 @@ export function App({
           .filter(
             (r) =>
               r.class_id === e.class_id &&
-              (!r.effective_to || String(r.effective_to) >= new Date().toISOString().slice(0, 10)),
+              // Tarikh KL (bukan UTC): selepas tengah malam KL jadual lama tamat semalam.
+              (!r.effective_to || String(r.effective_to) >= klDate(new Date().toISOString())),
           )
           .sort(
             (a, b) =>
@@ -1960,9 +1984,9 @@ export function App({
             </div>
           ))}
         </div>
-        {/* Pentadbir tidak perlu senarai sesi di Utama; tutor dan ibu bapa masih melihatnya. */}
-        <div className={academic ? 'dashboard-grid single' : 'dashboard-grid'}>
-          {!academic && (
+        {/* Pentadbir dan tutor tidak perlu senarai sesi di Utama (tutor ada Sesi & kehadiran); ibu bapa masih melihatnya. */}
+        <div className={academic || role === 'tutor' ? 'dashboard-grid single' : 'dashboard-grid'}>
+          {!academic && role !== 'tutor' && (
             <Card
               title="Sesi pembelajaran"
               subtitle="Jadual dan tindakan tutor"
@@ -2395,7 +2419,7 @@ export function App({
         }
       >
         <Table
-          headers={['Penjaga', 'WhatsApp', 'Anak', 'Akses portal']}
+          headers={['Penjaga', 'WhatsApp', 'Anak', ...(isStatic() ? [] : ['Akses portal'])]}
           rows={all('guardians')
             .filter(matches)
             .map((g) => [
@@ -2420,13 +2444,18 @@ export function App({
                 .filter((sg) => sg.guardian_id === g.id)
                 .map((sg) => lookup('students', sg.student_id))
                 .join(', '),
-              <button
-                key="invite"
-                disabled={!g.email || !['owner'].includes(role) || busy}
-                onClick={() => invite(String(g.email), 'guardian', g.id)}
-              >
-                Jemput OTP
-              </button>,
+              // Jemputan e-mel memerlukan fungsi pelayan; tiada dalam binaan statik (Pages).
+              ...(isStatic()
+                ? []
+                : [
+                    <button
+                      key="invite"
+                      disabled={!g.email || !['owner'].includes(role) || busy}
+                      onClick={() => invite(String(g.email), 'guardian', g.id)}
+                    >
+                      Jemput OTP
+                    </button>,
+                  ]),
             ])}
         />
         <p className="footnote">
@@ -2545,9 +2574,16 @@ export function App({
     );
     const nowMs = Date.now();
     const today = klDate(new Date().toISOString());
-    const todays = live
-      .filter((x) => klDate(String(x.starts_at)) === today)
+    // Sesi hari ini (tarikh KL) tidak bergantung pada bulan yang dipilih.
+    const todays = all('class_sessions')
+      .filter(
+        (x) =>
+          !['cancelled', 'rescheduled'].includes(String(x.status)) &&
+          klDate(String(x.starts_at)) === today,
+      )
       .sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
+    // Tab Hari ini hanya menyenaraikan tutor yang ada sekurang-kurangnya satu sesi hari ini.
+    const todayTutors = [...new Set(todays.map((x) => String(x.tutor_id)))];
     const attendanceOf = (sid: unknown) => {
       const mark = all('attendance').find((a) => a.session_id === sid);
       return mark ? statusLabels[String(mark.status)] : '—';
@@ -2572,7 +2608,12 @@ export function App({
             ['today', 'Hari ini'] as [string, string],
             ['students', 'Semua murid'] as [string, string],
             ...all('staff_profiles')
-              .filter((t) => t.role === 'tutor' && t.active !== false)
+              .filter(
+                (t) =>
+                  t.role === 'tutor' &&
+                  t.active !== false &&
+                  (sessionTab !== 'today' || todayTutors.includes(String(t.id))),
+              )
               .map((t) => [String(t.id), String(t.display_name)] as [string, string]),
           ].map(([id, label]) => (
             <button
@@ -2592,22 +2633,54 @@ export function App({
         {sessionTab === 'today' ? (
           <Card
             title="Sesi hari ini"
-            subtitle="Pilih tab tutor untuk melihat semua sesinya bulan ini"
+            subtitle={
+              todayTutors.length
+                ? `${todayTutors.length} tutor ada sesi hari ini · pilih tab tutor untuk semua sesinya bulan ini`
+                : 'Pilih Semua murid atau tab tutor untuk sesi bulan ini'
+            }
           >
             {todays.length ? (
-              <Table
-                headers={['Masa', 'Murid · Program', 'Tutor', 'Status', 'Kehadiran', '']}
-                rows={todays.filter(matches).map((x) => [
-                  timeLabel(String(x.starts_at)),
-                  lookup('classes', x.class_id, 'name'),
-                  lookup('staff_profiles', x.tutor_id, 'display_name'),
-                  <Badge key="s" value={x.status} />,
-                  attendanceOf(x.id),
-                  <button key="o" className="text-link" onClick={() => go(`sessions/${x.id}`)}>
-                    Lihat <ChevronRight size={16} />
-                  </button>,
-                ])}
-              />
+              <div className="today-tutors">
+                {todayTutors
+                  .map((tid) => [tid, lookup('staff_profiles', tid, 'display_name')])
+                  .sort((x, y) => x[1].localeCompare(y[1]))
+                  .map(([tid, name]) => {
+                    const own = todays.filter((x) => x.tutor_id === tid);
+                    return (
+                      <section className="today-tutor" key={tid} aria-label={name}>
+                        <header>
+                          <h3>{name}</h3>
+                          <span>{own.length} sesi</span>
+                          <button
+                            className="text-link"
+                            onClick={() => {
+                              setSessionTab(tid);
+                              setReviewClass('');
+                            }}
+                          >
+                            Sesi bulan ini <ChevronRight size={16} />
+                          </button>
+                        </header>
+                        <Table
+                          headers={['Masa', 'Murid · Program', 'Status', 'Kehadiran', '']}
+                          rows={own.filter(matches).map((x) => [
+                            timeLabel(String(x.starts_at)),
+                            lookup('classes', x.class_id, 'name'),
+                            <Badge key="s" value={x.status} />,
+                            attendanceOf(x.id),
+                            <button
+                              key="o"
+                              className="text-link"
+                              onClick={() => go(`sessions/${x.id}`)}
+                            >
+                              Lihat <ChevronRight size={16} />
+                            </button>,
+                          ])}
+                        />
+                      </section>
+                    );
+                  })}
+              </div>
             ) : (
               <Empty text="Tiada sesi hari ini." />
             )}
@@ -2813,6 +2886,7 @@ export function App({
         </details>
         <Card
           title="Invois & baki"
+          subtitle="Cari mengikut ibu bapa, murid, tutor atau no. invois"
           action={
             <button className="primary" onClick={invoiceForm}>
               <Plus size={16} />
@@ -2820,83 +2894,183 @@ export function App({
             </button>
           }
         >
-          <Table
-            headers={['Invois', 'Penjaga', 'Jumlah', 'Bayaran', 'Baki', 'Status', '']}
-            rows={all('invoices')
+          {(() => {
+            // Murid invois: daripada item invois; jika tiada, anak-anak penjaga invois itu.
+            const studentsOf = (i: Row) => {
+              const ids = all('invoice_items')
+                .filter((x) => x.invoice_id === i.id && x.student_id)
+                .map((x) => x.student_id);
+              return [
+                ...new Set(
+                  ids.length
+                    ? ids
+                    : all('student_guardians')
+                        .filter((l) => l.guardian_id === i.guardian_id)
+                        .map((l) => l.student_id),
+                ),
+              ];
+            };
+            // Tutor semasa murid: pendaftaran aktif + tugasan kelas tanpa tarikh tamat.
+            const tutorsOf = (studentIds: unknown[]) => [
+              ...new Set(
+                all('enrollments')
+                  .filter((e) => studentIds.includes(e.student_id) && e.status === 'active')
+                  .flatMap((e) =>
+                    all('class_tutors').filter((t) => t.class_id === e.class_id && !t.ends_on),
+                  )
+                  .map((t) => lookup('staff_profiles', t.staff_id, 'display_name')),
+              ),
+            ];
+            const q = invoiceQuery.trim().toLowerCase();
+            const items = all('invoices')
               .filter(matches)
               .map((i) => {
-                const b = invoiceBalance(i, all('payments'), all('payment_allocations'));
-                return [
-                  String(i.number),
-                  lookup('guardians', i.guardian_id),
-                  formatMoney(b.invoiced),
-                  formatMoney(b.paid),
-                  formatMoney(b.outstanding),
-                  <Badge key="s" value={i.status} />,
-                  <div key="act" className="button-row compact">
-                    {b.outstanding > 0 && !['draft', 'void'].includes(String(i.status)) && (
-                      <button
-                        className="pay-button"
-                        disabled={busy}
-                        onClick={() => markInvoicePaid(i, b.outstanding)}
-                      >
-                        <Check size={15} />
-                        Yuran telah dibayar
-                      </button>
-                    )}
-                    <a
-                      key="print"
-                      className="text-link"
-                      target="_blank"
-                      rel="noreferrer"
-                      href={`/api/document?type=invoice&id=${i.id}${demo ? '&demo=1' : ''}`}
-                      onClick={(e) => {
-                        if (isStatic()) {
-                          e.preventDefault();
-                          void import('@/lib/student-reports')
-                            .then(async ({ financialPdf }) =>
-                              downloadBlob(
-                                new Blob(
-                                  [await financialPdf(i, 'invoice', demo, invoiceExtra(i))],
-                                  {
-                                    type: 'application/pdf',
-                                  },
-                                ),
-                                fileName(
-                                  ['Invois', i.number, lookup('guardians', i.guardian_id)],
-                                  'pdf',
-                                ),
-                              ),
-                            )
-                            .catch(() => setNotice('Dokumen gagal dijana.'));
-                        }
-                      }}
+                const studentIds = studentsOf(i);
+                const students = studentIds.map((id) => lookup('students', id));
+                return {
+                  i,
+                  b: invoiceBalance(i, all('payments'), all('payment_allocations')),
+                  students,
+                  haystack: [
+                    i.number,
+                    lookup('guardians', i.guardian_id),
+                    ...students,
+                    ...tutorsOf(studentIds),
+                  ]
+                    .join(' ')
+                    .toLowerCase(),
+                };
+              })
+              .filter((x) => !q || x.haystack.includes(q));
+            const isVoid = (i: Row) => i.status === 'void';
+            const due = items.filter(
+              (x) => !isVoid(x.i) && (x.i.status === 'draft' || x.b.outstanding > 0),
+            );
+            const done = items.filter((x) => !isVoid(x.i) && !due.includes(x));
+            const voided = items.filter((x) => isVoid(x.i));
+            const rowsOf = (list: typeof items) =>
+              list.map(({ i, b, students }) => [
+                <strong key="n">{String(i.number)}</strong>,
+                <span key="g" className="guardian-cell">
+                  {lookup('guardians', i.guardian_id)}
+                  {students.length > 0 && <small>{students.join(', ')}</small>}
+                </span>,
+                <span key="j" className="guardian-cell">
+                  {formatMoney(b.invoiced)}
+                  {b.paid > 0 && b.outstanding > 0 && <small>Dibayar {formatMoney(b.paid)}</small>}
+                </span>,
+                formatMoney(b.outstanding),
+                <Badge key="s" value={i.status} />,
+                <div key="act" className="button-row compact">
+                  {b.outstanding > 0 && !['draft', 'void'].includes(String(i.status)) && (
+                    <button
+                      className="pay-button"
+                      disabled={busy}
+                      onClick={() => markInvoicePaid(i, b.outstanding)}
                     >
-                      Cetak / PDF
-                    </a>
-                  </div>,
-                ];
-              })}
-          />
+                      <Check size={15} />
+                      Yuran telah dibayar
+                    </button>
+                  )}
+                  <a
+                    key="print"
+                    className="text-link"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`/api/document?type=invoice&id=${i.id}${demo ? '&demo=1' : ''}`}
+                    onClick={(e) => {
+                      if (isStatic()) {
+                        e.preventDefault();
+                        void import('@/lib/student-reports')
+                          .then(async ({ financialPdf }) =>
+                            downloadBlob(
+                              new Blob([await financialPdf(i, 'invoice', demo, invoiceExtra(i))], {
+                                type: 'application/pdf',
+                              }),
+                              fileName(
+                                ['Invois', i.number, lookup('guardians', i.guardian_id)],
+                                'pdf',
+                              ),
+                            ),
+                          )
+                          .catch(() => setNotice('Dokumen gagal dijana.'));
+                      }
+                    }}
+                  >
+                    Cetak / PDF
+                  </a>
+                </div>,
+              ]);
+            const headers = ['Invois', 'Ibu bapa · murid', 'Jumlah', 'Baki', 'Status', ''];
+            return (
+              <>
+                <div className="delivery-tools">
+                  <label className="delivery-search">
+                    <Search size={16} aria-hidden="true" />
+                    <input
+                      type="search"
+                      aria-label="Cari invois"
+                      placeholder="Cari ibu bapa, murid, tutor atau no. invois…"
+                      value={invoiceQuery}
+                      onChange={(e) => setInvoiceQuery(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="pay-columns">
+                  <PayColumn
+                    title="Belum bayar"
+                    tone="due"
+                    summary={`${due.length} invois · baki ${formatMoney(due.reduce((n, x) => n + x.b.outstanding, 0))}`}
+                  >
+                    {due.length ? (
+                      <Table headers={headers} rows={rowsOf(due)} />
+                    ) : (
+                      <Empty text={q ? 'Tiada padanan.' : 'Tiada invois belum bayar.'} />
+                    )}
+                  </PayColumn>
+                  <PayColumn
+                    title="Sudah bayar"
+                    tone="done"
+                    summary={`${done.length} invois · ${formatMoney(done.reduce((n, x) => n + x.b.paid, 0))}`}
+                  >
+                    {done.length ? (
+                      <Table headers={headers} rows={rowsOf(done)} />
+                    ) : (
+                      <Empty text={q ? 'Tiada padanan.' : 'Belum ada invois dibayar.'} />
+                    )}
+                  </PayColumn>
+                </div>
+                {voided.length > 0 && (
+                  <details className="more-tools">
+                    <summary>Invois dibatalkan ({voided.length})</summary>
+                    <Table headers={headers} rows={rowsOf(voided)} />
+                  </details>
+                )}
+              </>
+            );
+          })()}
         </Card>
-        <Card title="Bukti bayaran (admin)">
-          {all('payments')
-            .filter((p) => p.status === 'pending_verification')
-            .map((p) => (
-              <label className="file-label" key={p.id}>
-                {String(p.reference || p.id)} · Pilih JPG / PNG / PDF
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,application/pdf"
-                  disabled={demo || busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadProof(p.id, file);
-                  }}
-                />
-              </label>
-            ))}
-        </Card>
+        {/* Muat naik bukti memerlukan fungsi pelayan; binaan statik (Pages) tidak memaparkannya. */}
+        {!isStatic() && (
+          <Card title="Bukti bayaran (admin)">
+            {all('payments')
+              .filter((p) => p.status === 'pending_verification')
+              .map((p) => (
+                <label className="file-label" key={p.id}>
+                  {String(p.reference || p.id)} · Pilih JPG / PNG / PDF
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,application/pdf"
+                    disabled={demo || busy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadProof(p.id, file);
+                    }}
+                  />
+                </label>
+              ))}
+          </Card>
+        )}
         <Card
           title="Bayaran & pengesahan"
           subtitle="Bayaran dikira selepas disahkan admin"
@@ -3412,18 +3586,50 @@ export function App({
               </div>
               {payslipBar(allowanceTab === 'all' ? undefined : allowanceTab)}
               {allowanceTab === 'all' ? (
-                <Table
-                  headers={['Tutor', 'Sesi dibayar', 'Jumlah', 'Bayaran', '']}
-                  rows={tutorIds.map((tid) => [
-                    <strong key="n">{lookup('staff_profiles', tid, 'display_name')}</strong>,
-                    allowances.filter((r) => r.tutorId === tid && r.payable_sen > 0).length,
-                    <strong key="t">{formatMoney(allowanceOf(tid))}</strong>,
-                    tutorPayStatus(tid),
-                    <button key="o" className="text-link" onClick={() => setAllowanceTab(tid)}>
-                      Butiran <ChevronRight size={16} />
-                    </button>,
-                  ])}
-                />
+                (() => {
+                  // Dua lajur: dibayar = bayaran bulan ini > 0 dan menampung elaun penuh.
+                  const isPaid = (tid: string) =>
+                    tutorPaidSen(tid) > 0 && tutorPaidSen(tid) >= allowanceOf(tid);
+                  const unpaid = tutorIds.filter((tid) => !isPaid(tid));
+                  const paid = tutorIds.filter(isPaid);
+                  const rowsOf = (ids: string[]) =>
+                    ids.map((tid) => [
+                      <strong key="n">{lookup('staff_profiles', tid, 'display_name')}</strong>,
+                      allowances.filter((r) => r.tutorId === tid && r.payable_sen > 0).length,
+                      <strong key="t">{formatMoney(allowanceOf(tid))}</strong>,
+                      tutorPayStatus(tid),
+                      <button key="o" className="text-link" onClick={() => setAllowanceTab(tid)}>
+                        Butiran <ChevronRight size={16} />
+                      </button>,
+                    ]);
+                  const headers = ['Tutor', 'Sesi dibayar', 'Jumlah', 'Bayaran', ''];
+                  return (
+                    <div className="pay-columns">
+                      <PayColumn
+                        title="Belum dibayar"
+                        tone="due"
+                        summary={`${unpaid.length} tutor · baki ${formatMoney(unpaid.reduce((n, tid) => n + Math.max(0, allowanceOf(tid) - tutorPaidSen(tid)), 0))}`}
+                      >
+                        {unpaid.length ? (
+                          <Table headers={headers} rows={rowsOf(unpaid)} />
+                        ) : (
+                          <Empty text="Semua elaun bulan ini sudah dibayar." />
+                        )}
+                      </PayColumn>
+                      <PayColumn
+                        title="Sudah dibayar"
+                        tone="done"
+                        summary={`${paid.length} tutor · ${formatMoney(paid.reduce((n, tid) => n + tutorPaidSen(tid), 0))}`}
+                      >
+                        {paid.length ? (
+                          <Table headers={headers} rows={rowsOf(paid)} />
+                        ) : (
+                          <Empty text="Belum ada elaun dibayar bulan ini." />
+                        )}
+                      </PayColumn>
+                    </div>
+                  );
+                })()
               ) : (
                 <>
                   <div className="tab-total pay-row">
@@ -4020,7 +4226,8 @@ export function App({
             ];
           })}
         />
-        {role === 'owner' && (
+        {/* Jemputan kakitangan memerlukan fungsi pelayan; di Pages tutor memohon sendiri. */}
+        {role === 'owner' && !isStatic() && (
           <form
             className="invite-form"
             onSubmit={(e) => {
