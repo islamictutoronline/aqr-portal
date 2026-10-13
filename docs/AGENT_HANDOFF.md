@@ -2,6 +2,14 @@
 
 Kemas kini: 13 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Push dan deploy tema semua tab — 13 Oktober 2026
+
+Atas arahan pengguna “push dan deploy”, perubahan UI semua tab dipush ke `main` pada commit `80fd127` (`Apply emerald theme across all portal tabs`). Workflow [AQR checks #38396303210](https://github.com/islamictutoronline/aqr-portal/actions/runs/38396303210) dan [AQR GitHub Pages #38396313209](https://github.com/islamictutoronline/aqr-portal/actions/runs/38396313209) selesai **success**, termasuk job build dan deploy.
+
+[Portal sebenar](https://islamictutoronline.github.io/aqr-portal/) memberi HTTP 200. CSS terbitan `index-6_jgIB9Q.css` mengandungi `.portal-theme` dan gaya subtab; JavaScript `index-Cl_7F_Vq.js` menggunakan `app portal-theme`. Halaman log masuk desktop/telefon disemak tanpa ralat JavaScript atau respons HTTP gagal, lebar 390px tanpa limpahan, dan `?demo=1` tidak membuka demo produksi. Ini mengesahkan penerbitan aset dan halaman awam; operasi berautentikasi serta integrasi Supabase sebenar tidak diuji semula. Tiada migrasi atau perubahan data dalam deploy ini.
+
+Commit catatan selepas deploy hanya mengubah dokumentasi, menggunakan `[skip ci]`; aset aplikasi yang diterbitkan kekal daripada commit `80fd127`. Catatan “tiada deploy” di bawah merujuk fasa pembangunan sebelum arahan penerbitan ini.
+
 ## Tema emerald semua tab — 13 Oktober 2026
 
 Arahan terbaru pengguna: “cantikkan pada semua bahagian tab — bukan dashboard sahaja”. Tema kini dikongsi oleh seluruh `App` menggunakan `className="app portal-theme"`. Fail `src/app/dashboard.css` telah dinamakan semula menjadi `src/app/portal-theme.css` dan import `globals.css` dikemas kini. Gaya emerald/mint/sage meliputi sidebar, subtab, kad, jadual, borang/dialog, profil murid/tutor, program, sesi/kehadiran, laporan, yuran/elaun, tetapan dan Parent Portal. Paparan log masuk tidak termasuk permintaan tab ini. Tiada perubahan pengiraan, handler, skema, data atau matriks akses; Parent Portal kekal baca sahaja. Semua gaya baharu dalam media skrin; cetakan kekal dengan sidebar tersembunyi dan kad putih.

@@ -2,6 +2,12 @@
 
 Mula: 10 Oktober 2026, Asia/Kuala_Lumpur.
 
+Push dan deploy — 13 Oktober 2026:
+
+- [x] Commit UI `80fd127` dipush ke `main`; AQR checks [#38396303210](https://github.com/islamictutoronline/aqr-portal/actions/runs/38396303210) dan Pages [#38396313209](https://github.com/islamictutoronline/aqr-portal/actions/runs/38396313209) **success**.
+- [x] [Portal sebenar](https://islamictutoronline.github.io/aqr-portal/) HTTP 200; CSS dan JavaScript tema bersama disahkan. Log masuk desktop/telefon tanpa ralat, telefon 390px tanpa limpahan, demo produksi kekal terkunci.
+- [x] Tiada perubahan data/migrasi atau ujian semula Supabase berautentikasi. Catatan selepas deploy ialah dokumentasi sahaja (`[skip ci]`); aset terbitan kekal daripada `80fd127`.
+
 Tema emerald semua tab — 13 Oktober 2026:
 
 - [x] `portal-theme.css` menggantikan `dashboard.css`; kelas tema dikongsi oleh semua tab `App`. Sidebar, subtab, kad, jadual, borang/dialog, profil, program, sesi, laporan, kewangan, tetapan dan Parent Portal kini seragam emerald/mint/sage.
