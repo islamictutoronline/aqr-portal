@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './portal-theme.css';
 :root {
   --navy: #12433d;
   --ivory: #f6f7f4;

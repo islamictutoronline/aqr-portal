@@ -1,6 +1,30 @@
 # Konteks serahan agen — AQR
 
-Kemas kini: 12 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+Kemas kini: 13 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+
+## Tema emerald semua tab — 13 Oktober 2026
+
+Arahan terbaru pengguna: “cantikkan pada semua bahagian tab — bukan dashboard sahaja”. Tema kini dikongsi oleh seluruh `App` menggunakan `className="app portal-theme"`. Fail `src/app/dashboard.css` telah dinamakan semula menjadi `src/app/portal-theme.css` dan import `globals.css` dikemas kini. Gaya emerald/mint/sage meliputi sidebar, subtab, kad, jadual, borang/dialog, profil murid/tutor, program, sesi/kehadiran, laporan, yuran/elaun, tetapan dan Parent Portal. Paparan log masuk tidak termasuk permintaan tab ini. Tiada perubahan pengiraan, handler, skema, data atau matriks akses; Parent Portal kekal baca sahaja. Semua gaya baharu dalam media skrin; cetakan kekal dengan sidebar tersembunyi dan kad putih.
+
+QA setempat: typecheck, lint, Prettier UI, binaan Pages/Next.js lulus; Pages **68/68**, E2E Next.js **8/8**. Sebelas halaman × 320/390/768/1440px disemak (44 paparan) tanpa limpahan dokumen atau ralat JavaScript. Jadual lejar dalam “Lagi pilihan” elaun diperbetulkan supaya skrol mendatar di dalam pembalut; kad tidak lagi memotong jadual pada 320/390px. Borang daftar murid, profil tutor, editor sesi tutor dan Parent Portal penjaga turut disemak. Bukti rekaan setempat dalam `docs/evidence/portal-emerald-*.png`, termasuk tutor, laporan, kewangan, tetapan dan Parent Portal. Tiada push/deploy, perubahan cloud atau ujian Supabase sebenar; amaran bundle/import Vite sedia ada kekal.
+
+Pratonton: `http://127.0.0.1:4173/?demo=1#/dashboard` (Vite pembangunan sahaja). Catatan tema dashboard di bawah ialah sejarah; had “dashboard sahaja” telah diganti oleh arahan semua tab.
+
+## Dashboard emerald cerah berdasarkan rujukan — 13 Oktober 2026 (sejarah sebelum peluasan semua tab)
+
+Arahan susulan pengguna: contoh UI dengan panel cerah/kad bulat, warna kekal green emerald dengan tambahan tona hijau lain. `src/app/dashboard.css` kini menggantikan tema gelap awal dengan latar mint, sidebar putih, ruang kandungan berbingkai bulat, hero gradient emerald/fern, kad metrik mint/sage/hijau muda dan panel putih berbayang lembut. Imej contoh digunakan sebagai rujukan visual sahaja; kandungan dan data imej tidak diimport. Perubahan kekal CSS dashboard sahaja; tiada perubahan pengiraan, handler, fitur, skema atau akses. Parent Portal dan cetakan kekal dengan gaya asal.
+
+Semakan setempat: typecheck/lint/Prettier dan binaan Pages/Next.js lulus; Pages **68/68**, E2E Next.js **8/8**. Lima lebar 320/390/768/1024/1440px disemak tanpa limpahan, dengan carian dan bar carta kelihatan. Tablet menggunakan kad carta/rekod bertindan supaya kandungan kekal mudah dibaca. Menu telefon/Escape memulangkan fokus dengan betul; tiada ralat JavaScript dalam semakan pelayar. Pratonton fixture rekaan terkini: `docs/evidence/dashboard-emerald-desktop.png` dan `docs/evidence/dashboard-emerald-mobile.png` (setempat, diabaikan Git). Tiada perubahan data/cloud, migrasi, push/deploy atau ujian Supabase sebenar; amaran bundle/import Vite sedia ada kekal.
+
+Server pembangunan masih tersedia di `http://127.0.0.1:4173/?demo=1#/dashboard` selagi proses Vite berjalan. Jalankan `npm run dev:pages -- --host 127.0.0.1 --port 4173` jika perlu. Binaan terbitan kekal mengunci demo.
+
+## Tema futuristik awal — 13 Oktober 2026 (diganti oleh kemasan emerald cerah di atas)
+
+Arahan terkini: ubah rupa dashboard supaya futuristik tanpa mengubah sistem atau fitur. Gaya baharu dalam `src/app/dashboard.css`, diimport oleh `globals.css`, menggunakan selector `.dashboard-theme` yang hanya dipasang apabila `section === 'dashboard'` dalam `src/components/app.tsx`. Palet zamrud gelap/cyan/emas, grid latar halus, orbit hiasan hero, panel berlapis dan carta gradient. Semua kandungan, pengiraan, handler, navigasi dan akses sedia ada dikekalkan. Parent Portal kekal baca sahaja dengan paparan asal. CSS baharu dibataskan kepada media skrin; cetakan menggunakan gaya asal. Tiada dependency baharu.
+
+Bukti setempat: typecheck, lint, Prettier fail UI, binaan Pages dan Next.js lulus; ujian Pages **68/68**, E2E Next.js **8/8**. Dashboard diperiksa pada 320/390/768/1440px tanpa limpahan mendatar, termasuk pratonton tutor dan navigasi ke halaman lain yang membuang tema dashboard. Tiada ralat JavaScript dalam semakan pelayar. Tangkapan skrin fixture rekaan: `docs/evidence/dashboard-futuristic-desktop.png` dan `docs/evidence/dashboard-futuristic-mobile.png` (bukti setempat, folder diabaikan Git). Amaran bundle/import Vite sedia ada masih muncul. Tiada perubahan data, migrasi, push/deploy atau ujian Supabase sebenar dalam sesi ini.
+
+Pratonton pembangunan: `http://127.0.0.1:4173/?demo=1#/dashboard`; jika server sudah berhenti, jalankan `npm run dev:pages -- --host 127.0.0.1 --port 4173`. Binaan terbitan masih mengunci demo.
 
 ## Kemasan paparan terkini — 12 Oktober 2026
 

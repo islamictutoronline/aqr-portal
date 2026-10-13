@@ -2,6 +2,24 @@
 
 Mula: 10 Oktober 2026, Asia/Kuala_Lumpur.
 
+Tema emerald semua tab — 13 Oktober 2026:
+
+- [x] `portal-theme.css` menggantikan `dashboard.css`; kelas tema dikongsi oleh semua tab `App`. Sidebar, subtab, kad, jadual, borang/dialog, profil, program, sesi, laporan, kewangan, tetapan dan Parent Portal kini seragam emerald/mint/sage.
+- [x] Sebelas halaman × empat lebar (320/390/768/1440px), 44 paparan tanpa limpahan dokumen atau ralat JavaScript. Jadual lejar elaun dalam “Lagi pilihan” kini skrol di dalam pembalut pada telefon. Borang, profil tutor, editor sesi dan peranan penjaga turut disemak.
+- [x] Typecheck/lint/Prettier, binaan Pages/Next.js, Pages 68/68 dan E2E Next.js 8/8 lulus. Bukti rekaan `docs/evidence/portal-emerald-*.png` disimpan setempat. Parent Portal kekal baca sahaja; cetakan asal dikekalkan. Tiada perubahan data/cloud atau deploy.
+
+Dashboard emerald cerah — 13 Oktober 2026 (arahan susulan dengan imej rujukan):
+
+- [x] Tema gelap awal diganti dengan latar mint, sidebar putih, kad bulat berbayang lembut dan pelbagai tona emerald/sage/hijau muda. Hero mengekalkan identiti AQR. Perubahan CSS dashboard sahaja; fitur dan data asal dikekalkan.
+- [x] Semakan 320/390/768/1024/1440px tanpa limpahan, dengan carian dan carta kelihatan; kad bertindan pada tablet. Menu telefon/Escape memulangkan fokus dengan betul.
+- [x] Typecheck/lint/Prettier dan binaan Pages/Next.js lulus; Pages 68/68, E2E Next.js 8/8. Bukti rekaan terkini: `docs/evidence/dashboard-emerald-desktop.png` dan `docs/evidence/dashboard-emerald-mobile.png` (setempat, diabaikan Git). Tiada perubahan data/cloud, migrasi atau deploy.
+
+Tema futuristik awal — 13 Oktober 2026 (diganti oleh tema emerald cerah):
+
+- [x] Lapisan CSS dashboard sahaja: zamrud gelap, aksen cyan/emas, panel berlapis, grid dan orbit hiasan. Kandungan, pengiraan, handler dan akses sedia ada dikekalkan; Parent Portal dan cetakan menggunakan paparan asal.
+- [x] Typecheck, lint, Prettier UI, binaan Pages/Next.js lulus; Pages 68/68 dan E2E Next.js 8/8. Dashboard 320/390/768/1440px tanpa limpahan; semakan visual desktop/telefon/tutor dan navigasi ke halaman lain lulus tanpa ralat JavaScript.
+- [x] Pratonton rekaan disimpan dalam `docs/evidence/dashboard-futuristic-desktop.png` dan `docs/evidence/dashboard-futuristic-mobile.png` (setempat, diabaikan Git). Tiada perubahan data/cloud, migrasi, push atau deploy. Amaran bundle/import Vite sedia ada kekal.
+
 Kemasan paparan — 12 Oktober 2026:
 
 - [x] UI hijau/emas lebih seragam: kad, angka ringkasan, tipografi, tab, butang dan log masuk; ringkasan perhatian pentadbir dalam tiga ruang pada desktop.

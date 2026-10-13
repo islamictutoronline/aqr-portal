@@ -4637,7 +4637,7 @@ export function App({
     );
   }
   return (
-    <div className="app">
+    <div className="app portal-theme">
       <a className="skip-link" href="#main">
         Langkau ke kandungan
       </a>
