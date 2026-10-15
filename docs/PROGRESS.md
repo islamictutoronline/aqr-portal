@@ -2,6 +2,8 @@
 
 Mula: 10 Oktober 2026, Asia/Kuala_Lumpur.
 
+Bacaan al-Quran (15 Okt): surah + muka surat wajib, ayat + juzuk pilihan — dideploy (`279651c`, Pages #38746070030 success).
+
 Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026:
 
 - [x] Butang Edit kelas direkod: tatal ke editor + penanda "Sedang dibuka di atas"; mesej simpan dipaparkan di sebelah butang Simpan.
