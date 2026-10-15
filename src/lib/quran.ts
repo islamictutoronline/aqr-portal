@@ -136,6 +136,8 @@ export const readingSchema = z.object({
   surah: z.number().int().min(1).max(114).optional(),
   ayah_from: z.number().int().min(1).max(286).optional(),
   ayah_to: z.number().int().min(1).max(286).optional(),
+  // Juzuk (pilihan): diisi tutor; jika kosong, dikira daripada muka surat.
+  juz: z.number().int().min(1).max(30).optional(),
 });
 export type Reading = z.infer<typeof readingSchema>;
 // Juzuk mushaf Madinah 604 muka surat: juzuk 1 = ms 1–21, kemudian 20 muka surat setiap juzuk.

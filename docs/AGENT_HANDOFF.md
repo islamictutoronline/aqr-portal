@@ -2,6 +2,10 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Bacaan al-Quran: surah + muka surat wajib — 15 Oktober 2026 (setempat, belum push/deploy)
+
+Arahan pengguna: "ayat, juzu optional sahaja; yang penting muka surat dan surah". Bagi program bacaan al-Quran (`kind === 'quran'`), editor sesi kini mewajibkan **Surah** dan **Muka surat** (tanda `*`; `readingRequired` → "Isi surah dan muka surat dahulu", butang Simpan tidak aktif) apabila murid hadir; **Ayat dari/hingga** dan **Juzuk** bertanda "pilihan". Juzuk kini boleh diisi (`readingSchema.juz` 1–30, disimpan dalam `attendance.reading`); jika kosong, placeholder dan jadual Rekod bacaan menggunakan `juzOf(page)`. Iqra' tidak berubah. Tiada migrasi (pangkalan data menerima kunci `juz` tambahan; `reading_label` tidak berubah). Ujian Pages bacaan dikemas kini; 72/72, `npm test` 124/124, Next build, E2E 8/8.
+
 ## Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026 (dideploy)
 
 **Push dan deploy (15 Okt):** commit `7be11e8` dipush ke `main`; [AQR checks #38741932570](https://github.com/islamictutoronline/aqr-portal/actions/runs/38741932570) dan [AQR GitHub Pages #38741943641](https://github.com/islamictutoronline/aqr-portal/actions/runs/38741943641) **success**. Laman sebenar HTTP 200; aset `index-BakUtwBZ.js` mengandungi "Tajuk / topik pembelajaran", "Sedang dibuka di atas", "Rekod bacaan" dan nota tarikh/jam; demo terbitan kekal terkunci. Belum diuji dengan log masuk tutor sebenar.

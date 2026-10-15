@@ -582,7 +582,17 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeDisabled();
   await page.getByLabel('Ayat dari').fill('1');
   await page.getByLabel('Ayat hingga').fill('4');
-  await expect(page.locator('.preview-comment')).toContainText('Bacaan: Surah Al-Ikhlas ayat 1–4.');
+  // Surah dan muka surat wajib; ayat dan juzuk pilihan.
+  await expect(page.locator('.reading-issue')).toContainText('Isi surah dan muka surat dahulu');
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeDisabled();
+  await page.getByLabel('Muka surat').fill('604');
+  await expect(page.getByLabel('Juzuk')).toHaveAttribute('placeholder', '30 (auto)');
+  await expect(page.locator('.preview-comment')).toContainText(
+    'Bacaan: Surah Al-Ikhlas ayat 1–4, muka surat 604.',
+  );
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
+  await page.getByLabel('Ayat dari').fill('');
+  await page.getByLabel('Ayat hingga').fill('');
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
   // Cuti bermaklum: tiada bacaan.
   await page.getByRole('button', { name: 'Cuti bermaklum', exact: true }).click();

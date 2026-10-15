@@ -3724,3 +3724,26 @@ textarea {
   width: 100%;
   min-height: 44px;
 }
+/* Medan bacaan al-Quran: surah dan muka surat wajib (*); ayat dan juzuk pilihan. */
+.reading-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.reading-grid label {
+  align-content: end;
+}
+.reading-grid label > span {
+  white-space: nowrap;
+}
+.reading-grid label > span small {
+  margin-left: 4px;
+  font-size: 12px;
+}
+.reading-grid .req {
+  color: #b42318;
+  font-size: 15px;
+  font-weight: 800;
+}
+.reading-grid .opt {
+  color: var(--slate);
+  font-weight: 500;
+}

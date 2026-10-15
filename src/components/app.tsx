@@ -5209,9 +5209,40 @@ function SessionEditor({
     : '';
   const readingInput = (): Reading | undefined =>
     kind && attendedNow && hasReading(reading) ? ({ ...reading, kind } as Reading) : undefined;
-  const readingIssue = readingInput() ? readingProblem(readingInput()!) : null;
+  // Al-Quran: surah dan muka surat wajib; ayat dan juzuk pilihan.
+  const readingRequired =
+    kind === 'quran' && attendedNow && (!reading.surah || !reading.page)
+      ? 'Isi surah dan muka surat dahulu'
+      : null;
+  const readingIssue = (readingInput() ? readingProblem(readingInput()!) : null) || readingRequired;
   const voided = ['cancelled', 'rescheduled'].includes(String(session.status));
   const locked = voided || ['verified', 'approved', 'paid'].includes(String(session.review_status));
+  const pageField = (
+    <label>
+      <span>
+        Muka surat{' '}
+        {kind === 'quran' && (
+          <small className="req" title="Wajib diisi">
+            *
+          </small>
+        )}
+      </span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={kind === 'iqra' ? 60 : 604}
+        disabled={locked}
+        value={reading.page ?? ''}
+        onChange={(e) =>
+          setReading((r) => ({
+            ...r,
+            page: e.target.value ? Number(e.target.value) : undefined,
+          }))
+        }
+      />
+    </label>
+  );
   let preview = 'Pilih kehadiran dan penilaian untuk melihat ulasan.';
   let valid = false;
   // Penilaian adalah pilihan: tanpa sebarang tap, sesi disimpan sebagai "belum dinilai".
@@ -5461,7 +5492,12 @@ function SessionEditor({
                     ) : (
                       <>
                         <label className="reading-surah">
-                          Surah
+                          <span>
+                            Surah{' '}
+                            <small className="req" title="Wajib diisi">
+                              *
+                            </small>
+                          </span>
                           <select
                             disabled={locked}
                             value={reading.surah ?? ''}
@@ -5480,9 +5516,13 @@ function SessionEditor({
                             ))}
                           </select>
                         </label>
+                        {pageField}
                         {(['ayah_from', 'ayah_to'] as const).map((f) => (
                           <label key={f}>
-                            {f === 'ayah_from' ? 'Ayat dari' : 'Ayat hingga'}
+                            <span>
+                              {f === 'ayah_from' ? 'Ayat dari' : 'Ayat hingga'}{' '}
+                              <small className="opt">pilihan</small>
+                            </span>
                             <input
                               type="number"
                               inputMode="numeric"
@@ -5499,31 +5539,29 @@ function SessionEditor({
                             />
                           </label>
                         ))}
+                        <label>
+                          <span>
+                            Juzuk <small className="opt">pilihan</small>
+                          </span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            max={30}
+                            disabled={locked}
+                            placeholder={juzOf(reading.page) ? `${juzOf(reading.page)} (auto)` : ''}
+                            value={reading.juz ?? ''}
+                            onChange={(e) =>
+                              setReading((r) => ({
+                                ...r,
+                                juz: e.target.value ? Number(e.target.value) : undefined,
+                              }))
+                            }
+                          />
+                        </label>
                       </>
                     )}
-                    <label>
-                      Muka surat
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={kind === 'iqra' ? 60 : 604}
-                        disabled={locked}
-                        value={reading.page ?? ''}
-                        onChange={(e) =>
-                          setReading((r) => ({
-                            ...r,
-                            page: e.target.value ? Number(e.target.value) : undefined,
-                          }))
-                        }
-                      />
-                    </label>
-                    {kind === 'quran' && (
-                      <label>
-                        Juzuk
-                        <input readOnly tabIndex={-1} value={juzOf(reading.page) ?? '—'} />
-                      </label>
-                    )}
+                    {kind === 'iqra' && pageField}
                   </div>
                   {readingIssue && <p className="reading-issue">{readingIssue}</p>}
                 </fieldset>
@@ -5676,7 +5714,7 @@ function ReadingRecord({
           ['MUKA SURAT', (r) => r.page],
         ]
       : [
-          ['JUZUK', (r) => juzOf(r.page)],
+          ['JUZUK', (r) => r.juz ?? juzOf(r.page)],
           ['MUKA SURAT', (r) => r.page],
           [
             'SURAH',
