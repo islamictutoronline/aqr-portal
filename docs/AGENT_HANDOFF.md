@@ -1,6 +1,21 @@
 # Konteks serahan agen — AQR
 
-Kemas kini: 13 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+
+## Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026 (setempat, belum push/deploy)
+
+Aduan pengguna: (1) butang **Edit** bagi kelas yang telah direkod "tidak berfungsi"; (2) kelas yang direkod selepas waktu kelas / pada hari lain tidak boleh disimpan; (3) integrasikan contoh rekod Tahfiz SMAP (Perkara JUZUK / MUKA SURAT / SURAH, Tarikh, Catatan, Guru, Edit); (4) program teori (KAFA, Bahasa Arab, dll.) isi tajuk/topik sendiri menggantikan kemahiran.
+
+Punca dan pembetulan:
+
+- **Edit:** sesi memang dibuka, tetapi editor di atas halaman manakala senarai "Kelas telah dilaksanakan" di bawah, jadi tiada perubahan kelihatan. Kini `useEffect` pada `selectedSession` menatal ke `#session-editor`, dan baris sesi semasa ditanda "Sedang dibuka di atas".
+- **Mesej ralat tidak kelihatan:** notis hanya di atas halaman; kini juga dipaparkan sebagai `.save-notice` di sebelah butang Simpan (`aria-live`, bukan `role=status` — ujian Pages bergantung pada satu `role=status`).
+- **Tarikh/jam diubah tidak disimpan:** "Simpan kehadiran" kini memanggil `move_session` dahulu jika tarikh/jam diubah, atau merekod terus ke kelas aktif sedia ada pada tarikh/jam itu (`onOpen` ke sesi itu). `rescheduleSession` memulangkan boolean.
+- **Migrasi 39** `202610150039_session_fixes.sql` (tambahan): `private.extend_backdated` dipanggil oleh `record_assessment` (kelas individu: tarikh mula tugasan/pendaftaran dilanjutkan ke tarikh sesi, maks 1 tahun); `create_session` menghidupkan semula sesi dibatalkan pada masa sama (sebelum ini memulangkan sesi dibatalkan → skrin rekod tidak terbuka); `private.free_voided_slot` dalam `move_session` mengundur kelas dibatalkan beberapa saat supaya slotnya boleh digunakan.
+- **Rekod bacaan gaya SMAP:** `juzOf()` dalam `src/lib/quran.ts`; editor sesi ada medan Juzuk (dikira dari muka surat, mushaf 604); komponen `ReadingRecord` dalam `app.tsx` memaparkan 3 rekod terkini bagi setiap perkara (Perkara · Tarikh · Catatan · Guru · Edit). Medan **Status dibuang atas arahan pengguna** ("kalau dah rekod, selesai").
+- **Tajuk/topik program teori (migrasi 40 `202610150040_session_topic.sql`):** program bukan bacaan al-Quran (`readingKind` null: Fardhu Ain KAFA/Dewasa, Bahasa Arab/KSSM/Madinah, Faraid, Tajwid TP, Tadabbur, Tarannum) memaparkan "2. Tajuk / topik pembelajaran" (teks bebas ≤120, wajib apabila hadir) menggantikan "Kemahiran dinilai". `assessmentSchema.topic`; `record_assessment` menggunakan topik sebagai label kemahiran (`assessment_responses.skill='topik'`), menulis `class_sessions.topic`, dan ulasan "Topik pembelajaran: … ." jika tanpa penilaian; `prepare_student_report` membawa `topic` dalam snapshot; PDF bulanan lajur TOPIK / BACAAN / TOPIK + "Topik terkini"; laporan kemajuan lajur "Kemahiran / topik". Demo: `?demo=1&role=tutor` membuka pratonton sebagai tutor (portal/main.tsx).
+
+Bukti setempat: typecheck/lint/Prettier lulus; `npm test` **124/124** (termasuk `tests/integration/session-fixes.test.ts` 8 ujian: 4 untuk migrasi 39 — gagal tanpanya, disahkan — dan 4 untuk migrasi 40); `test:pages` **72/72** (ujian baharu: rekod kelas hari lain dengan sekali Simpan + rekod bacaan; topik KAFA); binaan Pages/Next.js lulus; E2E Next.js **8/8**; `setup-all.sql` = 40 migrasi. **Migrasi 39 dan 40 dipasang pengguna** di Supabase `itglyiypxcavdegouoyz` dan disahkan 15 Okt (query semakan `pg_proc`: "SEMUA OK"). **Belum:** tiada commit/push/deploy; data sebenar pengguna tidak diperiksa (punca berdasarkan kod + ujian PGlite).
 
 ## Push dan deploy tema semua tab — 13 Oktober 2026
 

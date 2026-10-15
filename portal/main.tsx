@@ -141,16 +141,19 @@ function Root() {
     setBusy(false);
     if (error) setMessage('Kod tidak sah atau telah tamat tempoh.');
   }
-  if (demo)
+  if (demo) {
+    // ?demo=1&role=tutor membuka pratonton terus sebagai tutor (demo pembangunan sahaja).
+    const tutorDemo = new URLSearchParams(location.search).get('role') === 'tutor';
     return (
       <App
         initial={demoData()}
         demo
         path={location.hash.slice(2) || 'dashboard'}
-        role="owner"
-        name="Pentadbir contoh"
+        role={tutorDemo ? 'tutor' : 'owner'}
+        name={tutorDemo ? 'Tutor contoh' : 'Pentadbir contoh'}
       />
     );
+  }
   if (loading)
     return (
       <main className="auth-shell">

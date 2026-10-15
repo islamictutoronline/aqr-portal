@@ -138,6 +138,11 @@ export const readingSchema = z.object({
   ayah_to: z.number().int().min(1).max(286).optional(),
 });
 export type Reading = z.infer<typeof readingSchema>;
+// Juzuk mushaf Madinah 604 muka surat: juzuk 1 = ms 1–21, kemudian 20 muka surat setiap juzuk.
+export function juzOf(page?: number | null): number | null {
+  if (!page || page < 1 || page > 604) return null;
+  return page <= 21 ? 1 : Math.min(30, Math.floor((page - 2) / 20) + 1);
+}
 
 // Semakan julat ayat; mesej sama seperti pangkalan data.
 export function readingProblem(r: Reading): string | null {

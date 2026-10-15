@@ -256,7 +256,16 @@ export function buildReport(
         ];
       });
   } else if (code === 'student_progress') {
-    headers = ['Tarikh', 'Murid', 'Kemahiran', 'Skala', 'Penglibatan', 'Fokus', 'Ulasan', 'Status'];
+    headers = [
+      'Tarikh',
+      'Murid',
+      'Kemahiran / topik',
+      'Skala',
+      'Penglibatan',
+      'Fokus',
+      'Ulasan',
+      'Status',
+    ];
     rows = all('generated_parent_comments')
       .filter(inMonth)
       .filter((c) => role !== 'guardian' || c.status === 'published')
@@ -265,7 +274,7 @@ export function buildReport(
         return [
           dateLabel(String(sessions.find((s) => s.id === c.session_id)!.starts_at)),
           find('students', c.student_id, 'full_name'),
-          option(a.skill),
+          a.topic ? String(a.topic) : option(a.skill),
           typeof a.mastery === 'number' ? a.mastery : 'Belum dinilai',
           option(a.participation),
           option(a.focus),

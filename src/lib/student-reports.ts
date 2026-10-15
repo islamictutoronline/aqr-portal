@@ -13,7 +13,14 @@ import { Reading, hasReading, readingLabel, readingShort } from './quran';
 export type StudentSnapshot = {
   student_name: string;
   period: string;
-  attendance: { date: string; class_name: string; status: string; reading?: Reading | null }[];
+  attendance: {
+    date: string;
+    class_name: string;
+    status: string;
+    reading?: Reading | null;
+    // Tajuk/topik program teori (KAFA, Bahasa Arab, dll.).
+    topic?: string | null;
+  }[];
   feedback: { date: string; text: string }[];
   progress: { date: string; mastery: number; notes: string | null }[];
   // Rumusan bebas tutor untuk bulan ini (pilihan).
@@ -42,6 +49,7 @@ export function demoSnapshot(data: Dataset, student: Row, period: string): Stude
         ),
         status: String(a.status),
         reading: (a.reading as Reading | null) ?? null,
+        topic: String(get(a.session_id)!.topic || '') || null,
       })),
     feedback: (data.generated_parent_comments || [])
       .filter((c) => c.student_id === student.id && c.status === 'published' && get(c.session_id))
@@ -108,6 +116,8 @@ export function reportNarrative(snapshot: StudentSnapshot) {
   }
   const lastReading = [...snapshot.attendance].reverse().find((a) => hasReading(a.reading));
   if (lastReading) parts.push(`Bacaan terkini: ${readingLabel(lastReading.reading)}.`);
+  const lastTopic = [...snapshot.attendance].reverse().find((a) => a.topic);
+  if (lastTopic) parts.push(`Topik terkini: ${lastTopic.topic}.`);
   const scores = snapshot.progress.map((p) => p.mastery).filter((m) => m >= 1 && m <= 5);
   if (scores.length) {
     const avg = scores.reduce((n, m) => n + m, 0) / scores.length;
@@ -345,8 +355,11 @@ export async function reportPdf(
   }
   // --- Jadual kehadiran
   section('Rekod kehadiran');
-  // Lajur BACAAN hanya jika ada bacaan direkod (Iqra'/al-Quran).
-  const withReading = snapshot.attendance.some((a) => hasReading(a.reading));
+  // Lajur BACAAN (Iqra'/al-Quran) dan/atau TOPIK (program teori) hanya jika ada direkod.
+  const anyReading = snapshot.attendance.some((a) => hasReading(a.reading));
+  const anyTopic = snapshot.attendance.some((a) => a.topic);
+  const withReading = anyReading || anyTopic;
+  const detailHeader = anyReading && anyTopic ? 'BACAAN / TOPIK' : anyReading ? 'BACAAN' : 'TOPIK';
   const cols: [string, number][] = withReading
     ? [
         ['BIL', 26],
@@ -354,7 +367,7 @@ export async function reportPdf(
         ['HARI', 52],
         ['MASA', 58],
         ['PROGRAM', CW - 26 - 66 - 52 - 58 - 138 - 90],
-        ['BACAAN', 138],
+        [detailHeader, 138],
         ['KEHADIRAN', 90],
       ]
     : [
@@ -392,7 +405,7 @@ export async function reportPdf(
         day,
         time,
         program,
-        ...(withReading ? [readingShort(a.reading) || '—'] : []),
+        ...(withReading ? [readingShort(a.reading) || a.topic || '—'] : []),
         status,
       ];
       let x = M + 8;

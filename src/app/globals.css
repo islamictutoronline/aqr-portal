@@ -1774,6 +1774,28 @@ label {
   margin: 8px 0 4px;
   font-weight: 500;
 }
+/* Mesej simpan (berjaya atau ralat) dipaparkan di sebelah butang, bukan hanya di atas halaman. */
+.save-notice {
+  display: block;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff7e6;
+  color: #7a4a00;
+  font-weight: 600;
+}
+.session-when-note {
+  flex-basis: 100%;
+  margin: 0;
+}
+#session-editor {
+  display: block;
+  scroll-margin-top: 80px;
+}
+.reading-record td:nth-child(2) {
+  font-weight: 700;
+  white-space: nowrap;
+}
 
 /* Profil murid: butiran program dan jadual mingguan. */
 .program-detail {
@@ -3696,4 +3718,9 @@ textarea {
 .allowance-columns table.responsive td:nth-child(5) {
   grid-column: 1 / -1;
   grid-row: 3;
+}
+/* Tajuk/topik program teori (KAFA, Bahasa Arab, dll.) menggantikan pilihan kemahiran. */
+.topic-field input {
+  width: 100%;
+  min-height: 44px;
 }

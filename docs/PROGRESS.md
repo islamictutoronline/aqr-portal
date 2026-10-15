@@ -2,6 +2,16 @@
 
 Mula: 10 Oktober 2026, Asia/Kuala_Lumpur.
 
+Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026:
+
+- [x] Butang Edit kelas direkod: tatal ke editor + penanda "Sedang dibuka di atas"; mesej simpan dipaparkan di sebelah butang Simpan.
+- [x] Kelas direkod lewat / hari lain: tarikh-jam yang diubah disimpan bersama kehadiran; migrasi 39 (`extend_backdated`, `create_session` hidupkan semula slot dipadam, `free_voided_slot` dalam `move_session`).
+- [x] Rekod bacaan gaya SMAP: Juzuk (auto), Muka surat, Surah/Jilid, sejarah 3 terkini setiap perkara dengan Edit (tiada medan Status — rekod disimpan = selesai).
+- [x] Program teori (KAFA, Bahasa Arab, Faraid, Tajwid, Tadabbur, Tarannum): tajuk/topik ditulis sendiri menggantikan kemahiran; masuk ulasan, sesi, laporan kemajuan dan PDF bulanan (migrasi 40).
+- [x] Typecheck/lint/Prettier; `npm test` 124/124; `test:pages` 72/72; Pages/Next.js build; E2E 8/8.
+- [x] Migrasi 39 dan 40 dipasang di Supabase sebenar dan disahkan (15 Okt).
+- [ ] Push dan deploy Pages (menunggu arahan pengguna).
+
 Push dan deploy — 13 Oktober 2026:
 
 - [x] Commit UI `80fd127` dipush ke `main`; AQR checks [#38396303210](https://github.com/islamictutoronline/aqr-portal/actions/runs/38396303210) dan Pages [#38396313209](https://github.com/islamictutoronline/aqr-portal/actions/runs/38396313209) **success**.

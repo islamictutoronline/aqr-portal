@@ -1006,3 +1006,51 @@ test('admin generates reports + invoice for one family at once, then ZIPs a tuto
     .click();
   expect((await classZip).suggestedFilename()).toMatch(/^Laporan Kelas .*\.zip$/);
 });
+test('tutor records a class held on another day with one save; reading record lists it', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await page.locator('.student-picker button').first().click();
+  // Kelas sebenar berlaku pada hari lain dan jam lain: ubah tarikh/jam, terus simpan kehadiran.
+  await page.getByLabel('Tarikh kelas').first().fill('2026-10-07');
+  await page.getByLabel('Jam').first().fill('21:00');
+  await expect(page.getByText('Tarikh/jam baharu akan disimpan bersama kehadiran')).toBeVisible();
+  const first = page.locator('.student-tabs button').first();
+  await first.click();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByLabel("Jilid Iqra'").selectOption('3');
+  await page.getByLabel('Muka surat').fill('12');
+  await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
+  await expect(page.locator('.save-notice')).toContainText('memori tab');
+  await expect(page.getByLabel('Tarikh kelas').first()).toHaveValue('2026-10-07');
+  await first.click();
+  const record = page.locator('.reading-record');
+  await expect(record).toContainText('Sesi ini');
+  await expect(record).toContainText("Iqra' 3");
+});
+test('theory programme (KAFA) asks for a written topic instead of skill taps', async ({ page }) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  await page
+    .locator('.student-picker button')
+    .filter({ hasText: 'Fardhu Ain KAFA' })
+    .first()
+    .click();
+  await expect(page.getByText('2. Kemahiran dinilai')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  const save = page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ });
+  const topic = page.getByLabel('Tajuk / topik pembelajaran');
+  await topic.fill('');
+  await expect(save).toBeDisabled();
+  await expect(page.getByText('Isi tajuk/topik pembelajaran dahulu.')).toBeVisible();
+  await topic.fill('Bab wuduk — rukun dan perkara sunat');
+  await expect(page.locator('.preview-comment')).toContainText(
+    'Topik pembelajaran: Bab wuduk — rukun dan perkara sunat.',
+  );
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.locator('.save-notice')).toContainText('memori tab');
+});

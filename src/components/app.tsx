@@ -80,6 +80,7 @@ import { TutorClassReports } from './tutor-reports';
 import {
   Reading,
   hasReading,
+  juzOf,
   readingKind,
   readingLabel,
   readingProblem,
@@ -536,6 +537,13 @@ export function App({
   const [selectedSession, setSelectedSession] = useState(
     path.startsWith('sessions/') ? path.split('/')[1] : '',
   );
+  // Butang Edit/Rekod di bawah membuka sesi dalam editor di atas: tatal ke editor supaya jelas.
+  useEffect(() => {
+    if (!selectedSession) return;
+    document
+      .getElementById('session-editor')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [selectedSession]);
   const [child, setChild] = useState('');
   const [sessionTab, setSessionTab] = useState('today');
   const [reviewClass, setReviewClass] = useState('');
@@ -939,6 +947,23 @@ export function App({
             created_at: sess.starts_at,
           });
           sess.status = 'completed';
+          if (attended && sel.topic) sess.topic = sel.topic;
+        } else if (
+          operation === 'session' &&
+          next.class_sessions.some(
+            (x) =>
+              x.class_id === payload.cid &&
+              new Date(String(x.starts_at)).getTime() ===
+                new Date(String(payload.start_time)).getTime(),
+          )
+        ) {
+          const old = next.class_sessions.find(
+            (x) =>
+              x.class_id === payload.cid &&
+              new Date(String(x.starts_at)).getTime() ===
+                new Date(String(payload.start_time)).getTime(),
+          )!;
+          if (['cancelled', 'rescheduled'].includes(String(old.status))) old.status = 'scheduled';
         } else if (operation === 'session')
           next.class_sessions.push({
             id,
@@ -2135,9 +2160,13 @@ export function App({
               timeLabel(String(s.starts_at)),
               markOf(s.id),
               <div key="a" className="button-row">
-                <button className="text-link" onClick={() => go(`sessions/${s.id}`)}>
-                  Edit
-                </button>
+                {s.id === current.id ? (
+                  <span className="pill">Sedang dibuka di atas</span>
+                ) : (
+                  <button className="text-link" onClick={() => go(`sessions/${s.id}`)}>
+                    Edit
+                  </button>
+                )}
                 {!['verified', 'approved', 'paid'].includes(String(s.review_status)) && (
                   <button
                     className="text-link danger"
@@ -2161,9 +2190,8 @@ export function App({
     );
   }
   // Alih sesi di tempatnya: kehadiran kekal dan halaman kekal pada sesi yang sama.
-  const rescheduleSession = async (session: Row, start: string) => {
-    await mutate('move_session', { sid: session.id, new_start: start });
-  };
+  const rescheduleSession = (session: Row, start: string) =>
+    mutate('move_session', { sid: session.id, new_start: start });
   const allowances = useMemo(() => allowanceRows(visible, month), [visible, month]);
   const allowanceOf = (tid: unknown) =>
     allowances.filter((r) => r.tutorId === tid).reduce((n, r) => n + r.payable_sen, 0);
@@ -4901,6 +4929,8 @@ export function App({
               busy={busy}
               mutate={mutate}
               reschedule={rescheduleSession}
+              onOpen={(sid) => go(`sessions/${sid}`)}
+              notice={notice}
               onAdd={role === 'tutor' ? () => addSessionFor(currentSession.class_id) : undefined}
             />
           ) : (
@@ -5076,13 +5106,17 @@ function SessionEditor({
   busy,
   mutate,
   reschedule,
+  onOpen,
+  notice,
   onAdd,
 }: {
   session: Row;
   data: Dataset;
   busy: boolean;
   mutate: (operation: string, payload: Record<string, unknown>) => Promise<boolean>;
-  reschedule: (session: Row, start: string) => Promise<void>;
+  reschedule: (session: Row, start: string) => Promise<boolean>;
+  onOpen: (sid: string) => void;
+  notice?: string;
   onAdd?: () => void;
 }) {
   const startIso = String(session.starts_at);
@@ -5115,6 +5149,17 @@ function SessionEditor({
     const sel = (latest?.selections || {}) as Partial<Assessment>;
     return sel.mastery === 'not_assessed' ? {} : sel;
   };
+  // Tajuk/topik program teori: daripada rekod murid ini, atau topik sesi yang sudah diisi.
+  const savedTopic = (sid: unknown) => {
+    const latest = data.generated_parent_comments
+      .filter(
+        (c) => c.session_id === session.id && c.student_id === sid && c.status !== 'retracted',
+      )
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+    return String(
+      (latest?.selections as Partial<Assessment> | undefined)?.topic || session.topic || '',
+    );
+  };
   // Bacaan sesi (Iqra'/al-Quran) yang disimpan, atau kosong.
   const savedReading = (sid: unknown): Partial<Reading> =>
     (data.attendance.find((a) => a.session_id === session.id && a.student_id === sid)
@@ -5138,12 +5183,30 @@ function SessionEditor({
   const [assessment, setAssessment] = useState<Partial<Assessment>>(
     savedAssessment(students[0]?.id),
   );
+  const [topic, setTopic] = useState(savedTopic(students[0]?.id));
   const cls = data.classes.find((c) => c.id === session.class_id);
   const program = data.programs.find((p) => p.id === cls?.program_id);
   const subject = data.subjects.find((s) => s.id === program?.subject_id);
   const subjectSlug = String(subject?.slug || 'mengaji');
   const kind = readingKind(program?.code);
+  // Program bukan bacaan al-Quran (KAFA, Bahasa Arab, Faraid, Tajwid, dll.): tutor menulis topik.
+  const topicMode = !kind;
   const attendedNow = ['present', 'late', 'makeup'].includes(attendance);
+  const topicText = topic.trim();
+  const topicMissing = topicMode && attendedNow && !topicText;
+  const lastTopic = topicMode
+    ? String(
+        data.class_sessions
+          .filter(
+            (x) =>
+              x.class_id === session.class_id &&
+              x.id !== session.id &&
+              String(x.starts_at) < startIso &&
+              String(x.topic || '').trim(),
+          )
+          .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)))[0]?.topic || '',
+      )
+    : '';
   const readingInput = (): Reading | undefined =>
     kind && attendedNow && hasReading(reading) ? ({ ...reading, kind } as Reading) : undefined;
   const readingIssue = readingInput() ? readingProblem(readingInput()!) : null;
@@ -5160,7 +5223,8 @@ function SessionEditor({
         ? { mastery: 'not_assessed' }
         : ({ ...assessment, reading: undefined } as Assessment);
     const r = readingInput();
-    return r ? { ...base, reading: r } : base;
+    const withTopic = topicMode && attendedNow && topicText ? { ...base, topic: topicText } : base;
+    return r ? { ...withTopic, reading: r } : withTopic;
   };
   try {
     if (attendance) {
@@ -5171,7 +5235,7 @@ function SessionEditor({
         input,
         data.assessment_options.filter((o) => o.subject_id === subject?.id),
       );
-      valid = !readingIssue;
+      valid = !readingIssue && !topicMissing;
     }
   } catch {
     /* Explicit choices required. */
@@ -5217,26 +5281,48 @@ function SessionEditor({
       </div>
     </fieldset>
   );
+  const dateChanged = classDate !== initialDate || classTime !== initialTime;
   async function save(publish: boolean) {
+    // Kelas direkod lewat atau pada hari lain: tarikh/jam yang diubah disimpan bersama kehadiran.
+    // Jika sudah ada kelas pada tarikh/jam itu, kehadiran direkod terus ke kelas tersebut.
+    let sid = String(session.id);
+    if (dateChanged && !locked) {
+      const newStart = new Date(`${classDate}T${classTime}:00+08:00`).toISOString();
+      const other = data.class_sessions.find(
+        (x) =>
+          x.class_id === session.class_id &&
+          x.id !== session.id &&
+          !['cancelled', 'rescheduled'].includes(String(x.status)) &&
+          new Date(String(x.starts_at)).getTime() === new Date(newStart).getTime(),
+      );
+      if (other) sid = String(other.id);
+      else if (!(await reschedule(session, newStart))) return;
+    }
     const success = await mutate('assessment', {
-      sid: session.id,
+      sid,
       student: studentId,
       attendance_status: attendance,
       selected: assessmentInput(),
       publish,
     });
+    if (success && sid !== String(session.id)) {
+      onOpen(sid);
+      return;
+    }
     if (success) {
       const next = students[students.findIndex((s) => s.id === studentId) + 1];
       if (next) {
         setStudentId(next.id);
         setAttendance(savedAttendance(next.id));
         setAssessment(savedAssessment(next.id));
+        setTopic(savedTopic(next.id));
         setReading(savedReading(next.id));
       }
     }
   }
   return (
     <>
+      <span id="session-editor" />
       <Card
         title={String(cls?.name || 'Sesi')}
         subtitle={`${dateLabel(String(session.starts_at))} · ${timeLabel(String(session.starts_at))} · ${students.length} murid`}
@@ -5268,7 +5354,7 @@ function SessionEditor({
               onChange={(e) => setClassTime(e.target.value)}
             />
           </label>
-          {(classDate !== initialDate || classTime !== initialTime) && !locked && (
+          {dateChanged && !locked && (
             <button
               className="secondary"
               disabled={busy || !classDate || !classTime}
@@ -5282,6 +5368,11 @@ function SessionEditor({
               Simpan tarikh & jam
             </button>
           )}
+          {dateChanged && !locked && (
+            <p className="inline-note session-when-note">
+              Tarikh/jam baharu akan disimpan bersama kehadiran apabila anda tekan Simpan.
+            </p>
+          )}
         </div>
         <div className="student-tabs">
           {students.map((s) => (
@@ -5292,6 +5383,7 @@ function SessionEditor({
                 setStudentId(s.id);
                 setAttendance(savedAttendance(s.id));
                 setAssessment(savedAssessment(s.id));
+                setTopic(savedTopic(s.id));
                 setReading(savedReading(s.id));
               }}
             >
@@ -5426,13 +5518,39 @@ function SessionEditor({
                         }
                       />
                     </label>
+                    {kind === 'quran' && (
+                      <label>
+                        Juzuk
+                        <input readOnly tabIndex={-1} value={juzOf(reading.page) ?? '—'} />
+                      </label>
+                    )}
                   </div>
                   {readingIssue && <p className="reading-issue">{readingIssue}</p>}
                 </fieldset>
               )}
               {!['absent', 'excused'].includes(attendance) && (
                 <>
-                  {group('2. Kemahiran dinilai', 'skill', skillOptions[subjectSlug])}
+                  {topicMode ? (
+                    <fieldset className="topic-field">
+                      <legend>2. Tajuk / topik pembelajaran</legend>
+                      <input
+                        type="text"
+                        aria-label="Tajuk / topik pembelajaran"
+                        maxLength={120}
+                        disabled={locked}
+                        placeholder="Contoh: Bab wuduk — rukun dan perkara sunat"
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                      />
+                      {lastTopic && (
+                        <p className="reading-prev">
+                          Sesi lepas: <strong>{lastTopic}</strong>
+                        </p>
+                      )}
+                    </fieldset>
+                  ) : (
+                    group('2. Kemahiran dinilai', 'skill', skillOptions[subjectSlug])
+                  )}
                   <fieldset>
                     <legend>3. Penguasaan · tiada penilaian dipilih awal</legend>
                     <div className="chips mastery">
@@ -5488,7 +5606,16 @@ function SessionEditor({
                     ? 'Pilih kehadiran dahulu.'
                     : readingIssue
                       ? `Betulkan bacaan: ${readingIssue}.`
-                      : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
+                      : topicMissing
+                        ? 'Isi tajuk/topik pembelajaran dahulu.'
+                        : topicMode
+                          ? 'Lengkapkan penilaian (tahap, penglibatan dan fokus), atau biarkan kosong.'
+                          : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
+                </small>
+              )}
+              {notice && !busy && (
+                <small className="save-notice" aria-live="polite">
+                  {notice}
                 </small>
               )}
               <small>
@@ -5500,6 +5627,99 @@ function SessionEditor({
           </div>
         )}
       </Card>
+      {kind && studentId && (
+        <ReadingRecord
+          data={data}
+          kind={kind}
+          student={String(studentId)}
+          current={String(session.id)}
+          onOpen={onOpen}
+        />
+      )}
     </>
+  );
+}
+
+// Rekod bacaan gaya rekod Tahfiz: setiap perkara (juzuk / muka surat / surah, atau jilid Iqra')
+// dengan tiga rekod terkini, status, catatan dan guru. Edit membuka sesi pada tarikh itu.
+function ReadingRecord({
+  data,
+  kind,
+  student,
+  current,
+  onOpen,
+}: {
+  data: Dataset;
+  kind: 'iqra' | 'quran';
+  student: string;
+  current: string;
+  onOpen: (sid: string) => void;
+}) {
+  const entries = data.attendance
+    .filter((a) => a.student_id === student && hasReading(a.reading as Reading))
+    .map((a) => {
+      const sess = data.class_sessions.find((x) => x.id === a.session_id);
+      const tutor = (data.staff_profiles || []).find((t) => t.id === sess?.tutor_id);
+      return {
+        sid: String(a.session_id),
+        at: String(sess?.starts_at || ''),
+        reading: a.reading as Reading,
+        tutor: String(tutor?.display_name || tutor?.full_name || '—'),
+      };
+    })
+    .filter((x) => x.at)
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const items: [string, (r: Reading) => string | number | null | undefined][] =
+    kind === 'iqra'
+      ? [
+          ['JILID', (r) => (r.jilid ? `Iqra' ${r.jilid}` : null)],
+          ['MUKA SURAT', (r) => r.page],
+        ]
+      : [
+          ['JUZUK', (r) => juzOf(r.page)],
+          ['MUKA SURAT', (r) => r.page],
+          [
+            'SURAH',
+            (r) =>
+              r.surah
+                ? `${surahs[r.surah - 1][0]}${r.ayah_from ? ` ${r.ayah_from}${r.ayah_to && r.ayah_to !== r.ayah_from ? `–${r.ayah_to}` : ''}` : ''}`
+                : null,
+          ],
+        ];
+  const name = String(data.students.find((x) => x.id === student)?.full_name || '');
+  const rows: React.ReactNode[][] = [];
+  items.forEach(([label, value], i) => {
+    const list = entries.filter((e) => value(e.reading)).slice(0, 3);
+    if (!list.length) {
+      rows.push([String(i + 1), label, '—', 'Belum direkod', '—', '']);
+      return;
+    }
+    list.forEach((e, k) =>
+      rows.push([
+        k === 0 ? String(i + 1) : '',
+        k === 0 ? label : '',
+        dateLabel(e.at),
+        String(value(e.reading)),
+        e.tutor,
+        e.sid === current ? (
+          <span key="o" className="pill">
+            Sesi ini
+          </span>
+        ) : (
+          <button key="o" className="text-link" onClick={() => onOpen(e.sid)}>
+            Edit
+          </button>
+        ),
+      ]),
+    );
+  });
+  return (
+    <Card
+      title={`Rekod bacaan${name ? ` · ${name}` : ''}`}
+      subtitle="Tiga rekod terkini bagi setiap perkara. Rekod yang disimpan dikira selesai. Tekan Edit untuk membetulkan rekod pada tarikh lain."
+      className="reading-record"
+    >
+      <Table headers={['#', 'Perkara', 'Tarikh', 'Catatan', 'Guru', 'Operasi']} rows={rows} />
+    </Card>
   );
 }

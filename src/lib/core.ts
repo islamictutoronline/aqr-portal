@@ -250,6 +250,8 @@ export const assessmentSchema = z.object({
   practice: z.string().optional(),
   // Bacaan sesi (Iqra'/al-Quran) untuk laporan; hanya bagi kelas yang dihadiri.
   reading: readingSchema.optional(),
+  // Program teori (KAFA, Bahasa Arab, dll.): tajuk/topik ditulis sendiri, menggantikan kemahiran.
+  topic: z.string().trim().max(120, 'Tajuk/topik maksimum 120 aksara').optional(),
 });
 export type Assessment = z.infer<typeof assessmentSchema>;
 export function generateComment(
@@ -266,13 +268,17 @@ export function generateComment(
   );
 }
 function baseComment(subject: string, attendance: string, a: Assessment, customOptions: Row[]) {
-  if (['absent', 'excused'].includes(attendance) || a.mastery === 'not_assessed')
-    return 'Tiada penilaian pembelajaran untuk sesi ini.';
+  const topic = a.topic?.trim();
+  const absent = ['absent', 'excused'].includes(attendance);
+  // Sama seperti private.record_assessment (migrasi 40).
+  if (absent || a.mastery === 'not_assessed')
+    return `${topic && !absent ? `Topik pembelajaran: ${topic}. ` : ''}Tiada penilaian pembelajaran untuk sesi ini.`;
   const option = (group: string, code?: string) =>
     customOptions.find((o) => o.group_code === group && o.code === code && o.active !== false)
       ?.label as string | undefined;
-  const skill =
-    option('skill', a.skill) ?? skillOptions[subject]?.find((s) => s[0] === a.skill)?.[1];
+  const skill = topic
+    ? `topik ${topic}`
+    : (option('skill', a.skill) ?? skillOptions[subject]?.find((s) => s[0] === a.skill)?.[1]);
   const part =
     option('participation', a.participation) ??
     participationOptions.find((s) => s[0] === a.participation)?.[1];
@@ -281,7 +287,9 @@ function baseComment(subject: string, attendance: string, a: Assessment, customO
     ? (option('home_practice', a.practice) ?? practiceOptions.find((s) => s[0] === a.practice)?.[1])
     : '';
   if (!skill || !part || !focus || (a.practice && !practice))
-    throw new Error('Pilih kemahiran, penglibatan dan fokus');
+    throw new Error(
+      topic ? 'Pilih penglibatan dan fokus' : 'Pilih kemahiran, penglibatan dan fokus',
+    );
   const ratings = [
     'yang memerlukan bimbingan',
     'asas',
