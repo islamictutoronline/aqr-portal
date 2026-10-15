@@ -2,7 +2,9 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026 (setempat, belum push/deploy)
+## Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026 (dideploy)
+
+**Push dan deploy (15 Okt):** commit `7be11e8` dipush ke `main`; [AQR checks #38741932570](https://github.com/islamictutoronline/aqr-portal/actions/runs/38741932570) dan [AQR GitHub Pages #38741943641](https://github.com/islamictutoronline/aqr-portal/actions/runs/38741943641) **success**. Laman sebenar HTTP 200; aset `index-BakUtwBZ.js` mengandungi "Tajuk / topik pembelajaran", "Sedang dibuka di atas", "Rekod bacaan" dan nota tarikh/jam; demo terbitan kekal terkunci. Belum diuji dengan log masuk tutor sebenar.
 
 Aduan pengguna: (1) butang **Edit** bagi kelas yang telah direkod "tidak berfungsi"; (2) kelas yang direkod selepas waktu kelas / pada hari lain tidak boleh disimpan; (3) integrasikan contoh rekod Tahfiz SMAP (Perkara JUZUK / MUKA SURAT / SURAH, Tarikh, Catatan, Guru, Edit); (4) program teori (KAFA, Bahasa Arab, dll.) isi tajuk/topik sendiri menggantikan kemahiran.
 

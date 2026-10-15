@@ -10,7 +10,7 @@ Pembetulan rekod kelas + rekod bacaan gaya Tahfiz — 15 Oktober 2026:
 - [x] Program teori (KAFA, Bahasa Arab, Faraid, Tajwid, Tadabbur, Tarannum): tajuk/topik ditulis sendiri menggantikan kemahiran; masuk ulasan, sesi, laporan kemajuan dan PDF bulanan (migrasi 40).
 - [x] Typecheck/lint/Prettier; `npm test` 124/124; `test:pages` 72/72; Pages/Next.js build; E2E 8/8.
 - [x] Migrasi 39 dan 40 dipasang di Supabase sebenar dan disahkan (15 Okt).
-- [ ] Push dan deploy Pages (menunggu arahan pengguna).
+- [x] Push dan deploy: commit `7be11e8`; AQR checks #38741932570 dan Pages #38741943641 success; laman sebenar HTTP 200 dengan aset baharu.
 
 Push dan deploy — 13 Oktober 2026:
 
