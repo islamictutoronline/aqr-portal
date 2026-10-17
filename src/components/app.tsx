@@ -65,6 +65,7 @@ import {
   Rate,
   statusLabels,
   passwordProblem,
+  klDay,
   pickedCodes,
   normalizePhone,
   countryCodes,
@@ -2071,8 +2072,7 @@ export function App({
       setBusy(false);
     }
   }
-  const klDate = (iso: string) =>
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
+  const klDate = (iso: string) => klDay(iso);
   // Sesi paling sesuai untuk direkod: hari ini, kemudian sesi seterusnya. Slot lepas yang tidak
   // direkod tidak dibuka (jadual kerap berubah); kelas lepas direkod dengan menukar tarikh/jam
   // atau Tambah rekod sesi.
@@ -2245,9 +2245,15 @@ export function App({
       ))}
     </div>
   );
-  const monthlySessions = all('class_sessions').filter((s) =>
-    dateLabel(String(s.starts_at)).endsWith(`${month.slice(5)}/${month.slice(0, 4)}`),
-  );
+  // Sesi bulan dipilih (perbandingan masa, tanpa memformat tarikh bagi setiap sesi).
+  const monthRange = monthBounds(month);
+  const monthStart = Date.parse(monthRange.start);
+  const monthEnd = Date.parse(monthRange.end);
+  const monthlySessions = all('class_sessions').filter((s) => {
+    const t = Date.parse(String(s.starts_at));
+    return t >= monthStart && t < monthEnd;
+  });
+  const monthlySessionIds = new Set<unknown>(monthlySessions.map((s) => s.id));
   const invoices = all('invoices').filter(
     (i) => i.period === month && !['draft', 'void'].includes(String(i.status)),
   );
@@ -2304,7 +2310,7 @@ export function App({
             all('attendance').filter(
               (a) =>
                 ['present', 'late', 'makeup'].includes(String(a.status)) &&
-                monthlySessions.some((s) => s.id === a.session_id),
+                monthlySessionIds.has(a.session_id),
             ).length,
             'Rekod hadir bulan ini',
           ],

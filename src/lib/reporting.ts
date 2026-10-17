@@ -12,6 +12,7 @@ import {
   dateLabel,
   statusLabel,
   findRate,
+  klDay,
   skillCodes,
   pickedCodes,
   Rate,
@@ -84,20 +85,28 @@ export function allowanceRows(data: Dataset, month: string): AllowanceRow[] {
   const { start, end } = monthBounds(month);
   const all = (table: string) => data[table] ?? [];
   const rates = all('tutor_allowance_rates') as unknown as Rate[];
-  const klDay = (iso: string) =>
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  const classes = new Map(all('classes').map((c) => [c.id, c] as [unknown, Row]));
+  const programs = new Map(all('programs').map((p) => [p.id, p] as [unknown, Row]));
+  const marksBySession = new Map<unknown, Row[]>();
+  for (const a of all('attendance')) {
+    const list = marksBySession.get(a.session_id);
+    if (list) list.push(a);
+    else marksBySession.set(a.session_id, [a]);
+  }
   return all('class_sessions')
     .filter((s) => {
-      const t = new Date(String(s.starts_at));
-      return s.status === 'completed' && t >= new Date(start) && t < new Date(end);
+      const t = Date.parse(String(s.starts_at));
+      return s.status === 'completed' && t >= startMs && t < endMs;
     })
     .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
     .map((s) => {
-      const cls = all('classes').find((c) => c.id === s.class_id);
-      const program = all('programs').find((p) => p.id === cls?.program_id);
+      const cls = classes.get(s.class_id);
+      const program = programs.get(cls?.program_id);
       const minutes =
         (new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000;
-      const marks = all('attendance').filter((a) => a.session_id === s.id);
+      const marks = marksBySession.get(s.id) ?? [];
       const paid = marks.some((a) => PAYABLE_ATTENDANCE.includes(String(a.status)));
       const day = klDay(String(s.starts_at));
       let standard: number | null = null;
@@ -137,8 +146,6 @@ export type FeeRow = {
 export function feeRows(data: Dataset, month: string): FeeRow[] {
   const { start, end } = monthBounds(month);
   const all = (table: string) => data[table] ?? [];
-  const klDay = (iso: string) =>
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
   const stored = all('program_fee_rates');
   const rates: Row[] = stored.length
     ? stored
@@ -150,14 +157,28 @@ export function feeRows(data: Dataset, month: string): FeeRow[] {
         effective_from: '2000-01-01',
       }));
   const groups = new Map<string, FeeRow>();
+  // Indeks id → baris (elak carian linear bagi setiap kehadiran).
+  const index = (table: string) => new Map(all(table).map((r) => [r.id, r] as [unknown, Row]));
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  const sessions = new Map(
+    all('class_sessions')
+      .filter((s) => {
+        const t = Date.parse(String(s.starts_at));
+        return s.status === 'completed' && t >= startMs && t < endMs;
+      })
+      .map((s) => [s.id, s] as [unknown, Row]),
+  );
+  const classes = index('classes');
+  const programs = index('programs');
+  const students = index('students');
   for (const a of all('attendance')) {
     if (!CHARGEABLE_ATTENDANCE.includes(String(a.status))) continue;
-    const s = all('class_sessions').find((x) => x.id === a.session_id);
-    if (!s || s.status !== 'completed') continue;
+    const s = sessions.get(a.session_id);
+    if (!s) continue;
     const t = new Date(String(s.starts_at));
-    if (t < new Date(start) || t >= new Date(end)) continue;
-    const cls = all('classes').find((c) => c.id === s.class_id);
-    const program = all('programs').find((p) => p.id === cls?.program_id);
+    const cls = classes.get(s.class_id);
+    const program = programs.get(cls?.program_id);
     const minutes = (new Date(String(s.ends_at)).getTime() - t.getTime()) / 60000;
     const day = klDay(String(s.starts_at));
     const rate = rates.find(
@@ -173,7 +194,7 @@ export function feeRows(data: Dataset, month: string): FeeRow[] {
     const key = `${a.student_id}|${program?.id}|${minutes}|${fee}`;
     const row = groups.get(key) || {
       studentId: String(a.student_id),
-      student: String(all('students').find((x) => x.id === a.student_id)?.full_name || '—'),
+      student: String(students.get(a.student_id)?.full_name || '—'),
       program: String(program?.name || '—'),
       minutes,
       sessions: 0,

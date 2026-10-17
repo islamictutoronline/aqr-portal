@@ -93,21 +93,26 @@ export function fileName(parts: unknown[], ext: string) {
     .filter(Boolean);
   return `${clean.join(' - ').slice(0, 150)}.${ext}`;
 }
-export const formatMoney = (sen: number) =>
-  new Intl.NumberFormat('ms-MY', { style: 'currency', currency: 'MYR' }).format(sen / 100);
-export const dateLabel = (date: string) =>
-  new Intl.DateTimeFormat('ms-MY', {
-    timeZone: 'Asia/Kuala_Lumpur',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(date));
-export const timeLabel = (date: string) =>
-  new Intl.DateTimeFormat('ms-MY', {
-    timeZone: 'Asia/Kuala_Lumpur',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date));
+// Pemformat Intl dicipta sekali sahaja: mencipta pemformat baharu bagi setiap panggilan sangat mahal
+// dan menjadi punca utama paparan perlahan apabila beribu-ribu sesi diformat.
+const moneyFormat = new Intl.NumberFormat('ms-MY', { style: 'currency', currency: 'MYR' });
+const dateFormat = new Intl.DateTimeFormat('ms-MY', {
+  timeZone: 'Asia/Kuala_Lumpur',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+const timeFormat = new Intl.DateTimeFormat('ms-MY', {
+  timeZone: 'Asia/Kuala_Lumpur',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+export const formatMoney = (sen: number) => moneyFormat.format(sen / 100);
+export const dateLabel = (date: string) => dateFormat.format(new Date(date));
+export const timeLabel = (date: string) => timeFormat.format(new Date(date));
+// Tarikh Malaysia "YYYY-MM-DD".
+export const klDay = (date: string | number | Date) => dayFormat.format(new Date(date));
 export function monthBounds(month: string) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Bulan tidak sah');
   const [y, m] = month.split('-').map(Number);
