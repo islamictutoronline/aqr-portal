@@ -332,3 +332,9 @@ Untuk sambung kerja:
 - Pengguna meminta kata laluan lalai tetap untuk semua reset; **tidak dikodkan** kerana repo dan bundle Pages awam (sesiapa boleh log masuk ke akaun yang baru di-reset). Admin menaip kata laluan sementara dalam dialog (boleh menaip nilai pilihan pengguna); ia tidak disimpan dalam kod.
 - UI: butang "Reset kata laluan" di profil tutor (admin); tutor dengan `must_change_password` hanya melihat kad "Tukar kata laluan sementara" sehingga kata laluan baharu disimpan (`/api/password` menetapkan `must_change_password=false`). `weakPasswords` menolak awalan `abcde`. Demo: `?demo=1&role=tutor&reset=1`.
 - Ujian: `tests/integration/reset-password.test.ts` 4/4 (PGlite + pgcrypto), Pages 76/76, `npm test` 133/133, E2E 8/8, build OK. Migrasi 43 **dipasang pengguna di cloud 17 Okt** (success); deploy 20ab2d0 lulus, aset live disahkan (tiada kata laluan dalam bundle). Log masuk sebenar dengan kata laluan sementara **belum diuji**.
+
+## Tutor nampak murid bertarikh mula akan datang (migrasi 44) — 17 Oktober 2026
+
+- Laporan pengguna: 3 murid yang didaftar seorang tutor pada 17/10 dengan tarikh mula 18–19/10 tidak kelihatan kepada tutor itu (admin nampak). Disahkan melalui semakan baca sahaja di cloud: tugasan dan akaun tutor betul; `class_tutors.starts_on` > `current_date` menyebabkan `teaches_class(...,current_date)` palsu dalam RLS baca.
+- `supabase/migrations/202610170044_tutor_sees_upcoming.sql`: `private.tutor_reads_class(org,cid)` (tugasan tutor belum tamat ikut tarikh Malaysia; tidak semak `starts_on`) digunakan oleh `can_class`, `can_student`, polisi `enrollment_read` dan `mastery_read`. Akses tulis/rekod kekal melalui `teaches_class` ikut tarikh sesi.
+- Ujian `session-fixes` 12/12 (gagal tanpa migrasi 44: 0 lawan 3), `npm test` 134/134, Pages 76/76.

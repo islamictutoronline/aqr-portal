@@ -119,3 +119,4 @@ Ujian pelayar membuka kesemua 10 skrin modul tanpa ralat JavaScript atau overflo
 - 17 Okt 2026: deploy b850a78 (laporan kotak skrol/carian, hanya sesi selesai, skrip reset janaan); skrip peribadi penilaian rawak tutor Ahmad Muzzammil disediakan (di luar repo).
 - 17 Okt 2026: migrasi 42 `202610170042_supplementary_invoices.sql` — jana yuran sesi boleh diulang; sesi selepas invois dibayar masuk invois tambahan (`sessions:<bulan>:<penjaga>:2`), tiada sesi dibilkan dua kali. Diuji PGlite + Pages demo; dipasang pengguna di Supabase; deploy 2eb7c06.
 - 17 Okt 2026: migrasi 43 `202610170043_reset_tutor_password.sql` — admin reset kata laluan tutor (kata laluan sementara ditaip admin; tutor wajib tukar). Diuji PGlite + Pages demo.
+- 17 Okt 2026: migrasi 44 `202610170044_tutor_sees_upcoming.sql` — tutor nampak murid sebaik didaftar walaupun tarikh mula akan datang (RLS baca). Diuji PGlite.

@@ -286,3 +286,58 @@ describe('invois tambahan', () => {
     ).toBe(6);
   });
 });
+
+describe('tutor nampak murid dengan tarikh mula akan datang', () => {
+  it('murid, kelas, pendaftaran dan sesi kelihatan kepada tutornya sahaja', async () => {
+    const kl = (days: number) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(
+        new Date(Date.now() + days * 86400000),
+      );
+    await asUser(tutor);
+    const kid = (
+      await one<{ id: string }>('select tutor_enrol_student($1,$2,$3,30,$4,$5,$6,null,$7) id', [
+        org,
+        'Murid Mula Lusa',
+        id(42),
+        JSON.stringify([{ day: 3, time: '21:00' }]),
+        '2027-12-31',
+        kl(2),
+        '0122222222',
+      ])
+    ).id;
+    const seen = async () =>
+      Number(
+        (
+          await one<{ n: number }>(
+            `select (select count(*) from students where id=$1)
+              + (select count(*) from enrollments where student_id=$1)
+              + (select count(*) from classes c join enrollments e on e.class_id=c.id where e.student_id=$1) n`,
+            [kid],
+          )
+        ).n,
+      );
+    expect(await seen()).toBe(3);
+    // Sesi akan datang kelas itu turut kelihatan.
+    expect(
+      Number(
+        (
+          await one<{ n: number }>(
+            'select count(*) n from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1',
+            [kid],
+          )
+        ).n,
+      ),
+    ).toBeGreaterThan(0);
+    // Tutor lain tidak nampak.
+    await db.exec(`reset role; insert into auth.users(id) values('${id(16)}');
+      insert into staff_profiles(id,auth_user_id,display_name) values('${id(16)}','${id(16)}','Tutor Lain');
+      insert into staff_memberships(organization_id,staff_id,role) values('${org}','${id(16)}','tutor');`);
+    await asUser(id(16));
+    expect(await seen()).toBe(0);
+    // Tugasan yang telah tamat: tutor asal tidak lagi nampak.
+    await db.exec(`reset role; update class_tutors set starts_on=current_date-10, ends_on=current_date-2
+      where class_id=(select class_id from enrollments where student_id='${kid}')`);
+    await asUser(tutor);
+    expect(await seen()).toBe(0);
+  });
+});
