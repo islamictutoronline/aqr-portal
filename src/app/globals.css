@@ -3747,3 +3747,42 @@ textarea {
   color: var(--slate);
   font-weight: 500;
 }
+/* Laporan Excel & CSV: pratonton dalam kotak skrol dengan tajuk lajur melekat dan carian. */
+.report-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #dfe5e1);
+  border-radius: 12px;
+  background: #fff;
+  max-width: 420px;
+}
+.report-search input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  min-height: 42px;
+  background: transparent;
+}
+.report-scroll .table-wrap {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+}
+.report-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper, #f6f8f6);
+}
+.export-history {
+  padding: 16px 20px;
+}
+.export-history summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.export-history[open] summary {
+  margin-bottom: 12px;
+}

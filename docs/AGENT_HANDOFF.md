@@ -2,6 +2,13 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Laporan ringkas, tiada sesi dijadualkan, skrip reset janaan — 17 Oktober 2026 (setempat, belum push/deploy)
+
+- **Laporan Excel & CSV:** pratonton dalam kotak skrol (`.report-scroll`, maks 60vh, tajuk lajur melekat) dengan carian (`reportQuery`); "Sejarah eksport" dilipat (`details.export-history`). Muat turun kekal penuh.
+- **Tiada sesi dijadualkan dalam paparan:** Laporan mengajar bulanan hanya kelas `completed`, lajur Status → **Kehadiran** (status murid), disusun ikut tarikh. Tab Tutor: kad "Sesi dijadualkan" dibuang; "Sesi bulan ini" hanya kelas dilaksanakan dengan lajur Kehadiran; senarai tutor memaparkan bilangan sesi selesai sahaja.
+- **`supabase/reset-generated-data.sql`** (bukan migrasi; **dijalankan pengguna 17 Okt**: murid 12, kehadiran kekal 30, janaan 0): TRUNCATE invois/item/bayaran/peruntukan/resit/bukti, laporan bulanan + penghantaran, rumusan tutor, elaun dibayar/kelompok/payout/entri/pelarasan, sejarah eksport; padam kehadiran (+ulasan/penilaian/kemajuan) pada kelas yang tutornya bukan tutor 'AHMAD MUZZAMMIL%' dan kembalikan kelas itu ke `scheduled`; buka kunci `review_status`. Dikekalkan: murid, penjaga, kelas, jadual, akaun, kadar, kehadiran tutor itu. Diuji PGlite (invois/laporan/elaun 0; murid dan kehadiran tutor itu kekal).
+- Ujian: Pages 72/72 (baharu: carian laporan + tiada Dijadualkan), `npm test` 128/128.
+
 ## Buang menu Sesi & kehadiran untuk pentadbir — 17 Oktober 2026 (dideploy `64900e3`)
 
 **Push dan deploy:** [AQR checks #39033025289](https://github.com/islamictutoronline/aqr-portal/actions/runs/39033025289) dan [AQR GitHub Pages #39033026176](https://github.com/islamictutoronline/aqr-portal/actions/runs/39033026176) **success**; laman sebenar HTTP 200, aset `index-01iAVwen.js` tanpa kad "Belum direkod".

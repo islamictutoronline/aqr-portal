@@ -595,6 +595,7 @@ export function App({
     };
   }, [demo, initialRole]);
   const [reportCode, setReportCode] = useState<ReportCode>('monthly_teaching');
+  const [reportQuery, setReportQuery] = useState('');
   const academic = ['owner', 'admin'].includes(role);
   const finance = ['owner', 'admin'].includes(role);
   const activeGuardian = guardianId || 'guardian-0';
@@ -4113,22 +4114,53 @@ export function App({
               </button>
             </div>
           </div>
-          <div className="report-meta">
-            <strong>{report.title}</strong>
-            <span>
-              {month} · {report.rows.length} baris · {demo ? 'Demo rekaan' : 'Data berizin'}
-            </span>
-          </div>
-          <Table
-            headers={report.headers.map((h) => h.replace('(sen)', '(RM)'))}
-            rows={report.rows.map((row) =>
-              row.map((v, i) =>
-                report.headers[i].includes('(sen)') && typeof v === 'number' ? formatMoney(v) : v,
-              ),
-            )}
-          />
+          {(() => {
+            // Pratonton dalam kotak skrol dengan carian; muat turun tetap mengandungi semua baris.
+            const q = reportQuery.trim().toLowerCase();
+            const shown = q
+              ? report.rows.filter((row) => row.some((v) => String(v).toLowerCase().includes(q)))
+              : report.rows;
+            return (
+              <>
+                <div className="report-meta">
+                  <strong>{report.title}</strong>
+                  <span>
+                    {month} · {q ? `${shown.length} daripada ` : ''}
+                    {report.rows.length} baris · {demo ? 'Demo rekaan' : 'Data berizin'}
+                  </span>
+                </div>
+                <label className="report-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    type="search"
+                    aria-label="Cari dalam laporan"
+                    placeholder="Cari murid, tutor, program…"
+                    value={reportQuery}
+                    onChange={(e) => setReportQuery(e.target.value)}
+                  />
+                </label>
+                <div className="report-scroll">
+                  <Table
+                    headers={report.headers.map((h) => h.replace('(sen)', '(RM)'))}
+                    rows={shown.map((row) =>
+                      row.map((v, i) =>
+                        report.headers[i].includes('(sen)') && typeof v === 'number'
+                          ? formatMoney(v)
+                          : v,
+                      ),
+                    )}
+                  />
+                </div>
+                <p className="footnote">
+                  Pratonton boleh diskrol dalam kotak. Excel/CSV yang dimuat turun mengandungi semua{' '}
+                  {report.rows.length} baris.
+                </p>
+              </>
+            );
+          })()}
         </Card>
-        <Card title="Sejarah eksport">
+        <details className="card export-history">
+          <summary>Sejarah eksport ({all('export_jobs').length})</summary>
           <Table
             headers={['Laporan', 'Masa', 'Baris', 'Status']}
             rows={all('export_jobs').map((j) => [
@@ -4138,7 +4170,7 @@ export function App({
               <Badge key="s" value={j.status} />,
             ])}
           />
-        </Card>
+        </details>
         <p className="footnote">
           PDF melalui dialog cetak pelayar. Google Sheets memerlukan sambungan OAuth dalam Tetapan;
           demo tidak membuat eksport cloud.
@@ -4533,7 +4565,6 @@ export function App({
           <div className="metrics">
             {[
               ['Murid', new Set(enrol.map((e) => e.student_id)).size, 'Murid aktif'],
-              ['Sesi dijadualkan', ss.length, `Bulan ${month}`],
               ['Sesi selesai', done(ss), 'Telah dilaksanakan'],
               ['Elaun perlu dibayar', formatMoney(allowanceOf(tutor.id)), 'Dikira automatik'],
             ].map(([label, value, hint]) => (
@@ -4566,23 +4597,28 @@ export function App({
               })}
             />
           </Card>
-          <Card title="Sesi bulan ini" subtitle="Kelas yang dijadualkan dan dilaksanakan">
+          <Card title="Sesi bulan ini" subtitle="Kelas yang telah dilaksanakan">
             <Table
-              headers={['Tarikh', 'Masa', 'Murid · Program', 'Tempoh', 'Status', 'Elaun', '']}
-              rows={ss.map((s) => [
-                dateLabel(String(s.starts_at)),
-                timeLabel(String(s.starts_at)),
-                lookup('classes', s.class_id, 'name'),
-                `${(new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000} min`,
-                <Badge key="s" value={s.status} />,
-                (() => {
-                  const r = allowances.find((x) => x.session.id === s.id);
-                  return r ? formatMoney(r.payable_sen) : '—';
-                })(),
-                <button key="o" className="text-link" onClick={() => go(`sessions/${s.id}`)}>
-                  Buka sesi <ChevronRight size={16} />
-                </button>,
-              ])}
+              headers={['Tarikh', 'Masa', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun', '']}
+              rows={ss
+                .filter((s) => s.status === 'completed')
+                .map((s) => [
+                  dateLabel(String(s.starts_at)),
+                  timeLabel(String(s.starts_at)),
+                  lookup('classes', s.class_id, 'name'),
+                  `${(new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000} min`,
+                  <Badge
+                    key="s"
+                    value={all('attendance').find((a) => a.session_id === s.id)?.status || '—'}
+                  />,
+                  (() => {
+                    const r = allowances.find((x) => x.session.id === s.id);
+                    return r ? formatMoney(r.payable_sen) : '—';
+                  })(),
+                  <button key="o" className="text-link" onClick={() => go(`sessions/${s.id}`)}>
+                    Buka sesi <ChevronRight size={16} />
+                  </button>,
+                ])}
             />
           </Card>
         </>
@@ -4597,7 +4633,7 @@ export function App({
             return [
               <strong key="n">{String(t.display_name)}</strong>,
               new Set(studentsOf(t.id).map((e) => e.student_id)).size,
-              `${done(ss)} / ${ss.length}`,
+              done(ss),
               formatMoney(allowanceOf(t.id)),
               <Badge key="s" value={t.active ? 'active' : 'archived'} />,
               <div key="o" className="button-row">

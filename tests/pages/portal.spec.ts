@@ -1025,3 +1025,20 @@ test('theory programme (KAFA) asks for a written topic instead of skill taps', a
   await save.click();
   await expect(page.locator('.save-notice')).toContainText('memori tab');
 });
+test('report preview scrolls in a box and can be searched; export history is folded', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/reports');
+  const meta = page.locator('.report-meta');
+  await expect(meta).toContainText(/\d+ baris/);
+  // Laporan mengajar hanya mengandungi kelas yang dilaksanakan.
+  await expect(page.locator('.report-scroll td[data-label="Kehadiran"]').first()).not.toHaveText(
+    'Dijadualkan',
+  );
+  await page.getByLabel('Cari dalam laporan').fill('Tutor Contoh 2');
+  await expect(meta).toContainText(/daripada \d+ baris/);
+  await expect(page.locator('.report-scroll td[data-label="Tutor"]').first()).toHaveText(
+    'Tutor Contoh 2',
+  );
+  await expect(page.locator('details.export-history')).not.toHaveAttribute('open', '');
+});

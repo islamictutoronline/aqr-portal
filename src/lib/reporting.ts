@@ -221,26 +221,36 @@ export function buildReport(
       (p) => p.id === all('classes').find((c) => c.id === s.class_id)?.program_id,
     );
   if (code === 'monthly_teaching') {
-    headers = ['Tarikh', 'Tutor', 'Murid', 'Program', 'Tempoh min', 'Status', 'Nota'];
-    rows = sessions.flatMap((s) =>
-      all('enrollments')
-        .filter(
-          (e) =>
-            e.class_id === s.class_id &&
-            e.starts_on &&
-            String(e.starts_on) <= String(s.starts_at).slice(0, 10) &&
-            (!e.ends_on || String(e.ends_on) >= String(s.starts_at).slice(0, 10)),
-        )
-        .map((e) => [
-          dateLabel(String(s.starts_at)),
-          find('staff_profiles', s.tutor_id, 'display_name'),
-          find('students', e.student_id, 'full_name'),
-          String(sessionProgram(s)?.name ?? '—'),
-          (new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) / 60000,
-          statusLabel(s.status),
-          String(s.topic ?? ''),
-        ]),
-    );
+    headers = ['Tarikh', 'Tutor', 'Murid', 'Program', 'Tempoh min', 'Kehadiran', 'Nota'];
+    // Hanya kelas yang dilaksanakan: slot jadual yang tidak direkod tidak dilaporkan (jadual fleksibel).
+    rows = [...sessions]
+      .filter((s) => s.status === 'completed')
+      .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
+      .flatMap((s) =>
+        all('enrollments')
+          .filter(
+            (e) =>
+              e.class_id === s.class_id &&
+              e.starts_on &&
+              String(e.starts_on) <= String(s.starts_at).slice(0, 10) &&
+              (!e.ends_on || String(e.ends_on) >= String(s.starts_at).slice(0, 10)),
+          )
+          .map((e) => [
+            dateLabel(String(s.starts_at)),
+            find('staff_profiles', s.tutor_id, 'display_name'),
+            find('students', e.student_id, 'full_name'),
+            String(sessionProgram(s)?.name ?? '—'),
+            (new Date(String(s.ends_at)).getTime() - new Date(String(s.starts_at)).getTime()) /
+              60000,
+            (() => {
+              const mark = all('attendance').find(
+                (a) => a.session_id === s.id && a.student_id === e.student_id,
+              );
+              return mark ? statusLabel(mark.status) : '—';
+            })(),
+            String(s.topic ?? ''),
+          ]),
+      );
   } else if (code === 'attendance') {
     headers = ['Tarikh', 'Murid', 'Program', 'Kehadiran', 'Catatan'];
     rows = all('attendance')
