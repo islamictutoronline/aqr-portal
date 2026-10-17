@@ -4,6 +4,8 @@ Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan ke
 
 ## Julat muka surat + import Oktober tutor Ahmad Muzzammil — 17 Oktober 2026
 
+**Push dan deploy:** commit `8c16c64`; [AQR checks #39030187815](https://github.com/islamictutoronline/aqr-portal/actions/runs/39030187815) dan [AQR GitHub Pages #39030187868](https://github.com/islamictutoronline/aqr-portal/actions/runs/39030187868) **success**; laman sebenar HTTP 200, aset `index-C5tb3aCD.js` mengandungi medan julat muka surat.
+
 Arahan pengguna: masukkan jadual kehadiran/bacaan Oktober tutor AHMAD MUZZAMMIL (12 murid; TRUE = hadir; bacaan Tahsin sebagai julat muka surat, contoh 531-535) dan "buatkan kolum mukasurat boleh diisi macam 100-102".
 
 - **Julat muka surat:** `readingSchema.page_to`, `parsePages()` / `formatPages()` dalam `src/lib/quran.ts`; medan Muka surat kini teks (`100` atau `100-102`, ralat format dipaparkan); label/PDF/Rekod bacaan memaparkan "531–535". **Migrasi 41** `202610170041_page_range.sql`: `reading_label` mengesahkan `page_to` dan melabel julat.
