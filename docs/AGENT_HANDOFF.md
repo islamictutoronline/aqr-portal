@@ -337,4 +337,4 @@ Untuk sambung kerja:
 
 - Laporan pengguna: 3 murid yang didaftar seorang tutor pada 17/10 dengan tarikh mula 18–19/10 tidak kelihatan kepada tutor itu (admin nampak). Disahkan melalui semakan baca sahaja di cloud: tugasan dan akaun tutor betul; `class_tutors.starts_on` > `current_date` menyebabkan `teaches_class(...,current_date)` palsu dalam RLS baca.
 - `supabase/migrations/202610170044_tutor_sees_upcoming.sql`: `private.tutor_reads_class(org,cid)` (tugasan tutor belum tamat ikut tarikh Malaysia; tidak semak `starts_on`) digunakan oleh `can_class`, `can_student`, polisi `enrollment_read` dan `mastery_read`. Akses tulis/rekod kekal melalui `teaches_class` ikut tarikh sesi.
-- Ujian `session-fixes` 12/12 (gagal tanpa migrasi 44: 0 lawan 3), `npm test` 134/134, Pages 76/76.
+- Ujian `session-fixes` 12/12 (gagal tanpa migrasi 44: 0 lawan 3), `npm test` 134/134, Pages 76/76. **Dipasang pengguna di cloud 17 Okt** (success); pengesahan paparan tutor sebenar menunggu tutor muat semula.
