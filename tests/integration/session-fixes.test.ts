@@ -367,3 +367,61 @@ describe('label bacaan surah dan juzuk (migrasi 45)', () => {
     ).rejects.toThrow(/Surah tidak sah/);
   });
 });
+
+describe('penilaian pilihan berbilang (migrasi 46)', () => {
+  it('ulasan pangkalan data sama dengan portal; julat tahap; satu baris penilaian', async () => {
+    const { generateComment } = await import('../../src/lib/core');
+    await db.exec(`reset role; insert into assessment_options(organization_id,subject_id,group_code,code,label) values
+      ('${org}','${id(41)}','skill','bacaan','bacaan'),('${org}','${id(41)}','skill','tajwid','tajwid'),
+      ('${org}','${id(41)}','skill','sebutan','sebutan'),
+      ('${org}','${id(41)}','participation','aktif','aktif'),('${org}','${id(41)}','participation','bertanya','bertanya soalan'),
+      ('${org}','${id(41)}','focus','mad','hukum mad'),('${org}','${id(41)}','focus','makhraj','makhraj huruf'),
+      ('${org}','${id(41)}','home_practice','ulang','Ulang bacaan di rumah'),('${org}','${id(41)}','home_practice','dengar','Dengar bacaan qari')
+      on conflict do nothing;`);
+    const options = (await db.query('select group_code,code,label,active from assessment_options'))
+      .rows as Parameters<typeof generateComment>[3];
+    await asUser(tutor);
+    const sid = await create(daysAgo(6, 21));
+    const latest = async () =>
+      (
+        await one<{ text: string }>(
+          "select text from generated_parent_comments where session_id=$1 and status='published' order by created_at desc limit 1",
+          [sid],
+        )
+      ).text;
+    const multi = {
+      mastery: 4,
+      masteries: [4, 3],
+      skill: 'bacaan',
+      skills: ['bacaan', 'tajwid', 'sebutan'],
+      participation: 'aktif',
+      participations: ['aktif', 'bertanya'],
+      focus: 'mad',
+      focuses: ['mad', 'makhraj'],
+      practice: 'ulang',
+      practices: ['ulang', 'dengar'],
+    };
+    await record(sid, multi);
+    const text = await latest();
+    expect(text).toBe(
+      'Alhamdulillah, murid menunjukkan penguasaan yang memuaskan hingga baik dalam bacaan, tajwid dan sebutan. Murid aktif dan bertanya soalan dalam kelas. Fokus latihan ialah hukum mad dan makhraj huruf. Ulang bacaan di rumah. Dengar bacaan qari.',
+    );
+    expect(text).toBe(generateComment('mengaji', 'present', multi, options));
+    // Rekod lama (medan tunggal) kekal sama.
+    const single = { mastery: 5, skill: 'tajwid', participation: 'aktif', focus: 'mad' };
+    await record(sid, single);
+    expect(await latest()).toBe(generateComment('mengaji', 'present', single, options));
+    expect(await latest()).toContain('penguasaan yang sangat baik dalam tajwid.');
+    // Satu baris penilaian bagi murid/sesi (bukan baris lama yang tertinggal).
+    const rows = await db.query<{ skill: string; mastery: number }>(
+      'select skill,mastery from assessment_responses where session_id=$1',
+      [sid],
+    );
+    expect(rows.rows).toEqual([{ skill: 'tajwid', mastery: 5 }]);
+    // Kod tidak sah ditolak.
+    await expect(record(sid, { ...multi, skills: ['bacaan', 'tiada'] })).rejects.toThrow(
+      /tidak sah/,
+    );
+    await expect(record(sid, { ...multi, masteries: [2, 9] })).rejects.toThrow(/penguasaan/);
+  });
+});

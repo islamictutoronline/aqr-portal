@@ -362,3 +362,10 @@ Untuk sambung kerja:
 - Punca utama kelembapan: `portal/main.tsx` memuat semula SEMUA ~50 jadual (`loadData`) pada setiap `window` `focus` (tukar tab/aplikasi, tutup pemilih di telefon) dan setiap `SIGNED_IN`/`TOKEN_REFRESHED`; kegagalan muat semula latar juga menendang pengguna ke skrin log masuk. Kini: muat penuh sekali selepas log masuk; muat semula latar hanya apabila tab kembali dipaparkan dan > 5 minit sejak muat terakhir; `TOKEN_REFRESHED` diabaikan; `SIGNED_IN` hanya untuk pengguna baharu; satu muat pada satu masa (`inFlight`); ralat latar mengekalkan data.
 - `app.tsx`: indeks `byId(table)` (Map, dimemo bagi setiap `visible`) untuk `lookup` dan 12 carian `all(...).find(x => x.id === …)`; `useDeferredValue` untuk carian; latar modal tanpa `backdrop-filter: blur` (berat di telefon).
 - Ujian: `npm test` 140/140, Pages 80/80.
+
+## Penilaian pilihan berbilang (migrasi 46) — 17 Oktober 2026
+
+- Borang sesi: Kemahiran, Penglibatan, Fokus latihan dan Latihan rumah boleh dipilih lebih daripada satu (`skills`, `participations`, `focuses`, `practices`; medan tunggal = pilihan pertama untuk keserasian). Penguasaan boleh dipilih sebagai julat (`masteries`, pilihan pengguna "Julat tahap"); `mastery` = tahap tertinggi. Ulasan: "penguasaan yang memuaskan hingga baik dalam bacaan, tajwid dan sebutan. Murid aktif dan bertanya soalan dalam kelas. Fokus latihan ialah hukum mad dan makhraj huruf. Ulang bacaan di rumah. Dengar bacaan qari."
+- `src/lib/core.ts`: `pickedCodes`, `optionsLabel`, `joinMalay`, `skillsLabel`; `reporting.ts` lajur kemahiran/penglibatan/fokus digabung, tahap julat "3–4".
+- `supabase/migrations/202610170046_multi_skill.sql`: `private.selected_codes`, `private.option_list`, `private.record_assessment` (julat tahap, label digabung, kod tidak sah ditolak; `assessment_responses` satu baris setiap murid/sesi, kod dipisah koma). Ujian pariti ulasan DB = portal.
+- Ujian: `npm test` 141/141, Pages 82/82, E2E 8/8, build OK.

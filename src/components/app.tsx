@@ -65,6 +65,7 @@ import {
   Rate,
   statusLabels,
   passwordProblem,
+  pickedCodes,
   normalizePhone,
   countryCodes,
   joinPhone,
@@ -5492,8 +5493,39 @@ function SessionEditor({
   } catch {
     /* Explicit choices required. */
   }
-  const pick = (field: keyof Assessment, value: unknown) =>
-    setAssessment((a) => ({ ...a, [field]: value }));
+  // Pilihan berbilang: medan jamak menyimpan semua pilihan; medan tunggal = pilihan pertama.
+  const plural = {
+    skill: 'skills',
+    participation: 'participations',
+    focus: 'focuses',
+    practice: 'practices',
+  } as const;
+  const pickedOf = (field: keyof typeof plural) =>
+    pickedCodes(assessment as Record<string, unknown>, plural[field], field);
+  const toggle = (field: keyof typeof plural, value: string) =>
+    setAssessment((a) => {
+      const current = pickedCodes(a as Record<string, unknown>, plural[field], field);
+      const next = current.includes(value)
+        ? current.filter((x) => x !== value)
+        : [...current, value];
+      return { ...a, [plural[field]]: next.length ? next : undefined, [field]: next[0] };
+    });
+  // Penguasaan: satu tahap atau julat; mastery = tahap tertinggi.
+  const levels =
+    assessment.masteries ?? (typeof assessment.mastery === 'number' ? [assessment.mastery] : []);
+  const toggleLevel = (n: number) =>
+    setAssessment((a) => {
+      const current =
+        a.masteries ?? (typeof a.mastery === 'number' ? [a.mastery] : ([] as number[]));
+      const next = (current.includes(n) ? current.filter((x) => x !== n) : [...current, n]).sort(
+        (x, y) => x - y,
+      );
+      return {
+        ...a,
+        masteries: next.length ? next : undefined,
+        mastery: next.length ? next[next.length - 1] : undefined,
+      } as Partial<Assessment>;
+    });
   const optionList = (
     field: keyof Assessment,
     fallback: readonly (readonly [string, string])[],
@@ -5512,7 +5544,7 @@ function SessionEditor({
   };
   const group = (
     title: string,
-    field: keyof Assessment,
+    field: keyof typeof plural,
     fallback: readonly (readonly [string, string])[],
   ) => (
     <fieldset>
@@ -5523,9 +5555,9 @@ function SessionEditor({
             type="button"
             key={v}
             disabled={locked}
-            aria-pressed={assessment[field] === v}
-            className={assessment[field] === v ? 'selected' : ''}
-            onClick={() => pick(field, v)}
+            aria-pressed={pickedOf(field).includes(v)}
+            className={pickedOf(field).includes(v) ? 'selected' : ''}
+            onClick={() => toggle(field, v)}
           >
             {label}
           </button>
@@ -5828,18 +5860,22 @@ function SessionEditor({
                       )}
                     </fieldset>
                   ) : (
-                    group('2. Kemahiran dinilai', 'skill', skillOptions[subjectSlug])
+                    group(
+                      '2. Kemahiran dinilai · boleh pilih lebih daripada satu',
+                      'skill',
+                      skillOptions[subjectSlug],
+                    )
                   )}
                   <fieldset>
-                    <legend>3. Penguasaan · tiada penilaian dipilih awal</legend>
+                    <legend>3. Penguasaan · boleh pilih julat (contoh 3 dan 4)</legend>
                     <div className="chips mastery">
                       {['Bimbingan', 'Asas', 'Memuaskan', 'Baik', 'Sangat baik'].map((l, i) => (
                         <button
                           key={l}
                           disabled={locked}
-                          aria-pressed={assessment.mastery === i + 1}
-                          className={assessment.mastery === i + 1 ? 'selected' : ''}
-                          onClick={() => pick('mastery', i + 1)}
+                          aria-pressed={levels.includes(i + 1)}
+                          className={levels.includes(i + 1) ? 'selected' : ''}
+                          onClick={() => toggleLevel(i + 1)}
                         >
                           <strong>{i + 1}</strong>
                           {l}
@@ -5848,7 +5884,13 @@ function SessionEditor({
                       <button
                         disabled={locked}
                         className={assessment.mastery === 'not_assessed' ? 'selected' : ''}
-                        onClick={() => pick('mastery', 'not_assessed')}
+                        onClick={() =>
+                          setAssessment((a) => ({
+                            ...a,
+                            mastery: 'not_assessed',
+                            masteries: undefined,
+                          }))
+                        }
                       >
                         Belum dapat dinilai
                       </button>
@@ -5856,9 +5898,21 @@ function SessionEditor({
                   </fieldset>
                   {assessment.mastery !== 'not_assessed' && (
                     <>
-                      {group('4. Penglibatan', 'participation', participationOptions)}
-                      {group('5. Fokus latihan', 'focus', focusOptions)}
-                      {group('Latihan rumah (pilihan)', 'practice', practiceOptions)}
+                      {group(
+                        '4. Penglibatan · boleh pilih lebih daripada satu',
+                        'participation',
+                        participationOptions,
+                      )}
+                      {group(
+                        '5. Fokus latihan · boleh pilih lebih daripada satu',
+                        'focus',
+                        focusOptions,
+                      )}
+                      {group(
+                        'Latihan rumah (pilihan) · boleh pilih lebih daripada satu',
+                        'practice',
+                        practiceOptions,
+                      )}
                     </>
                   )}
                 </>

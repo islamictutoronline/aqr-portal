@@ -1212,3 +1212,45 @@ test('tutor profile lists only that tutor’s guardians in a collapsible box', a
       .map((x) => x.trim()))
       expect(mine).toContain(kid);
 });
+test('assessment sections allow several choices and the parent comment follows every change', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/sessions/session-13');
+  await page.reload();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByLabel('Muka surat').fill('3');
+  const section = (legend: RegExp) =>
+    page.locator('fieldset').filter({ has: page.locator('legend', { hasText: legend }) });
+  const preview = page.locator('.preview-comment');
+  const skills = section(/Kemahiran dinilai/).locator('button');
+  await skills.nth(0).click();
+  await skills.nth(1).click();
+  await expect(skills.nth(0)).toHaveAttribute('aria-pressed', 'true');
+  await expect(skills.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  const mastery = section(/Penguasaan/);
+  await mastery.getByRole('button', { name: /^3/ }).click();
+  await mastery.getByRole('button', { name: /^4/ }).click();
+  const parts = section(/Penglibatan/).locator('button');
+  await parts.nth(0).click();
+  await parts.nth(1).click();
+  const focus = section(/Fokus latihan/).locator('button');
+  await focus.nth(0).click();
+  await focus.nth(1).click();
+  const [s1, s2] = (await skills.allTextContents()).slice(0, 2).map((t) => t.trim());
+  await expect(preview).toContainText(
+    `penguasaan yang memuaskan hingga baik dalam ${s1.toLowerCase() === s1 ? s1 : ''}`,
+  );
+  await expect(preview).toContainText(` dan ${s2}`);
+  // Nyahpilih: ulasan dikemas kini serta-merta.
+  await mastery.getByRole('button', { name: /^4/ }).click();
+  await expect(preview).toContainText('penguasaan yang memuaskan dalam');
+  await skills.nth(1).click();
+  await expect(preview).not.toContainText(` dan ${s2}`);
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
+  await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
+  // Pilihan yang disimpan dimuat semula apabila sesi dibuka semula.
+  await page.goto('/?demo=1#/sessions/session-14');
+  await page.goto('/?demo=1#/sessions/session-13');
+  await expect(section(/Penglibatan/).locator('button[aria-pressed="true"]')).toHaveCount(2);
+  await expect(section(/Penguasaan/).locator('button[aria-pressed="true"]')).toHaveCount(1);
+});

@@ -12,6 +12,8 @@ import {
   dateLabel,
   statusLabel,
   findRate,
+  skillCodes,
+  pickedCodes,
   Rate,
   feeReference,
 } from './core';
@@ -284,10 +286,14 @@ export function buildReport(
         return [
           dateLabel(String(sessions.find((s) => s.id === c.session_id)!.starts_at)),
           find('students', c.student_id, 'full_name'),
-          a.topic ? String(a.topic) : option(a.skill),
-          typeof a.mastery === 'number' ? a.mastery : 'Belum dinilai',
-          option(a.participation),
-          option(a.focus),
+          a.topic ? String(a.topic) : skillCodes(a).map(option).join(', '),
+          Array.isArray(a.masteries) && a.masteries.length > 1
+            ? `${Math.min(...(a.masteries as number[]))}–${Math.max(...(a.masteries as number[]))}`
+            : typeof a.mastery === 'number'
+              ? a.mastery
+              : 'Belum dinilai',
+          pickedCodes(a, 'participations', 'participation').map(option).join(', ') || '—',
+          pickedCodes(a, 'focuses', 'focus').map(option).join(', ') || '—',
           String(c.text),
           statusLabel(c.status),
         ];

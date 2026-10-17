@@ -252,7 +252,14 @@ export const practiceOptions = [
   ['bersama', 'Latihan bersama penjaga digalakkan'],
 ] as const;
 export const assessmentSchema = z.object({
+  // Kemahiran pertama (keserasian rekod lama); `skills` = semua kemahiran yang dipilih.
   skill: z.string().optional(),
+  skills: z.array(z.string()).max(10).optional(),
+  // Pilihan berbilang (migrasi 46). Medan tunggal = pilihan pertama / tahap tertinggi.
+  masteries: z.array(z.number().int().min(1).max(5)).max(5).optional(),
+  participations: z.array(z.string()).max(10).optional(),
+  focuses: z.array(z.string()).max(10).optional(),
+  practices: z.array(z.string()).max(10).optional(),
   mastery: z.union([z.number().int().min(1).max(5), z.literal('not_assessed')]),
   participation: z.string().optional(),
   focus: z.string().optional(),
@@ -263,6 +270,41 @@ export const assessmentSchema = z.object({
   topic: z.string().trim().max(120, 'Tajuk/topik maksimum 120 aksara').optional(),
 });
 export type Assessment = z.infer<typeof assessmentSchema>;
+// "bacaan" · "bacaan dan tajwid" · "bacaan, tajwid dan sebutan" (sama seperti migrasi 46).
+export const joinMalay = (items: string[]) =>
+  items.length <= 1
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} dan ${items[items.length - 1]}`;
+// Kod pilihan berbilang: senarai (kunci jamak) atau satu kod (rekod lama); tanpa pendua.
+export function pickedCodes(a: Record<string, unknown>, plural: string, single: string): string[] {
+  const many = a[plural];
+  const list = Array.isArray(many) && many.length ? many : a[single] ? [a[single]] : [];
+  return [...new Set(list.map(String).filter((x) => x.trim()))];
+}
+export const skillCodes = (a: Record<string, unknown>) => pickedCodes(a, 'skills', 'skill');
+// Label digabung bagi kod yang dipilih; undefined jika tiada atau mana-mana kod tidak dikenali.
+export function optionsLabel(
+  group: string,
+  codes: string[],
+  fallback: readonly (readonly [string, string])[] | undefined,
+  customOptions: Row[] = [],
+): string[] | undefined {
+  if (!codes.length) return undefined;
+  const labels = codes.map(
+    (code) =>
+      (customOptions.find((o) => o.group_code === group && o.code === code && o.active !== false)
+        ?.label as string | undefined) ?? fallback?.find((s) => s[0] === code)?.[1],
+  );
+  return labels.every(Boolean) ? (labels as string[]) : undefined;
+}
+export function skillsLabel(
+  subject: string,
+  a: Record<string, unknown>,
+  customOptions: Row[] = [],
+): string | undefined {
+  const labels = optionsLabel('skill', skillCodes(a), skillOptions[subject], customOptions);
+  return labels && joinMalay(labels);
+}
 export function generateComment(
   subject: string,
   attendance: string,
@@ -282,20 +324,26 @@ function baseComment(subject: string, attendance: string, a: Assessment, customO
   // Sama seperti private.record_assessment (migrasi 40).
   if (absent || a.mastery === 'not_assessed')
     return `${topic && !absent ? `Topik pembelajaran: ${topic}. ` : ''}Tiada penilaian pembelajaran untuk sesi ini.`;
-  const option = (group: string, code?: string) =>
-    customOptions.find((o) => o.group_code === group && o.code === code && o.active !== false)
-      ?.label as string | undefined;
-  const skill = topic
-    ? `topik ${topic}`
-    : (option('skill', a.skill) ?? skillOptions[subject]?.find((s) => s[0] === a.skill)?.[1]);
-  const part =
-    option('participation', a.participation) ??
-    participationOptions.find((s) => s[0] === a.participation)?.[1];
-  const focus = option('focus', a.focus) ?? focusOptions.find((s) => s[0] === a.focus)?.[1];
-  const practice = a.practice
-    ? (option('home_practice', a.practice) ?? practiceOptions.find((s) => s[0] === a.practice)?.[1])
-    : '';
-  if (!skill || !part || !focus || (a.practice && !practice))
+  const sel = a as Record<string, unknown>;
+  const skill = topic ? `topik ${topic}` : skillsLabel(subject, sel, customOptions);
+  const partList = optionsLabel(
+    'participation',
+    pickedCodes(sel, 'participations', 'participation'),
+    participationOptions,
+    customOptions,
+  );
+  const focusList = optionsLabel(
+    'focus',
+    pickedCodes(sel, 'focuses', 'focus'),
+    focusOptions,
+    customOptions,
+  );
+  const practiceCodes = pickedCodes(sel, 'practices', 'practice');
+  const practiceList = optionsLabel('home_practice', practiceCodes, practiceOptions, customOptions);
+  const part = partList && joinMalay(partList);
+  const focus = focusList && joinMalay(focusList);
+  const practice = practiceList ? practiceList.map((p) => `${p}.`).join(' ') : '';
+  if (!skill || !part || !focus || (practiceCodes.length && !practice))
     throw new Error(
       topic ? 'Pilih penglibatan dan fokus' : 'Pilih kemahiran, penglibatan dan fokus',
     );
@@ -306,7 +354,15 @@ function baseComment(subject: string, attendance: string, a: Assessment, customO
     'yang baik',
     'yang sangat baik',
   ];
-  return `Alhamdulillah, murid menunjukkan penguasaan ${ratings[a.mastery - 1]} dalam ${skill}. Murid ${part} dalam kelas. Fokus latihan ialah ${focus}.${practice ? ` ${practice}.` : ''}`;
+  // Julat tahap (contoh 3 dan 4): "yang memuaskan hingga baik".
+  const levels = a.masteries?.length
+    ? [...new Set(a.masteries)].sort((x, y) => x - y)
+    : [a.mastery];
+  const low = levels[0];
+  const high = levels[levels.length - 1];
+  const level =
+    ratings[low - 1] + (high !== low ? ` hingga ${ratings[high - 1].replace(/^yang /, '')}` : '');
+  return `Alhamdulillah, murid menunjukkan penguasaan ${level} dalam ${skill}. Murid ${part} dalam kelas. Fokus latihan ialah ${focus}.${practice ? ` ${practice}` : ''}`;
 }
 export function comparableTrend(
   records: { mastery: number | null; skill: string; rubric_version: string; published: boolean }[],
