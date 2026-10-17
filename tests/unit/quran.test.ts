@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatPages,
+  parsePages,
   readingKind,
   readingLabel,
   readingProblem,
@@ -47,5 +49,22 @@ describe('bacaan sesi Iqra / al-Quran', () => {
     expect(generateComment('mengaji', 'absent', { mastery: 'not_assessed', reading })).toBe(
       'Tiada penilaian pembelajaran untuk sesi ini.',
     );
+  });
+});
+
+describe('julat muka surat', () => {
+  it('menghurai satu muka surat atau julat', () => {
+    expect(parsePages('100')).toEqual({ page: 100 });
+    expect(parsePages('100-102')).toEqual({ page: 100, page_to: 102 });
+    expect(parsePages(' 531 – 535 ')).toEqual({ page: 531, page_to: 535 });
+    expect(parsePages('ms 23-24')).toEqual({ page: 23, page_to: 24 });
+    expect(parsePages('100-100')).toEqual({ page: 100 });
+    expect(parsePages('')).toEqual({});
+    expect(parsePages('abc')).toBeNull();
+  });
+  it('memaparkan julat dalam label dan menolak julat terbalik', () => {
+    expect(formatPages({ page: 531, page_to: 535 })).toBe('531–535');
+    expect(readingLabel({ kind: 'quran', page: 531, page_to: 535 })).toBe('Muka surat 531–535');
+    expect(readingProblem({ kind: 'quran', page: 10, page_to: 8 })).toMatch(/akhir/);
   });
 });

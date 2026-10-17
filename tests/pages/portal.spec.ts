@@ -585,6 +585,10 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
   // Surah dan muka surat wajib; ayat dan juzuk pilihan.
   await expect(page.locator('.reading-issue')).toContainText('Isi surah dan muka surat dahulu');
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeDisabled();
+  await page.getByLabel('Muka surat').fill('604-602');
+  await expect(page.locator('.reading-issue')).toContainText('akhir mesti selepas');
+  await page.getByLabel('Muka surat').fill('600-604');
+  await expect(page.locator('.preview-comment')).toContainText('muka surat 600–604');
   await page.getByLabel('Muka surat').fill('604');
   await expect(page.getByLabel('Juzuk')).toHaveAttribute('placeholder', '30 (auto)');
   await expect(page.locator('.preview-comment')).toContainText(

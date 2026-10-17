@@ -133,6 +133,8 @@ export const readingSchema = z.object({
   kind: z.enum(['iqra', 'quran']),
   jilid: z.number().int().min(1).max(6).optional(),
   page: z.number().int().min(1).max(604).optional(),
+  // Julat muka surat (contoh 100-102): page = mula, page_to = akhir.
+  page_to: z.number().int().min(1).max(604).optional(),
   surah: z.number().int().min(1).max(114).optional(),
   ayah_from: z.number().int().min(1).max(286).optional(),
   ayah_to: z.number().int().min(1).max(286).optional(),
@@ -140,6 +142,19 @@ export const readingSchema = z.object({
   juz: z.number().int().min(1).max(30).optional(),
 });
 export type Reading = z.infer<typeof readingSchema>;
+// "100" atau "100-102" (juga "100–102", "100 - 102", "ms 100-102") → { page, page_to }.
+export function parsePages(text: string): { page?: number; page_to?: number } | null {
+  const t = text.trim().replace(/^ms\.?\s*/i, '');
+  if (!t) return {};
+  const m = t.match(/^(\d{1,3})\s*(?:[-–—]\s*(\d{1,3}))?$/);
+  if (!m) return null;
+  const page = Number(m[1]);
+  const to = m[2] ? Number(m[2]) : undefined;
+  return to && to !== page ? { page, page_to: to } : { page };
+}
+// Paparan julat: "531" atau "531–535".
+export const formatPages = (r?: { page?: number; page_to?: number } | null) =>
+  r?.page ? `${r.page}${r.page_to && r.page_to !== r.page ? `–${r.page_to}` : ''}` : '';
 // Juzuk mushaf Madinah 604 muka surat: juzuk 1 = ms 1–21, kemudian 20 muka surat setiap juzuk.
 export function juzOf(page?: number | null): number | null {
   if (!page || page < 1 || page > 604) return null;
@@ -148,6 +163,9 @@ export function juzOf(page?: number | null): number | null {
 
 // Semakan julat ayat; mesej sama seperti pangkalan data.
 export function readingProblem(r: Reading): string | null {
+  if (r.page_to && !r.page) return 'Isi muka surat mula';
+  if (r.page && r.page_to && r.page_to < r.page)
+    return 'Muka surat akhir mesti selepas muka surat mula';
   if (r.kind === 'iqra') return null;
   const max = r.surah ? surahs[r.surah - 1][1] : 286;
   if ((r.ayah_from || r.ayah_to) && !r.surah) return 'Pilih surah dahulu';
@@ -174,7 +192,7 @@ export function readingLabel(r?: Partial<Reading> | null): string {
         (from ? ` ayat ${from}${to ? `–${to}` : ''}` : to ? ` ayat ${to}` : ''),
     );
   }
-  if (r!.page) parts.push(`muka surat ${r!.page}`);
+  if (r!.page) parts.push(`muka surat ${formatPages(r)}`);
   const text = parts.join(', ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -187,6 +205,6 @@ export function readingShort(r?: Partial<Reading> | null): string {
     const to = r!.ayah_to && r!.ayah_to !== r!.ayah_from ? `–${r!.ayah_to}` : '';
     parts.push(`${surahs[r!.surah - 1][0]}${r!.ayah_from ? ` ${r!.ayah_from}${to}` : ''}`);
   }
-  if (r!.page) parts.push(`ms ${r!.page}`);
+  if (r!.page) parts.push(`ms ${formatPages(r)}`);
   return parts.join(' · ');
 }

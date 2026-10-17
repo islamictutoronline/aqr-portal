@@ -2,6 +2,14 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Julat muka surat + import Oktober tutor Ahmad Muzzammil — 17 Oktober 2026
+
+Arahan pengguna: masukkan jadual kehadiran/bacaan Oktober tutor AHMAD MUZZAMMIL (12 murid; TRUE = hadir; bacaan Tahsin sebagai julat muka surat, contoh 531-535) dan "buatkan kolum mukasurat boleh diisi macam 100-102".
+
+- **Julat muka surat:** `readingSchema.page_to`, `parsePages()` / `formatPages()` dalam `src/lib/quran.ts`; medan Muka surat kini teks (`100` atau `100-102`, ralat format dipaparkan); label/PDF/Rekod bacaan memaparkan "531–535". **Migrasi 41** `202610170041_page_range.sql`: `reading_label` mengesahkan `page_to` dan melabel julat.
+- **Import data:** skrip `~/Desktop/AQR-data-peribadi/import-oktober-2026-ahmad-muzzammil.sql` (FAIL PERIBADI, di luar repo — mengandungi nama murid; jangan commit). Bahagian A semak padanan nama (mesti 1 setiap nama, terhad kepada murid tutor itu); Bahagian B bertindak sebagai tutor (`request.jwt.claim.sub`), guna sesi sedia ada pada tarikh itu atau `create_session` pada jam jadual, kemudian `record_assessment` (hadir, `not_assessed`, bacaan + kind ikut program). Keputusan pengguna: rekod sedia ada dikekalkan; bacaan yang ditulis pada baris sehari lewat dialih ke hari hadir (tiga murid); 'IQ: 25' = Iqra' 5 ms 25. Diuji pada PGlite dengan nama rekaan: 30 kehadiran, rekod sedia ada kekal, ulang tanpa pendua.
+- Bukti: `npm test` 128/128, `test:pages` 72/72, Next build, E2E 8/8, `setup-all.sql` 41 migrasi. **Migrasi 41 dipasang pengguna** (17 Okt, "Success"). **Belum:** import data belum dijalankan.
+
 ## Bacaan al-Quran: surah + muka surat wajib — 15 Oktober 2026 (dideploy)
 
 **Push dan deploy:** commit `279651c`; [AQR checks #38746066036](https://github.com/islamictutoronline/aqr-portal/actions/runs/38746066036) dan [AQR GitHub Pages #38746070030](https://github.com/islamictutoronline/aqr-portal/actions/runs/38746070030) **success**; laman sebenar HTTP 200, aset `index-CZY6z6sk.js` mengandungi semakan surah/muka surat dan Juzuk auto.

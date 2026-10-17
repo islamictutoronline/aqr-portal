@@ -80,7 +80,9 @@ import { TutorClassReports } from './tutor-reports';
 import {
   Reading,
   hasReading,
+  formatPages,
   juzOf,
+  parsePages,
   readingKind,
   readingLabel,
   readingProblem,
@@ -5179,6 +5181,8 @@ function SessionEditor({
       .sort((a, b) => b.at.localeCompare(a.at))[0];
   const [studentId, setStudentId] = useState(students[0]?.id || '');
   const [reading, setReading] = useState<Partial<Reading>>(savedReading(students[0]?.id));
+  // Muka surat ditaip sebagai teks: "100" atau julat "100-102".
+  const [pageText, setPageText] = useState(formatPages(savedReading(students[0]?.id)));
   const [attendance, setAttendance] = useState(savedAttendance(students[0]?.id));
   const [assessment, setAssessment] = useState<Partial<Assessment>>(
     savedAssessment(students[0]?.id),
@@ -5214,7 +5218,12 @@ function SessionEditor({
     kind === 'quran' && attendedNow && (!reading.surah || !reading.page)
       ? 'Isi surah dan muka surat dahulu'
       : null;
-  const readingIssue = (readingInput() ? readingProblem(readingInput()!) : null) || readingRequired;
+  const pageFormatIssue =
+    kind && attendedNow && pageText.trim() && !parsePages(pageText)
+      ? 'Muka surat tidak sah (contoh: 100 atau 100-102)'
+      : null;
+  const readingIssue =
+    pageFormatIssue || (readingInput() ? readingProblem(readingInput()!) : null) || readingRequired;
   const voided = ['cancelled', 'rescheduled'].includes(String(session.status));
   const locked = voided || ['verified', 'approved', 'paid'].includes(String(session.review_status));
   const pageField = (
@@ -5228,18 +5237,20 @@ function SessionEditor({
         )}
       </span>
       <input
-        type="number"
+        type="text"
         inputMode="numeric"
-        min={1}
-        max={kind === 'iqra' ? 60 : 604}
+        placeholder="cth 100-102"
         disabled={locked}
-        value={reading.page ?? ''}
-        onChange={(e) =>
+        value={pageText}
+        onChange={(e) => {
+          setPageText(e.target.value);
+          const parsed = parsePages(e.target.value);
           setReading((r) => ({
             ...r,
-            page: e.target.value ? Number(e.target.value) : undefined,
-          }))
-        }
+            page: parsed?.page,
+            page_to: parsed?.page_to,
+          }));
+        }}
       />
     </label>
   );
@@ -5348,6 +5359,7 @@ function SessionEditor({
         setAssessment(savedAssessment(next.id));
         setTopic(savedTopic(next.id));
         setReading(savedReading(next.id));
+        setPageText(formatPages(savedReading(next.id)));
       }
     }
   }
@@ -5416,6 +5428,7 @@ function SessionEditor({
                 setAssessment(savedAssessment(s.id));
                 setTopic(savedTopic(s.id));
                 setReading(savedReading(s.id));
+                setPageText(formatPages(savedReading(s.id)));
               }}
             >
               {String(s.full_name)}
@@ -5711,11 +5724,11 @@ function ReadingRecord({
     kind === 'iqra'
       ? [
           ['JILID', (r) => (r.jilid ? `Iqra' ${r.jilid}` : null)],
-          ['MUKA SURAT', (r) => r.page],
+          ['MUKA SURAT', (r) => formatPages(r) || null],
         ]
       : [
           ['JUZUK', (r) => r.juz ?? juzOf(r.page)],
-          ['MUKA SURAT', (r) => r.page],
+          ['MUKA SURAT', (r) => formatPages(r) || null],
           [
             'SURAH',
             (r) =>

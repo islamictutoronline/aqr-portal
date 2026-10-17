@@ -206,3 +206,27 @@ describe('tajuk/topik program teori', () => {
     expect(snap.snapshot.attendance.some((a) => a.topic === 'Bab wuduk — rukun')).toBe(true);
   });
 });
+
+// Migrasi 41: julat muka surat.
+describe('julat muka surat', () => {
+  it('label ulasan memaparkan julat', async () => {
+    await asUser(tutor);
+    const sid = await create(daysAgo(10));
+    await record(sid, {
+      mastery: 'not_assessed',
+      reading: { kind: 'quran', page: 531, page_to: 535 },
+    });
+    const c = await one<{ text: string }>(
+      "select text from generated_parent_comments where session_id=$1 and status<>'retracted'",
+      [sid],
+    );
+    expect(c.text).toContain('Bacaan: Muka surat 531–535.');
+  });
+  it('julat terbalik ditolak', async () => {
+    await asUser(tutor);
+    const sid = await create(daysAgo(11));
+    await expect(
+      record(sid, { mastery: 'not_assessed', reading: { kind: 'quran', page: 10, page_to: 8 } }),
+    ).rejects.toThrow(/akhir mesti selepas/);
+  });
+});
