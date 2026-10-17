@@ -242,25 +242,16 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'Murid Jadual' })).toHaveCount(0);
 });
-test('admin views sessions per tutor tab and automatic allowance without approvals', async ({
-  page,
-}) => {
-  await page.goto('/?demo=1#/calendar');
-  await expect(page.getByRole('heading', { name: 'Sesi hari ini' })).toBeVisible();
-  // Tab Hari ini hanya menyenaraikan tutor yang ada sesi hari ini; semua tutor ada di tab lain.
-  await page.getByRole('tab', { name: 'Semua murid' }).click();
-  await page.getByRole('tab', { name: 'Tutor Contoh 1' }).click();
-  await expect(page.getByRole('heading', { name: 'Tutor Contoh 1' })).toBeVisible();
-  await expect(page.locator('td[data-label="Elaun"]').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Lulus|Sahkan/ })).toHaveCount(0);
-  // Semakan mengikut murid: satu tekan memaparkan semua kelas murid itu.
-  await page.getByRole('button', { name: 'Semak', exact: true }).first().click();
-  await expect(page.getByRole('heading', { name: /^Semakan:/ })).toBeVisible();
-  await expect(page.locator('td[data-label="Ulasan tutor"]').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Tutup semakan' }).click();
-  await expect(page.getByRole('heading', { name: /^Semakan:/ })).toHaveCount(0);
-  await page.getByRole('tab', { name: 'Semua murid' }).click();
-  await expect(page.locator('td[data-label="Tutor"]').first()).toBeVisible();
+test('admin has no Sesi & kehadiran menu; allowance per tutor stays', async ({ page }) => {
+  await page.goto('/?demo=1#/dashboard');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await expect(page.getByRole('button', { name: 'Sesi & kehadiran', exact: true })).toHaveCount(0);
+  // Tutor masih mempunyai menu itu.
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await expect(page.getByRole('button', { name: 'Sesi & kehadiran', exact: true })).toBeVisible();
   await page.goto('/?demo=1#/allowance');
   await page.reload();
   await expect(page.getByText('Jumlah perlu dibayar').first()).toBeVisible();
@@ -295,8 +286,10 @@ test('tutor edits a recorded attendance, sees remaining sessions and voids a cla
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
   await expect(history).toContainText('sesi berbaki');
-  await history.getByRole('button', { name: 'Edit' }).first().click();
+  await expect(history.getByText('Sedang dibuka di atas')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Simpan perubahan' })).toBeVisible();
+  // Slot lepas yang tidak direkod tidak dipaparkan lagi.
+  await expect(page.getByRole('heading', { name: 'Belum direkod' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan perubahan' }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
@@ -318,7 +311,8 @@ test('tutor backdates a recorded class and saves attendance without assessment t
   const history = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
-  await history.getByRole('button', { name: 'Edit' }).first().click();
+  // Kelas terakhir yang direkod dibuka terus (slot lepas yang tidak direkod tidak dibuka).
+  await expect(history.getByText('Sedang dibuka di atas')).toBeVisible();
   const date = page.getByLabel('Tarikh kelas');
   await expect(date).toBeEnabled();
   await date.fill('2026-09-15');
@@ -842,43 +836,6 @@ test('tutor allowance: unpaid and paid tutors in two columns; paying moves the t
   await expect(paid).toContainText('1 tutor');
   await moved.getByRole('button', { name: /Butiran/ }).click();
   await expect(page.locator('.tab-total')).toContainText('RM');
-});
-test('admin Hari ini lists only tutors with a session today (KL date)', async ({ page }) => {
-  // Tarikh tetap tanpa sesi demo; tutor 1 menambah satu sesi hari ini.
-  await page.clock.setFixedTime(new Date('2026-10-13T09:00:00+08:00'));
-  await page.goto('/?demo=1#/calendar');
-  await expect(page.getByRole('heading', { name: 'Sesi hari ini' })).toBeVisible();
-  await expect(page.getByText('Tiada sesi hari ini.')).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Tutor Contoh/ })).toHaveCount(0);
-  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
-  if ((page.viewportSize()?.width || 0) <= 700)
-    await page.getByRole('button', { name: 'Buka menu' }).click();
-  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await page.locator('.student-picker button').first().click();
-  await page.locator('.card').first().getByRole('button', { name: 'Tambah rekod sesi' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Tarikh kelas').fill('2026-10-13');
-  await dialog.getByLabel('Jam').fill('20:00');
-  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
-  await expect(page.getByLabel('Tarikh kelas')).toHaveValue('2026-10-13');
-  await page.getByLabel('Pratonton peranan demo').selectOption('owner');
-  if ((page.viewportSize()?.width || 0) <= 700)
-    await page.getByRole('button', { name: 'Buka menu' }).click();
-  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await expect(page.getByRole('tab', { name: 'Hari ini' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByRole('tab', { name: 'Tutor Contoh 1' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Tutor Contoh 2' })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Tutor Contoh 3' })).toHaveCount(0);
-  const block = page.getByRole('region', { name: 'Tutor Contoh 1' });
-  await expect(block).toContainText('1 sesi');
-  await expect(block.locator('td[data-label="Masa"]')).toHaveCount(1);
-  // Tab lain masih memaparkan semua tutor.
-  await page.getByRole('tab', { name: 'Semua murid' }).click();
-  await expect(page.getByRole('tab', { name: 'Tutor Contoh 2' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Tutor Contoh 3' })).toBeVisible();
 });
 // Admin mendaftar murid bagi pihak tutor; jadual fleksibel tidak menjana sesi automatik.
 async function adminEnrol(page: Page, name: string, tutor: string, flexible = false) {

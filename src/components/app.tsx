@@ -623,8 +623,8 @@ export function App({
     ([p]) =>
       p === 'dashboard' ||
       p === 'settings' ||
-      (academic &&
-        ['students', 'guardians', 'tutors', 'classes', 'calendar', 'reports'].includes(p)) ||
+      // Pentadbir tidak memerlukan menu Sesi & kehadiran (menyerabutkan); sesi dibuka dari profil.
+      (academic && ['students', 'guardians', 'tutors', 'classes', 'reports'].includes(p)) ||
       (finance && ['finance', 'allowance', 'reports'].includes(p)) ||
       (role === 'tutor' && ['students', 'calendar', 'allowance', 'reports'].includes(p)) ||
       (role === 'guardian' && ['parent', 'reports'].includes(p)) ||
@@ -1340,7 +1340,8 @@ export function App({
         setNotice('Rekod berjaya disimpan dalam pangkalan data.');
       }
       setDialog(null);
-      if (operation === 'void_session' && payload.sid === selectedSession) go('calendar');
+      if (operation === 'void_session' && payload.sid === selectedSession)
+        go(role === 'tutor' ? 'calendar' : 'tutors');
       return true;
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'Permintaan gagal');
@@ -2014,7 +2015,9 @@ export function App({
   }
   const klDate = (iso: string) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(iso));
-  // Sesi paling sesuai untuk direkod: hari ini, kemudian sesi lepas belum direkod, kemudian seterusnya.
+  // Sesi paling sesuai untuk direkod: hari ini, kemudian sesi seterusnya. Slot lepas yang tidak
+  // direkod tidak dibuka (jadual kerap berubah); kelas lepas direkod dengan menukar tarikh/jam
+  // atau Tambah rekod sesi.
   const bestSession = (cid: unknown) => {
     const now = Date.now();
     const today = klDate(new Date().toISOString());
@@ -2022,15 +2025,14 @@ export function App({
       .filter((s) => s.class_id === cid && !['cancelled', 'rescheduled'].includes(String(s.status)))
       .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
     const todays = list.filter((s) => klDate(String(s.starts_at)) === today);
-    // Keutamaan: sesi hari ini yang belum direkod, sesi lepas yang belum direkod (terkini dahulu),
-    // sesi hari ini yang sudah direkod, kemudian sesi seterusnya.
+    // Keutamaan: sesi hari ini yang belum direkod, sesi hari ini yang sudah direkod, sesi
+    // seterusnya, kemudian kelas terakhir yang direkod (tanpa mencipta kelas baharu).
     return (
       todays.find((s) => s.status !== 'completed') ||
-      [...list]
-        .reverse()
-        .find((s) => s.status === 'scheduled' && new Date(String(s.starts_at)).getTime() < now) ||
       todays[0] ||
-      list.find((s) => new Date(String(s.starts_at)).getTime() >= now)
+      list.find((s) => new Date(String(s.starts_at)).getTime() >= now) ||
+      [...list].reverse().find((s) => s.status === 'completed') ||
+      list[list.length - 1]
     );
   };
   const openStudentSession = async (cid: unknown) => {
@@ -2119,34 +2121,9 @@ export function App({
       .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)));
     const markOf = (sid: unknown) =>
       statusLabels[String(all('attendance').find((a) => a.session_id === sid)?.status)] || '—';
-    const pending = all('class_sessions')
-      .filter(
-        (s) =>
-          s.class_id === current.class_id &&
-          s.id !== current.id &&
-          s.status === 'scheduled' &&
-          new Date(String(s.starts_at)).getTime() <= Date.now(),
-      )
-      .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
+    // Slot jadual lepas yang tidak direkod tidak dipaparkan: jadual kerap ditukar oleh tutor/ibu bapa.
     return (
       <>
-        {pending.length > 0 && (
-          <Card
-            title="Belum direkod"
-            subtitle="Kelas yang masanya sudah berlalu. Tekan Rekod untuk mengisi kehadiran."
-          >
-            <Table
-              headers={['Tarikh', 'Masa', '']}
-              rows={pending.map((s) => [
-                dateLabel(String(s.starts_at)),
-                timeLabel(String(s.starts_at)),
-                <button key="r" className="primary" onClick={() => go(`sessions/${s.id}`)}>
-                  Rekod
-                </button>,
-              ])}
-            />
-          </Card>
-        )}
         <Card
           title="Kelas telah dilaksanakan"
           subtitle={

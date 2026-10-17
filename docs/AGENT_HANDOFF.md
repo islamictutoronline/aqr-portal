@@ -2,6 +2,14 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Buang menu Sesi & kehadiran untuk pentadbir — 17 Oktober 2026 (setempat, belum push/deploy)
+
+Arahan pengguna: "tab sesi dan kehadiran tak perlu ada di dashboard admin, menyerabutkan". `navigation` tidak lagi memasukkan `calendar` bagi owner/admin (halaman itu kini "tidak ditemui" untuk pentadbir); tutor kekal. Selepas padam kelas yang dibuka, pentadbir dibawa ke `tutors` (tutor ke `calendar`). Ringkasan sesi/elaun per tutor kekal di Kewangan → Elaun tutor. Ujian Pages: ujian halaman Sesi pentadbir ditukar kepada semakan menu (pentadbir tiada, tutor ada); ujian "admin Hari ini" dibuang. 70/70.
+
+## Buang kad "Belum direkod" dalam rekod sesi — 17 Oktober 2026 (setempat, belum push/deploy)
+
+Arahan pengguna: slot jadual lepas yang tidak direkod tidak perlu dipaparkan (jadual kerap ditukar tutor/ibu bapa). `sessionHistory` tidak lagi memaparkan kad "Belum direkod". `bestSession` tidak lagi membuka slot lepas yang belum direkod: keutamaan kini sesi hari ini (belum → sudah direkod), sesi seterusnya, kemudian kelas terakhir yang direkod (tidak mencipta kelas baharu secara automatik). Kelas lepas direkod dengan menukar tarikh/jam atau Tambah rekod sesi. Metrik admin "Belum direkod" di halaman Sesi & kehadiran admin dikekalkan. Ujian Pages dikemas kini (72/72).
+
 ## Julat muka surat + import Oktober tutor Ahmad Muzzammil — 17 Oktober 2026
 
 **Push dan deploy:** commit `8c16c64`; [AQR checks #39030187815](https://github.com/islamictutoronline/aqr-portal/actions/runs/39030187815) dan [AQR GitHub Pages #39030187868](https://github.com/islamictutoronline/aqr-portal/actions/runs/39030187868) **success**; laman sebenar HTTP 200, aset `index-C5tb3aCD.js` mengandungi medan julat muka surat.
