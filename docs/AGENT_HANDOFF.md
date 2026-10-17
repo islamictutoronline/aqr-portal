@@ -318,4 +318,4 @@ Untuk sambung kerja:
 
 ## Penilaian rawak tutor Ahmad Muzzammil — 17 Oktober 2026
 
-- Atas permintaan pengguna, skrip peribadi `~/Desktop/AQR-data-peribadi/isi-penilaian-rawak-ahmad-muzzammil.sql` (di luar repo) mengisi penilaian bagi kehadiran Hadir/Lewat/Ganti tutor itu yang belum dinilai: tahap 3–5, kemahiran/penglibatan/fokus rawak daripada `assessment_options` aktif; bacaan dikekalkan; ulasan diterbitkan melalui `record_assessment`. Idempoten (langkau yang sudah dinilai). Diuji PGlite; larian di cloud bergantung pada pengguna.
+- Atas permintaan pengguna, skrip peribadi `~/Desktop/AQR-data-peribadi/isi-penilaian-rawak-ahmad-muzzammil.sql` (di luar repo) mengisi penilaian bagi kehadiran Hadir/Lewat/Ganti tutor itu yang belum dinilai: tahap 3–5, kemahiran/penglibatan/fokus rawak daripada `assessment_options` aktif; bacaan dikekalkan; ulasan diterbitkan melalui `record_assessment`. Idempoten (langkau yang sudah dinilai). Diuji PGlite; **dijalankan pengguna di cloud 17 Okt**: 31 kehadiran Hadir, 31 dinilai, 0 belum dinilai.
