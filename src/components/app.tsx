@@ -87,7 +87,10 @@ import {
   readingKind,
   readingLabel,
   readingProblem,
+  surahFromPage,
   surahs,
+  surahsOnPages,
+  juzLabel,
 } from '@/lib/quran';
 import { scopeDemo } from '@/lib/demo';
 import { AdditionalTools } from './tools';
@@ -4717,6 +4720,52 @@ export function App({
               })}
             />
           </Card>
+          {(() => {
+            // Penjaga murid tutor ini sahaja (tidak bercampur dengan penjaga tutor lain).
+            const kids = new Set(enrol.map((e) => e.student_id));
+            const links = all('student_guardians').filter((l) => kids.has(l.student_id));
+            const list = [...new Set(links.map((l) => l.guardian_id))]
+              .map((gid) => all('guardians').find((g) => g.id === gid))
+              .filter((g): g is Row => Boolean(g))
+              .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name)));
+            return (
+              <details className="card guardian-box">
+                <summary>
+                  Penjaga murid tutor ini <span className="count-pill">{list.length}</span>
+                </summary>
+                {list.length ? (
+                  <Table
+                    headers={['Penjaga', 'WhatsApp', 'Anak (murid tutor ini)']}
+                    rows={list.map((g) => [
+                      <strong key="n">{String(g.full_name)}</strong>,
+                      g.phone ? (
+                        <a
+                          key="wa"
+                          className="wa-link"
+                          href={whatsappUrl(g.phone)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {String(g.phone)}
+                        </a>
+                      ) : (
+                        'Tiada'
+                      ),
+                      [
+                        ...new Set(
+                          links
+                            .filter((l) => l.guardian_id === g.id)
+                            .map((l) => lookup('students', l.student_id)),
+                        ),
+                      ].join(', '),
+                    ])}
+                  />
+                ) : (
+                  <Empty text="Tiada penjaga dipautkan kepada murid tutor ini." />
+                )}
+              </details>
+            );
+          })()}
           <Card title="Sesi bulan ini" subtitle="Kelas yang telah dilaksanakan">
             <Table
               headers={['Tarikh', 'Masa', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun', '']}
@@ -5349,13 +5398,25 @@ function SessionEditor({
           .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)))[0]?.topic || '',
       )
     : '';
+  // Bacaan al-Quran (Kelancaran/Tahsin): tutor menaip muka surat sahaja; surah dan juzuk automatik.
+  const autoSurah = kind === 'quran' && surahFromPage(program?.code);
+  const autoReading = (r: Partial<Reading>): Partial<Reading> => ({
+    kind: 'quran',
+    page: r.page,
+    page_to: r.page_to,
+    ...(surahsOnPages(r.page, r.page_to) ?? {}),
+  });
   const readingInput = (): Reading | undefined =>
-    kind && attendedNow && hasReading(reading) ? ({ ...reading, kind } as Reading) : undefined;
-  // Al-Quran: surah dan muka surat wajib; ayat dan juzuk pilihan.
+    kind && attendedNow && hasReading(reading)
+      ? ((autoSurah ? autoReading(reading) : { ...reading, kind }) as Reading)
+      : undefined;
+  // Bacaan: muka surat wajib. Pra Tahfiz/Tahfiz: surah juga wajib; ayat dan juzuk pilihan.
   const readingRequired =
-    kind === 'quran' && attendedNow && (!reading.surah || !reading.page)
-      ? 'Isi surah dan muka surat dahulu'
-      : null;
+    kind === 'quran' && attendedNow && autoSurah && !reading.page
+      ? 'Isi muka surat dahulu'
+      : kind === 'quran' && attendedNow && !autoSurah && (!reading.surah || !reading.page)
+        ? 'Isi surah dan muka surat dahulu'
+        : null;
   const pageFormatIssue =
     kind && attendedNow && pageText.trim() && !parsePages(pageText)
       ? 'Muka surat tidak sah (contoh: 100 atau 100-102)'
@@ -5387,6 +5448,10 @@ function SessionEditor({
             ...r,
             page: parsed?.page,
             page_to: parsed?.page_to,
+            // Pra Tahfiz: cadangkan surah daripada muka surat jika belum dipilih (boleh diubah).
+            ...(kind === 'quran' && !autoSurah && !r.surah && parsed?.page
+              ? { surah: surahsOnPages(parsed.page)?.surah }
+              : {}),
           }));
         }}
       />
@@ -5640,6 +5705,24 @@ function SessionEditor({
                           ))}
                         </select>
                       </label>
+                    ) : autoSurah ? (
+                      <>
+                        {pageField}
+                        <p className="reading-auto" aria-live="polite">
+                          {(() => {
+                            const r = autoReading(reading);
+                            if (!r.surah) return 'Surah dan juzuk dipaparkan automatik.';
+                            const name =
+                              surahs[r.surah - 1][0] +
+                              (r.surah_to ? ` – ${surahs[r.surah_to - 1][0]}` : '');
+                            return (
+                              <>
+                                Surah <strong>{name}</strong> · Juzuk <strong>{juzLabel(r)}</strong>
+                              </>
+                            );
+                          })()}
+                        </p>
+                      </>
                     ) : (
                       <>
                         <label className="reading-surah">
@@ -5865,14 +5948,18 @@ function ReadingRecord({
           ['MUKA SURAT', (r) => formatPages(r) || null],
         ]
       : [
-          ['JUZUK', (r) => r.juz ?? juzOf(r.page)],
+          ['JUZUK', (r) => juzLabel(r) || null],
           ['MUKA SURAT', (r) => formatPages(r) || null],
           [
             'SURAH',
-            (r) =>
-              r.surah
-                ? `${surahs[r.surah - 1][0]}${r.ayah_from ? ` ${r.ayah_from}${r.ayah_to && r.ayah_to !== r.ayah_from ? `–${r.ayah_to}` : ''}` : ''}`
-                : null,
+            (r) => {
+              // Rekod lama tanpa surah: dikira daripada muka surat.
+              const x = r.surah ? r : { ...r, ...surahsOnPages(r.page, r.page_to) };
+              if (!x.surah) return null;
+              if (x.surah_to && x.surah_to !== x.surah)
+                return `${surahs[x.surah - 1][0]} – ${surahs[x.surah_to - 1][0]}`;
+              return `${surahs[x.surah - 1][0]}${x.ayah_from ? ` ${x.ayah_from}${x.ayah_to && x.ayah_to !== x.ayah_from ? `–${x.ayah_to}` : ''}` : ''}`;
+            },
           ],
         ];
   const name = String(data.students.find((x) => x.id === student)?.full_name || '');

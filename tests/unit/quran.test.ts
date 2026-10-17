@@ -7,6 +7,10 @@ import {
   readingProblem,
   readingShort,
   surahs,
+  surahStartPages,
+  surahsOnPages,
+  surahFromPage,
+  juzLabel,
 } from '../../src/lib/quran';
 import { generateComment } from '../../src/lib/core';
 
@@ -25,11 +29,14 @@ describe('bacaan sesi Iqra / al-Quran', () => {
   it('label penuh dan ringkas', () => {
     expect(readingLabel({ kind: 'iqra', jilid: 3, page: 12 })).toBe("Iqra' 3, muka surat 12");
     expect(readingLabel({ kind: 'quran', surah: 67, ayah_from: 1, ayah_to: 10, page: 562 })).toBe(
-      'Surah Al-Mulk ayat 1–10, muka surat 562',
+      'Surah Al-Mulk ayat 1–10, juzuk 29, muka surat 562',
     );
-    expect(readingLabel({ kind: 'quran', page: 3 })).toBe('Muka surat 3');
+    // Tanpa surah: surah dan juzuk dikira daripada muka surat.
+    expect(readingLabel({ kind: 'quran', page: 3 })).toBe(
+      'Surah Al-Baqarah, juzuk 1, muka surat 3',
+    );
     expect(readingShort({ kind: 'quran', surah: 67, ayah_from: 1, ayah_to: 10, page: 562 })).toBe(
-      'Al-Mulk 1–10 · ms 562',
+      'Al-Mulk 1–10 · Juz 29 · ms 562',
     );
     expect(readingShort({ kind: 'iqra', jilid: 3, page: 12 })).toBe("Iqra' 3 · ms 12");
   });
@@ -64,7 +71,46 @@ describe('julat muka surat', () => {
   });
   it('memaparkan julat dalam label dan menolak julat terbalik', () => {
     expect(formatPages({ page: 531, page_to: 535 })).toBe('531–535');
-    expect(readingLabel({ kind: 'quran', page: 531, page_to: 535 })).toBe('Muka surat 531–535');
+    expect(readingLabel({ kind: 'quran', page: 531, page_to: 535 })).toBe(
+      "Surah Ar-Rahman – Al-Waqi'ah, juzuk 27, muka surat 531–535",
+    );
     expect(readingProblem({ kind: 'quran', page: 10, page_to: 8 })).toMatch(/akhir/);
+  });
+});
+
+describe('surah dan juzuk automatik daripada muka surat', () => {
+  it('data mushaf Madinah: 114 surah, tertib menaik', () => {
+    expect(surahStartPages).toHaveLength(114);
+    expect(surahStartPages.every((p, i) => i === 0 || p >= surahStartPages[i - 1])).toBe(true);
+    // Rujukan biasa: Yasin 440, Al-Kahf 293, Al-Mulk 562, An-Naba' 582, An-Nas 604.
+    expect([36, 18, 67, 78, 114].map((s) => surahStartPages[s - 1])).toEqual([
+      440, 293, 562, 582, 604,
+    ]);
+  });
+  it('surah pada muka surat dan julat', () => {
+    expect(surahsOnPages(100, 102)).toEqual({ surah: 4 });
+    expect(surahsOnPages(77)).toEqual({ surah: 4 });
+    expect(surahsOnPages(105, 107)).toEqual({ surah: 4, surah_to: 5 });
+    expect(surahsOnPages(591)).toEqual({ surah: 86, surah_to: 87 });
+    expect(surahsOnPages(0)).toBeNull();
+  });
+  it('juzuk termasuk julat merentas juzuk', () => {
+    expect(juzLabel({ kind: 'quran', page: 100, page_to: 102 })).toBe('5–6');
+    expect(juzLabel({ kind: 'quran', page: 582 })).toBe('30');
+    expect(juzLabel({ kind: 'quran', page: 100, juz: 7 })).toBe('7');
+  });
+  it('hanya program bacaan mengisi surah automatik; Pra Tahfiz memilih surah sendiri', () => {
+    expect(surahFromPage('TAHSIN_AQ')).toBe(true);
+    expect(surahFromPage('KELANCARAN_AQ')).toBe(true);
+    expect(surahFromPage('PRA_TAHFIZ')).toBe(false);
+    expect(surahFromPage('IQRA')).toBe(false);
+  });
+  it('label julat surah', () => {
+    expect(readingLabel({ kind: 'quran', page: 105, page_to: 107, surah: 4, surah_to: 5 })).toBe(
+      "Surah An-Nisa' – Al-Ma'idah, juzuk 6, muka surat 105–107",
+    );
+    expect(readingShort({ kind: 'quran', page: 105, page_to: 107, surah: 4, surah_to: 5 })).toBe(
+      "An-Nisa' – Al-Ma'idah · Juz 6 · ms 105–107",
+    );
   });
 });

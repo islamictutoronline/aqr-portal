@@ -220,7 +220,8 @@ describe('julat muka surat', () => {
       "select text from generated_parent_comments where session_id=$1 and status<>'retracted'",
       [sid],
     );
-    expect(c.text).toContain('Bacaan: Muka surat 531–535.');
+    // Tiada surah dipilih: surah dan juzuk dikira daripada muka surat (migrasi 45).
+    expect(c.text).toContain("Bacaan: Surah Ar-Rahman – Al-Waqi'ah, juzuk 27, muka surat 531–535.");
   });
   it('julat terbalik ditolak', async () => {
     await asUser(tutor);
@@ -339,5 +340,30 @@ describe('tutor nampak murid dengan tarikh mula akan datang', () => {
       where class_id=(select class_id from enrollments where student_id='${kid}')`);
     await asUser(tutor);
     expect(await seen()).toBe(0);
+  });
+});
+
+describe('label bacaan surah dan juzuk (migrasi 45)', () => {
+  it('pangkalan data dan portal menghasilkan label yang sama', async () => {
+    const { readingLabel } = await import('../../src/lib/quran');
+    await db.exec('reset role');
+    for (const r of [
+      { kind: 'quran', page: 100, page_to: 102, surah: 4 },
+      { kind: 'quran', page: 105, page_to: 107, surah: 4, surah_to: 5 },
+      { kind: 'quran', page: 591 },
+      { kind: 'quran', page: 562, surah: 67, ayah_from: 1, ayah_to: 10 },
+      { kind: 'quran', page: 293, surah: 18, juz: 15 },
+      { kind: 'iqra', jilid: 3, page: 12 },
+    ]) {
+      const db_label = (
+        await one<{ l: string }>('select private.reading_label($1::jsonb) l', [JSON.stringify(r)])
+      ).l;
+      expect(db_label).toBe(readingLabel(r as Parameters<typeof readingLabel>[0]));
+    }
+    await expect(
+      db.query('select private.reading_label($1::jsonb)', [
+        JSON.stringify({ kind: 'quran', page: 100, surah: 5, surah_to: 4 }),
+      ]),
+    ).rejects.toThrow(/Surah tidak sah/);
   });
 });

@@ -119,6 +119,30 @@ export const surahs: [string, number][] = [
   ['An-Nas', 6],
 ];
 
+// Muka surat permulaan setiap surah dalam mushaf Madinah 604 muka surat (indeks 0 = Al-Fatihah).
+// Diselaraskan dengan private.surah_start_page dalam migrasi 45.
+export const surahStartPages: number[] = [
+  1, 2, 50, 77, 106, 128, 151, 177, 187, 208, 221, 235, 249, 255, 262, 267, 282, 293, 305, 312, 322,
+  332, 342, 350, 359, 367, 377, 385, 396, 404, 411, 415, 418, 428, 434, 440, 446, 453, 458, 467,
+  477, 483, 489, 496, 499, 502, 507, 511, 515, 518, 520, 523, 526, 528, 531, 534, 537, 542, 545,
+  549, 551, 553, 554, 556, 558, 560, 562, 564, 566, 568, 570, 572, 574, 575, 577, 578, 580, 582,
+  583, 585, 586, 587, 587, 589, 590, 591, 591, 592, 593, 594, 595, 595, 596, 596, 597, 597, 598,
+  598, 599, 599, 600, 600, 601, 601, 601, 602, 602, 602, 603, 603, 603, 604, 604, 604,
+];
+// Surah pada julat muka surat: surah pertama yang bermula pada muka surat mula (jika ada), jika
+// tidak surah yang sedang dibaca; hingga surah yang sedang dibaca pada muka surat akhir.
+export function surahsOnPages(
+  page?: number | null,
+  pageTo?: number | null,
+): { surah: number; surah_to?: number } | null {
+  if (!page || page < 1 || page > 604) return null;
+  const current = (p: number) => surahStartPages.findLastIndex((start) => start <= p) + 1;
+  const startsHere = surahStartPages.indexOf(page) + 1;
+  const first = startsHere || current(page);
+  const last = current(pageTo && pageTo >= page && pageTo <= 604 ? pageTo : page);
+  return last > first ? { surah: first, surah_to: last } : { surah: first };
+}
+
 // Program yang merekod bacaan: Iqra' (jilid + muka surat) atau al-Quran (surah + ayat + muka surat).
 export type ReadingKind = 'iqra' | 'quran';
 export function readingKind(programCode: unknown): ReadingKind | null {
@@ -128,6 +152,11 @@ export function readingKind(programCode: unknown): ReadingKind | null {
     return 'quran';
   return null;
 }
+// Program bacaan al-Quran (bukan hafazan): tutor hanya menaip muka surat; surah dan juzuk automatik.
+// Pra Tahfiz/Tahfiz kekal memilih surah sendiri.
+export function surahFromPage(programCode: unknown): boolean {
+  return ['KELANCARAN_AQ', 'TAHSIN_AQ'].includes(String(programCode || '').toUpperCase());
+}
 
 export const readingSchema = z.object({
   kind: z.enum(['iqra', 'quran']),
@@ -136,6 +165,8 @@ export const readingSchema = z.object({
   // Julat muka surat (contoh 100-102): page = mula, page_to = akhir.
   page_to: z.number().int().min(1).max(604).optional(),
   surah: z.number().int().min(1).max(114).optional(),
+  // Surah akhir apabila julat muka surat merentas surah (dikira automatik).
+  surah_to: z.number().int().min(1).max(114).optional(),
   ayah_from: z.number().int().min(1).max(286).optional(),
   ayah_to: z.number().int().min(1).max(286).optional(),
   // Juzuk (pilihan): diisi tutor; jika kosong, dikira daripada muka surat.
@@ -161,6 +192,14 @@ export function juzOf(page?: number | null): number | null {
   return page <= 21 ? 1 : Math.min(30, Math.floor((page - 2) / 20) + 1);
 }
 
+// Juzuk bacaan: juzuk ditaip tutor (jika ada) atau dikira daripada muka surat; julat jika merentas juzuk.
+export function juzLabel(r: Partial<Reading>): string {
+  const from = r.juz ?? juzOf(r.page);
+  if (!from) return '';
+  const to = r.juz ? null : juzOf(r.page_to);
+  return to && to !== from ? `${from}–${to}` : String(from);
+}
+
 // Semakan julat ayat; mesej sama seperti pangkalan data.
 export function readingProblem(r: Reading): string | null {
   if (r.page_to && !r.page) return 'Isi muka surat mula';
@@ -179,32 +218,49 @@ export const hasReading = (r?: Partial<Reading> | null) =>
   !!r && !!(r.jilid || r.page || r.surah || r.ayah_from || r.ayah_to);
 
 // "Iqra' 3, muka surat 12" · "Surah Al-Mulk ayat 1–10, muka surat 562" (sama seperti private.reading_label).
-export function readingLabel(r?: Partial<Reading> | null): string {
-  if (!hasReading(r)) return '';
+// Rekod al-Quran tanpa surah (contoh: rekod lama yang hanya ada muka surat): surah dikira daripada
+// muka surat supaya laporan tetap memaparkannya.
+const withSurah = (r: Partial<Reading>): Partial<Reading> =>
+  r.kind === 'quran' && !r.surah && r.page ? { ...r, ...surahsOnPages(r.page, r.page_to) } : r;
+export function readingLabel(input?: Partial<Reading> | null): string {
+  if (!hasReading(input)) return '';
+  const r = withSurah(input!);
   const parts: string[] = [];
   if (r!.kind === 'iqra') {
     if (r!.jilid) parts.push(`Iqra' ${r!.jilid}`);
-  } else if (r!.surah) {
-    const from = r!.ayah_from;
-    const to = r!.ayah_to && r!.ayah_to !== from ? r!.ayah_to : undefined;
-    parts.push(
-      `Surah ${surahs[r!.surah - 1][0]}` +
-        (from ? ` ayat ${from}${to ? `–${to}` : ''}` : to ? ` ayat ${to}` : ''),
-    );
+  } else {
+    if (r!.surah && r!.surah_to && r!.surah_to !== r!.surah) {
+      parts.push(`Surah ${surahs[r!.surah - 1][0]} – ${surahs[r!.surah_to - 1][0]}`);
+    } else if (r!.surah) {
+      const from = r!.ayah_from;
+      const to = r!.ayah_to && r!.ayah_to !== from ? r!.ayah_to : undefined;
+      parts.push(
+        `Surah ${surahs[r!.surah - 1][0]}` +
+          (from ? ` ayat ${from}${to ? `–${to}` : ''}` : to ? ` ayat ${to}` : ''),
+      );
+    }
+    const juz = juzLabel(r!);
+    if (juz) parts.push(`juzuk ${juz}`);
   }
   if (r!.page) parts.push(`muka surat ${formatPages(r)}`);
   const text = parts.join(', ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 // Versi ringkas untuk jadual PDF: "Al-Mulk 1–10 · ms 562" / "Iqra' 3 · ms 12".
-export function readingShort(r?: Partial<Reading> | null): string {
-  if (!hasReading(r)) return '';
+export function readingShort(input?: Partial<Reading> | null): string {
+  if (!hasReading(input)) return '';
+  const r = withSurah(input!);
   const parts: string[] = [];
   if (r!.kind === 'iqra' && r!.jilid) parts.push(`Iqra' ${r!.jilid}`);
   if (r!.kind === 'quran' && r!.surah) {
-    const to = r!.ayah_to && r!.ayah_to !== r!.ayah_from ? `–${r!.ayah_to}` : '';
-    parts.push(`${surahs[r!.surah - 1][0]}${r!.ayah_from ? ` ${r!.ayah_from}${to}` : ''}`);
+    if (r!.surah_to && r!.surah_to !== r!.surah)
+      parts.push(`${surahs[r!.surah - 1][0]} – ${surahs[r!.surah_to - 1][0]}`);
+    else {
+      const to = r!.ayah_to && r!.ayah_to !== r!.ayah_from ? `–${r!.ayah_to}` : '';
+      parts.push(`${surahs[r!.surah - 1][0]}${r!.ayah_from ? ` ${r!.ayah_from}${to}` : ''}`);
+    }
   }
+  if (r!.kind === 'quran' && juzLabel(r!)) parts.push(`Juz ${juzLabel(r!)}`);
   if (r!.page) parts.push(`ms ${formatPages(r)}`);
   return parts.join(' · ');
 }

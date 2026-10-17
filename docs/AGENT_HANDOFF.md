@@ -348,3 +348,11 @@ Untuk sambung kerja:
 - Bingkai berganda semasa fokus (gaya `input:focus-visible` umum pada input di dalam bingkai) dibuang: input dalam `.search`, `.month-filter`, `.delivery-search`, `.report-search` tanpa outline/bayang; bingkai luar menyerlah melalui `:focus-within`.
 - "Cari rekod" hanya dipaparkan pada senarai yang ditapisnya (`searchable`: Murid, Penjaga, Tutor, Kurikulum, Rekod kehadiran/sesi, Kewangan, Elaun; bukan halaman profil, Utama atau Laporan yang ada carian sendiri). Penapisan baharu: Elaun (tutor, murid · program, kehadiran) dan Kurikulum. `matches` tidak lagi memadankan `id`/`*_id` (dahulu "4" memadankan hampir semua rekod melalui UUID). Rekod kehadiran tutor kini padan nama murid/kelas (dahulu hanya padan UUID secara tidak sengaja); bayaran dan invois padan nama penjaga. Carian dikosongkan apabila halaman bertukar melalui hash/Back.
 - Ujian Pages baharu meliputi setiap kotak carian + gaya satu bingkai; Pages 78/78, `npm test` 134/134, E2E 8/8, build OK.
+
+## Surah & juzuk automatik + penjaga di profil tutor (migrasi 45) — 17 Oktober 2026
+
+- `src/lib/quran.ts`: `surahStartPages` (mushaf Madinah 604 ms), `surahsOnPages(page, page_to)` → `{surah, surah_to?}`, `surahFromPage(code)` (KELANCARAN_AQ, TAHSIN_AQ), `juzLabel`. `readingSchema.surah_to`. Label: "Surah An-Nisa' – Al-Ma'idah, juzuk 6, muka surat 105–107"; ringkas "An-Nisa' – Al-Ma'idah · Juz 6 · ms 105–107". Rekod tanpa surah: surah dikira daripada muka surat.
+- Borang sesi: program bacaan (Kelancaran/Tahsin) hanya muka surat (wajib) + paparan automatik "Surah … · Juzuk …"; surah/ayat/juzuk disembunyikan dan disimpan automatik. Pra Tahfiz/Tahfiz: surah wajib dipilih; menaip muka surat mencadangkan surah jika kosong; juzuk automatik.
+- `supabase/migrations/202610170045_reading_surah_juz.sql`: `private.juz_of`, `private.surah_start_pages`, `private.surah_at_page`, `private.reading_label` dengan `surah_to`, juzuk (julat) dan terbitan surah daripada muka surat. Ujian pariti label DB = portal.
+- Profil tutor: `details.guardian-box` "Penjaga murid tutor ini" (tertutup lalai; penjaga + WhatsApp + anak yang diajar tutor itu sahaja).
+- Ujian: `npm test` 140/140, Pages 80/80, E2E 8/8, build OK.

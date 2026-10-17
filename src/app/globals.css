@@ -3821,3 +3821,41 @@ textarea {
 .report-search input::-webkit-search-decoration {
   -webkit-appearance: none;
 }
+/* Bacaan al-Quran: surah dan juzuk dikira automatik daripada muka surat. */
+.reading-auto {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--mint, #eef5f1);
+  color: var(--slate);
+  font-size: 14px;
+}
+.reading-auto strong {
+  color: var(--teal);
+}
+/* Profil tutor: kotak boleh dibuka untuk senarai penjaga murid tutor itu sahaja. */
+.guardian-box {
+  padding: 16px 20px;
+}
+.guardian-box summary {
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.guardian-box[open] summary {
+  margin-bottom: 12px;
+}
+.count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--mint, #eef5f1);
+  color: var(--teal);
+  font-size: 12px;
+}

@@ -571,9 +571,30 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
   await page.getByLabel('Muka surat').fill('5');
   await expect(page.locator('.preview-comment')).toContainText("Bacaan: Iqra' 2, muka surat 5.");
   await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
+  // Kelancaran/Tahsin (bacaan): hanya muka surat; surah dan juzuk automatik.
   await page.goto('/?demo=1#/sessions/session-13');
   await page.reload();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await expect(page.getByLabel('Surah')).toHaveCount(0);
+  await expect(page.getByLabel('Ayat dari')).toHaveCount(0);
+  await expect(page.locator('.reading-issue')).toContainText('Isi muka surat dahulu');
+  await page.getByLabel('Muka surat').fill('105-107');
+  await expect(page.locator('.reading-auto')).toContainText(
+    "Surah An-Nisa' – Al-Ma'idah · Juzuk 6",
+  );
+  await expect(page.locator('.preview-comment')).toContainText(
+    "Bacaan: Surah An-Nisa' – Al-Ma'idah, juzuk 6, muka surat 105–107.",
+  );
+  await page.getByLabel('Muka surat').fill('100-102');
+  await expect(page.locator('.reading-auto')).toContainText("Surah An-Nisa' · Juzuk 5–6");
+  await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
+  // Pra Tahfiz: surah dipilih sendiri (wajib); muka surat mencadangkan surah jika kosong.
+  await page.goto('/?demo=1#/sessions/session-14');
+  await page.reload();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByLabel('Muka surat').fill('582');
+  await expect(page.getByLabel('Surah')).toHaveValue('78');
+  await page.getByLabel('Muka surat').fill('');
   await page.getByLabel('Surah').selectOption('112');
   await page.getByLabel('Ayat hingga').fill('9');
   await expect(page.locator('.reading-issue')).toContainText('hanya 4 ayat');
@@ -590,7 +611,7 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
   await page.getByLabel('Muka surat').fill('604');
   await expect(page.getByLabel('Juzuk')).toHaveAttribute('placeholder', '30 (auto)');
   await expect(page.locator('.preview-comment')).toContainText(
-    'Bacaan: Surah Al-Ikhlas ayat 1–4, muka surat 604.',
+    'Bacaan: Surah Al-Ikhlas ayat 1–4, juzuk 30, muka surat 604.',
   );
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
   await page.getByLabel('Ayat dari').fill('');
@@ -1160,4 +1181,34 @@ test('every search box filters its own list and shows a single frame when focuse
     expect(name).toContain(first);
   await search().fill('tiada-murid-sebegini');
   await expect(picker).toHaveCount(0);
+});
+test('tutor profile lists only that tutor’s guardians in a collapsible box', async ({ page }) => {
+  await page.goto('/?demo=1#/tutors');
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'Tutor Contoh 1' })
+    .getByRole('button', { name: /^Lihat/ })
+    .click();
+  const box = page.locator('details.guardian-box');
+  await expect(box.locator('summary')).toContainText('Penjaga murid tutor ini');
+  // Tertutup secara lalai; dibuka apabila ditekan.
+  await expect(box.locator('table')).toBeHidden();
+  await box.locator('summary').click();
+  await expect(box.locator('tbody tr').first()).toBeVisible();
+  const mine = (
+    await page
+      .locator('.card')
+      .filter({ has: page.getByRole('heading', { name: 'Murid', exact: true }) })
+      .locator('tbody tr td:first-child strong')
+      .allTextContents()
+  ).map((t) => t.trim());
+  expect(mine.length).toBeGreaterThan(0);
+  const count = Number(await box.locator('.count-pill').textContent());
+  await expect(box.locator('tbody tr')).toHaveCount(count);
+  for (const cell of await box.locator('tbody tr td:nth-child(3)').allTextContents())
+    for (const kid of cell
+      .replace(/^Anak \(murid tutor ini\)/, '')
+      .split(',')
+      .map((x) => x.trim()))
+      expect(mine).toContain(kid);
 });
