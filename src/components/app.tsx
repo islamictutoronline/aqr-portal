@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
 import {
   apiFetch,
   navigatePath,
@@ -616,8 +616,13 @@ export function App({
     [data, demo, role, activeGuardian, activeTutor],
   );
   const all = (table: string) => visible[table] || [];
+  // Indeks id → baris bagi setiap jadual (dibina sekali bagi setiap set data) supaya paparan
+  // jadual besar tidak mencari secara linear untuk setiap sel.
+  const indexes = useMemo(() => ({}) as Record<string, Map<unknown, Row>>, [visible]);
+  const byId = (table: string) =>
+    (indexes[table] ??= new Map(all(table).map((r) => [r.id, r] as [unknown, Row])));
   const lookup = (table: string, id: unknown, field = 'full_name') =>
-    String(all(table).find((r) => r.id === id)?.[field] ?? '—');
+    String(byId(table).get(id)?.[field] ?? '—');
   const options = (table: string, field = 'full_name'): [string, string][] =>
     all(table)
       .filter((r) => table !== 'staff_profiles' || r.role === 'tutor')
@@ -672,8 +677,10 @@ export function App({
     navigation.some((n) => n[0] === section) ||
     (section === 'sessions' && (academic || role === 'tutor'));
   // Carian umum: padan teks yang dipaparkan sahaja (bukan ID dalaman atau rujukan *_id).
+  // Taipan dalam kotak carian kekal lancar: penapisan senarai besar ditangguhkan sedikit.
+  const deferredSearch = useDeferredValue(search);
   const matches = (row: Row) => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return (
       !q ||
       Object.entries(row).some(
@@ -1552,7 +1559,7 @@ export function App({
     const link = all('student_guardians').find(
       (l) => l.student_id === studentId && l.is_billing_contact,
     );
-    return link ? all('guardians').find((g) => g.id === link.guardian_id) : undefined;
+    return link ? byId('guardians').get(link.guardian_id) : undefined;
   };
   const editGuardian = (studentId: unknown, studentName: unknown) => {
     const g = guardianOf(studentId);
@@ -1625,7 +1632,7 @@ export function App({
       day: Number(r.day_of_week),
       time: String(r.start_time).slice(0, 5),
     }));
-    const flexible = !!all('classes').find((c) => c.id === classId)?.flexible;
+    const flexible = !!byId('classes').get(classId)?.flexible;
     setDialog({
       title: `Ubah jadual · ${program}`,
       operation: 'update_schedule',
@@ -1888,7 +1895,7 @@ export function App({
     all('enrollments')
       .filter((e) => e.student_id === studentId && e.status === 'active')
       .map((e) => {
-        const c = all('classes').find((x) => x.id === e.class_id);
+        const c = byId('classes').get(e.class_id);
         const t = all('class_tutors').find((x) => x.class_id === e.class_id && !x.ends_on);
         const program = lookup('programs', c?.program_id, 'name');
         const tutorName = t ? lookup('staff_profiles', t.staff_id, 'display_name') : '';
@@ -2001,7 +2008,7 @@ export function App({
       ],
       transform: (v) => ({ ...v, minutes: Number(v.minutes), amount: integerSen(v.amount) }),
     });
-  const currentSession = all('class_sessions').find((s) => s.id === selectedSession);
+  const currentSession = byId('class_sessions').get(selectedSession);
   const report = useMemo(() => {
     const code = allowedReport(role, reportCode)
       ? reportCode
@@ -2088,7 +2095,7 @@ export function App({
     const found = bestSession(cid);
     if (found) return go(`sessions/${found.id}`);
     // Jadual fleksibel: tiada sesi dijana — tutor memilih tarikh sebenar kelas.
-    if (all('classes').find((c) => c.id === cid)?.flexible) return addSessionFor(cid);
+    if (byId('classes').get(cid)?.flexible) return addSessionFor(cid);
     const start = new Date(Math.floor(Date.now() / 300000) * 300000).toISOString();
     const minutes = Number(
       all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
@@ -2176,7 +2183,7 @@ export function App({
         <Card
           title="Kelas telah dilaksanakan"
           subtitle={
-            all('classes').find((c) => c.id === current.class_id)?.flexible
+            byId('classes').get(current.class_id)?.flexible
               ? `Bulan ${month}: ${counts.done} kelas direkod · jadual fleksibel`
               : `Bulan ${month}: ${counts.done} selesai · ${counts.left} sesi berbaki`
           }
@@ -2500,7 +2507,7 @@ export function App({
   }
   function studentsScreen() {
     const id = page.split('/')[1];
-    const student = all('students').find((s) => s.id === id);
+    const student = byId('students').get(id);
     return student ? (
       <>
         <div className="profile-hero">
@@ -2974,7 +2981,7 @@ export function App({
                 }),
               )
               .map((e) => {
-                const c = all('classes').find((x) => x.id === e.class_id);
+                const c = byId('classes').get(e.class_id);
                 return (
                   <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
                     <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
@@ -3731,7 +3738,7 @@ export function App({
     org: orgContact(),
   });
   const receiptExtra = (r: Row) => {
-    const p = all('payments').find((x) => x.id === r.payment_id);
+    const p = byId('payments').get(r.payment_id);
     return {
       guardian: p ? lookup('guardians', p.guardian_id) : '',
       payment: {
@@ -4321,7 +4328,7 @@ export function App({
             rows={all('attendance')
               .filter((a) => a.student_id === selected.id)
               .map((a) => {
-                const s = all('class_sessions').find((s) => s.id === a.session_id);
+                const s = byId('class_sessions').get(a.session_id);
                 return [
                   s ? dateLabel(String(s.starts_at)) : '—',
                   lookup('classes', s?.class_id, 'name'),
@@ -4704,7 +4711,7 @@ export function App({
             <Table
               headers={['Murid', 'Program', 'Sesi selesai bulan ini', '']}
               rows={enrol.map((e) => {
-                const c = all('classes').find((x) => x.id === e.class_id);
+                const c = byId('classes').get(e.class_id);
                 return [
                   <strong key="n">{lookup('students', e.student_id)}</strong>,
                   lookup('programs', c?.program_id, 'name'),
@@ -4725,7 +4732,7 @@ export function App({
             const kids = new Set(enrol.map((e) => e.student_id));
             const links = all('student_guardians').filter((l) => kids.has(l.student_id));
             const list = [...new Set(links.map((l) => l.guardian_id))]
-              .map((gid) => all('guardians').find((g) => g.id === gid))
+              .map((gid) => byId('guardians').get(gid))
               .filter((g): g is Row => Boolean(g))
               .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name)));
             return (

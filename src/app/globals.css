@@ -897,10 +897,9 @@ dd {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #11243988;
+  background: #112439a6;
   z-index: 60;
   padding: 20px;
-  backdrop-filter: blur(3px);
 }
 .modal {
   width: 460px;

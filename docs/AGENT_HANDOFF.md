@@ -356,3 +356,9 @@ Untuk sambung kerja:
 - `supabase/migrations/202610170045_reading_surah_juz.sql`: `private.juz_of`, `private.surah_start_pages`, `private.surah_at_page`, `private.reading_label` dengan `surah_to`, juzuk (julat) dan terbitan surah daripada muka surat. Ujian pariti label DB = portal.
 - Profil tutor: `details.guardian-box` "Penjaga murid tutor ini" (tertutup lalai; penjaga + WhatsApp + anak yang diajar tutor itu sahaja).
 - Ujian: `npm test` 140/140, Pages 80/80, E2E 8/8, build OK.
+
+## Prestasi portal — 17 Oktober 2026
+
+- Punca utama kelembapan: `portal/main.tsx` memuat semula SEMUA ~50 jadual (`loadData`) pada setiap `window` `focus` (tukar tab/aplikasi, tutup pemilih di telefon) dan setiap `SIGNED_IN`/`TOKEN_REFRESHED`; kegagalan muat semula latar juga menendang pengguna ke skrin log masuk. Kini: muat penuh sekali selepas log masuk; muat semula latar hanya apabila tab kembali dipaparkan dan > 5 minit sejak muat terakhir; `TOKEN_REFRESHED` diabaikan; `SIGNED_IN` hanya untuk pengguna baharu; satu muat pada satu masa (`inFlight`); ralat latar mengekalkan data.
+- `app.tsx`: indeks `byId(table)` (Map, dimemo bagi setiap `visible`) untuk `lookup` dan 12 carian `all(...).find(x => x.id === …)`; `useDeferredValue` untuk carian; latar modal tanpa `backdrop-filter: blur` (berat di telefon).
+- Ujian: `npm test` 140/140, Pages 80/80.

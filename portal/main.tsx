@@ -50,7 +50,20 @@ function Root() {
   const demo = demoAllowed && new URLSearchParams(location.search).get('demo') === '1';
   useEffect(() => {
     let alive = true;
-    const load = async () => {
+    // Muat penuh ~50 jadual hanya bila perlu: sekali selepas log masuk, kemudian paling kerap setiap
+    // REFRESH_MS apabila tab kembali dipaparkan. Pembaharuan token tidak memuat semula data.
+    const REFRESH_MS = 5 * 60 * 1000;
+    let lastLoad = 0;
+    let lastUser = '';
+    let inFlight: Promise<void> | null = null;
+    const load = (background = false) => {
+      if (inFlight) return inFlight;
+      inFlight = run(background).finally(() => {
+        inFlight = null;
+      });
+      return inFlight;
+    };
+    const run = async (background: boolean) => {
       if (!configured || demo) {
         setLoading(false);
         return;
@@ -77,11 +90,14 @@ function Root() {
         const ctx = await getContext();
         const data = await loadData(ctx);
         if (alive) {
+          lastLoad = Date.now();
+          lastUser = session.user.id;
           setLoaded({ ctx, data });
           setMessage('');
         }
       } catch (e) {
-        if (alive) {
+        // Muat semula latar yang gagal (contoh: rangkaian terputus seketika) mengekalkan data sedia ada.
+        if (alive && !background) {
           setLoaded(null);
           setMessage(e instanceof Error ? e.message : 'Akses gagal');
         }
@@ -92,19 +108,25 @@ function Root() {
     void load();
     const {
       data: { subscription },
-    } = db.auth.onAuthStateChange((event) => {
+    } = db.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        lastUser = '';
         setLoaded(null);
         setSigned(false);
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')
+      } else if (event === 'SIGNED_IN' && session?.user.id !== lastUser) {
+        // supabase-js juga menghantar SIGNED_IN apabila tab kembali aktif; muat hanya untuk pengguna baharu.
         setTimeout(() => void load(), 0);
+      }
     });
-    const focus = () => void load();
-    window.addEventListener('focus', focus);
+    const visible = () => {
+      if (document.visibilityState === 'visible' && lastLoad && Date.now() - lastLoad > REFRESH_MS)
+        void load(true);
+    };
+    document.addEventListener('visibilitychange', visible);
     return () => {
       alive = false;
       subscription.unsubscribe();
-      window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', visible);
     };
   }, [demo]);
   async function login(e: FormEvent) {
