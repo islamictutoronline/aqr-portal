@@ -1042,3 +1042,21 @@ test('report preview scrolls in a box and can be searched; export history is fol
   );
   await expect(page.locator('details.export-history')).not.toHaveAttribute('open', '');
 });
+test('session invoices: regenerating after payment does not bill the same sessions twice', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/finance');
+  const generate = page.getByRole('button', { name: 'Jana / kemas kini invois' });
+  await generate.click();
+  const due = page.getByRole('region', { name: 'Belum bayar' });
+  const done = page.getByRole('region', { name: 'Sudah bayar' });
+  const row = due.getByRole('row').filter({ hasText: 'DEMO-5 ' });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name: 'Yuran telah dibayar' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(done).toContainText('DEMO-5 ');
+  const before = await page.locator('tbody tr').count();
+  await generate.click();
+  await expect(page.locator('tbody tr')).toHaveCount(before);
+  await expect(page.getByText('Invois tambahan', { exact: true })).toHaveCount(0);
+});

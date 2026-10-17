@@ -1422,28 +1422,58 @@ export function App({
       setBusy(false);
     }
   }
-  // Demo: tiru generate_session_invoices (yuran ikut sesi; satu invois setiap penjaga bil).
+  // Demo: tiru generate_session_invoices (yuran ikut sesi; invois tambahan selepas bayaran).
   function demoInvoices(next: Dataset, period: string, id: string) {
     const rows = feeRows(next, period).filter((f) => f.guardianId && f.rate_sen !== null);
     for (const gid of new Set(rows.map((f) => f.guardianId!))) {
-      const mine = rows.filter((f) => f.guardianId === gid);
-      const key = `sessions:${period}:${gid}`;
-      const existing = next.invoices.find((i) => i.idempotency_key === key);
-      const invId = existing?.id || `${id}-${gid}`;
+      const base = `sessions:${period}:${gid}`;
+      const mine = next.invoices.filter(
+        (i) =>
+          i.status !== 'void' &&
+          (i.idempotency_key === base || String(i.idempotency_key).startsWith(`${base}:`)),
+      );
+      const paidSome = (i: Row) =>
+        (next.payment_allocations || []).some((a) => a.invoice_id === i.id);
+      const open = mine
+        .filter((i) => ['issued', 'draft', 'overdue'].includes(String(i.status)) && !paidSome(i))
+        .at(-1);
+      const billed = (f: (typeof rows)[number]) =>
+        next.invoice_items
+          .filter(
+            (x) =>
+              x.invoice_id !== open?.id &&
+              mine.some((i) => i.id === x.invoice_id) &&
+              x.student_id === f.studentId &&
+              x.unit_price_sen === f.rate_sen &&
+              x.description === `${f.student} · ${f.program} (${f.minutes} minit)`,
+          )
+          .reduce((n, x) => n + Number(x.quantity), 0);
+      const rest = rows
+        .filter((f) => f.guardianId === gid)
+        .map((f) => ({ f, quantity: f.sessions - billed(f) }))
+        .filter((x) => x.quantity > 0);
+      if (!rest.length) {
+        if (open) open.status = 'void';
+        continue;
+      }
+      let key = base;
+      for (let k = 2; next.invoices.some((i) => i.idempotency_key === key); k++)
+        key = `${base}:${k}`;
+      const invId = open?.id || `${id}-${gid}`;
       next.invoice_items = next.invoice_items.filter((x) => x.invoice_id !== invId);
-      mine.forEach((f, k) =>
+      rest.forEach(({ f, quantity }, k) =>
         next.invoice_items.push({
           id: `${invId}-${k}`,
           invoice_id: invId,
           student_id: f.studentId,
           description: `${f.student} · ${f.program} (${f.minutes} minit)`,
-          quantity: f.sessions,
+          quantity,
           unit_price_sen: f.rate_sen,
           discount_sen: 0,
         }),
       );
-      const total = mine.reduce((n, f) => n + f.total_sen, 0);
-      if (existing) existing.total_sen = total;
+      const total = rest.reduce((n, x) => n + x.quantity * Number(x.f.rate_sen), 0);
+      if (open) open.total_sen = total;
       else
         next.invoices.push({
           id: invId,
@@ -3182,7 +3212,7 @@ export function App({
       <>
         <Card
           title="Yuran bulan ini"
-          subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Cuti bermaklum tidak.`}
+          subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Cuti bermaklum tidak. Boleh dijana berulang kali: invois belum dibayar dikemas kini; sesi selepas bayaran masuk invois tambahan.`}
           action={
             academic && (
               <button
@@ -3318,7 +3348,12 @@ export function App({
             const voided = items.filter((x) => isVoid(x.i));
             const rowsOf = (list: typeof items) =>
               list.map(({ i, b, students }) => [
-                <strong key="n">{String(i.number)}</strong>,
+                <span key="n" className="guardian-cell">
+                  <strong>{String(i.number)}</strong>
+                  {/^sessions:.+:\d+$/.test(String(i.idempotency_key ?? '')) && (
+                    <small>Invois tambahan</small>
+                  )}
+                </span>,
                 <span key="g" className="guardian-cell">
                   {lookup('guardians', i.guardian_id)}
                   {students.length > 0 && <small>{students.join(', ')}</small>}

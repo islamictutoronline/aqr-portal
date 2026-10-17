@@ -230,3 +230,59 @@ describe('julat muka surat', () => {
     ).rejects.toThrow(/akhir mesti selepas/);
   });
 });
+
+describe('invois tambahan', () => {
+  it('sesi selepas invois dibayar masuk invois tambahan; tiada sesi dibilkan dua kali', async () => {
+    await db.exec(`reset role; insert into program_fee_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from)
+      values('${org}','TAHFIZ',30,1000,'2026-01-01') on conflict do nothing;`);
+    const day = (d: number) => `2026-06-${String(d).padStart(2, '0')}T20:00:00+08:00`;
+    const add = async (d: number) => {
+      await asUser(tutor);
+      await record(await create(day(d)));
+    };
+    const invoices = async () => {
+      await asUser(owner);
+      await db.query('select generate_session_invoices($1,$2)', [org, '2026-06']);
+      return (
+        await db.query<{ id: string; idempotency_key: string; total_sen: string; status: string }>(
+          "select id,idempotency_key,total_sen,status from invoices where period='2026-06' order by created_at,idempotency_key",
+        )
+      ).rows.map((r) => ({
+        id: r.id,
+        tambahan: /:\d+$/.test(r.idempotency_key),
+        total: Number(r.total_sen),
+        status: r.status,
+      }));
+    };
+    await add(1);
+    await add(2);
+    expect((await invoices()).map((i) => i.total)).toEqual([2000]);
+    await add(8);
+    const [first] = await invoices();
+    expect(first.total).toBe(3000);
+    // Ibu bapa bayar pada pertengahan bulan.
+    await db.query('select mark_invoice_paid($1,$2)', [org, first.id]);
+    await add(15);
+    await add(22);
+    let list = await invoices();
+    expect(list.map(({ tambahan, total, status }) => ({ tambahan, total, status }))).toEqual([
+      { tambahan: false, total: 3000, status: 'paid' },
+      { tambahan: true, total: 2000, status: 'issued' },
+    ]);
+    // Jana semula tanpa sesi baharu: tiada invois atau caj tambahan.
+    expect((await invoices()).map((i) => i.total)).toEqual([3000, 2000]);
+    // Sesi baharu dimasukkan ke invois tambahan yang belum dibayar.
+    await add(29);
+    list = await invoices();
+    expect(list.map((i) => i.total)).toEqual([3000, 3000]);
+    expect(
+      Number(
+        (
+          await one<{ q: string }>(
+            "select sum(ii.quantity) q from invoice_items ii join invoices i on i.id=ii.invoice_id where i.period='2026-06'",
+          )
+        ).q,
+      ),
+    ).toBe(6);
+  });
+});

@@ -319,3 +319,9 @@ Untuk sambung kerja:
 ## Penilaian rawak tutor Ahmad Muzzammil — 17 Oktober 2026
 
 - Atas permintaan pengguna, skrip peribadi `~/Desktop/AQR-data-peribadi/isi-penilaian-rawak-ahmad-muzzammil.sql` (di luar repo) mengisi penilaian bagi kehadiran Hadir/Lewat/Ganti tutor itu yang belum dinilai: tahap 3–5, kemahiran/penglibatan/fokus rawak daripada `assessment_options` aktif; bacaan dikekalkan; ulasan diterbitkan melalui `record_assessment`. Idempoten (langkau yang sudah dinilai). Diuji PGlite; **dijalankan pengguna di cloud 17 Okt**: 31 kehadiran Hadir, 31 dinilai, 0 belum dinilai.
+
+## Invois tambahan (migrasi 42) — 17 Oktober 2026
+
+- `supabase/migrations/202610170042_supplementary_invoices.sql` menggantikan `private.generate_session_invoices`: invois sesi bulan itu yang belum menerima bayaran dikemas kini (seperti dahulu); jika invois sudah menerima bayaran, sesi yang belum dibilkan masuk invois baharu dengan kunci `sessions:<bulan>:<penjaga>:2`, `:3`, … Kuantiti dikira berbanding semua invois sesi bulan itu yang tidak `void`, jadi tiada sesi dibilkan dua kali; invois terbuka yang tiada baki dibatalkan (`void`).
+- UI: label "Invois tambahan" di bawah no. invois; subtajuk "Yuran bulan ini" menerangkan jana berulang; demo `demoInvoices` meniru logik sama.
+- Ujian: integrasi `session-fixes` 11/11 (bayar pertengahan bulan → invois tambahan; jana semula tanpa sesi baharu tiada caj; sesi baharu masuk invois tambahan belum dibayar), Pages 74/74, `npm test` 129/129, lint/format/build OK. **Belum dipasang di cloud** sehingga pengguna menampal migrasi 42.
