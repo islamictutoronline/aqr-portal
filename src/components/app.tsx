@@ -472,6 +472,8 @@ export function App({
       const next = window.location.hash.slice(2) || 'dashboard';
       setPage(next);
       setDrawer(false);
+      // Carian lama tidak dibawa ke halaman lain (pautan, Back/Forward).
+      setSearch('');
       if (next.startsWith('sessions/')) setSelectedSession(next.split('/')[1]);
     };
     window.addEventListener('hashchange', changed);
@@ -637,6 +639,13 @@ export function App({
       (demo && role === 'owner' && p === 'parent'),
   );
   const section = page.split('/')[0];
+  // Kotak "Cari rekod" hanya dipaparkan pada senarai yang benar-benar ditapis olehnya (laporan,
+  // invois dan penghantaran mempunyai carian sendiri).
+  const searchable =
+    !page.split('/')[1] &&
+    ['students', 'guardians', 'tutors', 'classes', 'calendar', 'finance', 'allowance'].includes(
+      section,
+    );
   const allowed = navigation.map((n) => n[0] as string);
   const groups = menu
     .map(([id, label, Icon, members]) => {
@@ -659,11 +668,17 @@ export function App({
   const allowedPage =
     navigation.some((n) => n[0] === section) ||
     (section === 'sessions' && (academic || role === 'tutor'));
-  const matches = (row: Row) =>
-    !search ||
-    Object.values(row).some(
-      (v) => typeof v === 'string' && v.toLowerCase().includes(search.toLowerCase()),
+  // Carian umum: padan teks yang dipaparkan sahaja (bukan ID dalaman atau rujukan *_id).
+  const matches = (row: Row) => {
+    const q = search.trim().toLowerCase();
+    return (
+      !q ||
+      Object.entries(row).some(
+        ([k, v]) =>
+          k !== 'id' && !k.endsWith('_id') && typeof v === 'string' && v.toLowerCase().includes(q),
+      )
     );
+  };
   async function mutate(operation: string, payload: Record<string, unknown>) {
     setBusy(true);
     setNotice('');
@@ -2918,11 +2933,15 @@ export function App({
         >
           <Table
             headers={['Program', 'Unit', 'Hasil pembelajaran']}
-            rows={all('curriculum_units').map((u) => [
-              lookup('programs', u.program_id, 'name'),
-              String(u.name),
-              String(u.outcome || 'Belum ditetapkan'),
-            ])}
+            rows={all('curriculum_units')
+              .filter((u) =>
+                matches({ ...u, program: String(lookup('programs', u.program_id, 'name')) }),
+              )
+              .map((u) => [
+                lookup('programs', u.program_id, 'name'),
+                String(u.name),
+                String(u.outcome || 'Belum ditetapkan'),
+              ])}
           />
           <p className="footnote">
             Penguasaan keseluruhan: belum cukup data tanpa bukti penilaian unit. Tiada peratusan
@@ -2943,24 +2962,32 @@ export function App({
       return (
         <Card title="Rekod kehadiran" subtitle="Tekan nama murid untuk merekod kelas">
           <div className="student-picker">
-            {rows.filter(matches).map((e) => {
-              const c = all('classes').find((x) => x.id === e.class_id);
-              return (
-                <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
-                  <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
-                  <span>
-                    <strong>{lookup('students', e.student_id)}</strong>
-                    <small>
-                      {lookup('programs', c?.program_id, 'name')} ·{' '}
-                      {c?.flexible
-                        ? `Jadual fleksibel · ${classCounts(e.class_id).done} kelas direkod`
-                        : `Selesai ${classCounts(e.class_id).done} · Berbaki ${classCounts(e.class_id).left}`}
-                    </small>
-                  </span>
-                  <ChevronRight size={18} />
-                </button>
-              );
-            })}
+            {rows
+              .filter((e) =>
+                matches({
+                  id: '',
+                  name: lookup('students', e.student_id),
+                  program: lookup('classes', e.class_id, 'name'),
+                }),
+              )
+              .map((e) => {
+                const c = all('classes').find((x) => x.id === e.class_id);
+                return (
+                  <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
+                    <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
+                    <span>
+                      <strong>{lookup('students', e.student_id)}</strong>
+                      <small>
+                        {lookup('programs', c?.program_id, 'name')} ·{' '}
+                        {c?.flexible
+                          ? `Jadual fleksibel · ${classCounts(e.class_id).done} kelas direkod`
+                          : `Selesai ${classCounts(e.class_id).done} · Berbaki ${classCounts(e.class_id).left}`}
+                      </small>
+                    </span>
+                    <ChevronRight size={18} />
+                  </button>
+                );
+              })}
           </div>
           {!rows.length && <Empty text="Belum ada murid. Daftar murid di menu Murid." />}
         </Card>
@@ -3061,19 +3088,27 @@ export function App({
                         </header>
                         <Table
                           headers={['Masa', 'Murid · Program', 'Status', 'Kehadiran', '']}
-                          rows={own.filter(matches).map((x) => [
-                            timeLabel(String(x.starts_at)),
-                            lookup('classes', x.class_id, 'name'),
-                            <Badge key="s" value={x.status} />,
-                            attendanceOf(x.id),
-                            <button
-                              key="o"
-                              className="text-link"
-                              onClick={() => go(`sessions/${x.id}`)}
-                            >
-                              Lihat <ChevronRight size={16} />
-                            </button>,
-                          ])}
+                          rows={own
+                            .filter((x) =>
+                              matches({
+                                id: '',
+                                name: lookup('classes', x.class_id, 'name'),
+                                attendance: attendanceOf(x.id),
+                              }),
+                            )
+                            .map((x) => [
+                              timeLabel(String(x.starts_at)),
+                              lookup('classes', x.class_id, 'name'),
+                              <Badge key="s" value={x.status} />,
+                              attendanceOf(x.id),
+                              <button
+                                key="o"
+                                className="text-link"
+                                onClick={() => go(`sessions/${x.id}`)}
+                              >
+                                Lihat <ChevronRight size={16} />
+                              </button>,
+                            ])}
                         />
                       </section>
                     );
@@ -3321,7 +3356,7 @@ export function App({
             ];
             const q = invoiceQuery.trim().toLowerCase();
             const items = all('invoices')
-              .filter(matches)
+              .filter((i) => matches({ ...i, guardian: lookup('guardians', i.guardian_id) }))
               .map((i) => {
                 const studentIds = studentsOf(i);
                 const students = studentIds.map((id) => lookup('students', id));
@@ -3487,7 +3522,7 @@ export function App({
           <Table
             headers={['Tarikh', 'Penjaga', 'Amaun', 'Kaedah', 'Rujukan', 'Status', 'Tindakan']}
             rows={all('payments')
-              .filter(matches)
+              .filter((p) => matches({ ...p, guardian: lookup('guardians', p.guardian_id) }))
               .map((p) => [
                 p.paid_on ? dateLabel(String(p.paid_on)) : '—',
                 lookup('guardians', p.guardian_id),
@@ -3914,7 +3949,14 @@ export function App({
   function allowanceScreen() {
     const total = allowances.reduce((n, r) => n + r.payable_sen, 0);
     const missing = allowances.filter((r) => r.rate_sen === null).length;
-    const tutorIds = [...new Set(allowances.map((r) => r.tutorId))];
+    // Carian: nama tutor, murid · program atau kehadiran.
+    const rowMatch = (r: (typeof allowances)[number]) =>
+      matches({ id: '', label: r.label, attendance: r.attendance });
+    const tutorIds = [...new Set(allowances.map((r) => r.tutorId))].filter(
+      (tid) =>
+        matches({ id: '', name: String(lookup('staff_profiles', tid, 'display_name')) }) ||
+        allowances.some((r) => r.tutorId === tid && rowMatch(r)),
+    );
     return (
       <>
         {metricCards([
@@ -3958,13 +4000,15 @@ export function App({
           {role === 'tutor' ? (
             <Table
               headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
-              rows={allowances.map((r) => [
-                dateLabel(String(r.session.starts_at)),
-                r.label,
-                `${r.minutes} min`,
-                r.attendance,
-                r.rate_sen === null ? 'Tiada kadar' : formatMoney(r.payable_sen),
-              ])}
+              rows={allowances
+                .filter(rowMatch)
+                .map((r) => [
+                  dateLabel(String(r.session.starts_at)),
+                  r.label,
+                  `${r.minutes} min`,
+                  r.attendance,
+                  r.rate_sen === null ? 'Tiada kadar' : formatMoney(r.payable_sen),
+                ])}
             />
           ) : (
             <>
@@ -4066,7 +4110,7 @@ export function App({
                   <Table
                     headers={['Tarikh', 'Murid · Program', 'Tempoh', 'Kehadiran', 'Elaun']}
                     rows={allowances
-                      .filter((r) => r.tutorId === allowanceTab)
+                      .filter((r) => r.tutorId === allowanceTab && rowMatch(r))
                       .map((r) => [
                         dateLabel(String(r.session.starts_at)),
                         r.label,
@@ -4924,15 +4968,18 @@ export function App({
               )}
             </div>
             <div className="filters">
-              <label className="search">
-                <Search size={16} aria-hidden="true" />
-                <input
-                  aria-label="Cari rekod"
-                  placeholder="Cari rekod…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
+              {searchable && (
+                <label className="search">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    type="search"
+                    aria-label="Cari rekod"
+                    placeholder="Cari rekod…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+              )}
               <label className="month-filter">
                 <CalendarDays size={16} aria-hidden="true" />
                 <input

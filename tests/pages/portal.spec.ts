@@ -24,7 +24,7 @@ test('mobile search remains usable and the menu traps and restores keyboard focu
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?demo=1#/students');
-  const search = page.getByRole('textbox', { name: 'Cari rekod' });
+  const search = page.getByRole('searchbox', { name: 'Cari rekod' });
   await expect(search).toBeVisible();
   await search.fill('Murid Contoh 01');
   await expect(page.locator('table').getByText('Murid Contoh 01', { exact: true })).toBeVisible();
@@ -85,7 +85,10 @@ test('compact phones retain search and keep reports and money summaries inside t
   await page.setViewportSize({ width: 320, height: 850 });
   for (const screen of ['dashboard', 'students', 'reports', 'finance', 'allowance']) {
     await page.goto(`/?demo=1#/${screen}`);
-    await expect(page.getByRole('textbox', { name: 'Cari rekod' })).toBeVisible();
+    // Utama dan Laporan tiada carian umum (Laporan ada carian sendiri).
+    const search = page.getByRole('searchbox', { name: 'Cari rekod' });
+    if (['dashboard', 'reports'].includes(screen)) await expect(search).toHaveCount(0);
+    else await expect(search).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
       false,
     );
@@ -1085,4 +1088,76 @@ test('admin resets a tutor password; tutor must change it before continuing', as
   await page.getByRole('button', { name: 'Simpan kata laluan' }).click();
   await expect(page.getByRole('heading', { name: 'Tukar kata laluan sementara' })).toHaveCount(0);
   await expect(page.locator('.metrics').first()).toBeVisible();
+});
+test('every search box filters its own list and shows a single frame when focused', async ({
+  page,
+}) => {
+  const search = () => page.getByRole('searchbox', { name: 'Cari rekod' });
+  const rows = (text: string) => page.locator('main tbody tr').filter({ hasText: text });
+  const singleFrame = async (name: string) => {
+    const input = page.getByRole('searchbox', { name });
+    await input.focus();
+    const style = await input.evaluate((el) => {
+      const own = getComputedStyle(el);
+      const frame = getComputedStyle(el.parentElement!);
+      return { outline: own.outlineStyle, shadow: own.boxShadow, frame: frame.boxShadow };
+    });
+    expect(style.outline).toBe('none');
+    expect(style.shadow).toBe('none');
+    expect(style.frame).not.toBe('none');
+  };
+  // Murid
+  await page.goto('/?demo=1#/students');
+  await expect(rows('Murid Contoh 01')).toHaveCount(1);
+  await singleFrame('Cari rekod');
+  await search().fill('murid contoh 03');
+  await expect(rows('Murid Contoh 03')).toHaveCount(1);
+  await expect(rows('Murid Contoh 01')).toHaveCount(0);
+  // ID dalaman tidak dipadankan.
+  await search().fill('demo-');
+  await expect(page.locator('main tbody tr').filter({ hasText: 'Murid Contoh' })).toHaveCount(0);
+  // Penjaga
+  await page.goto('/?demo=1#/guardians');
+  await search().fill('Penjaga Contoh 3');
+  await expect(rows('Penjaga Contoh 3')).not.toHaveCount(0);
+  await expect(rows('Penjaga Contoh 1')).toHaveCount(0);
+  // Tutor
+  await page.goto('/?demo=1#/tutors');
+  await search().fill('Tutor Contoh 2');
+  await expect(rows('Tutor Contoh 2')).not.toHaveCount(0);
+  await expect(rows('Tutor Contoh 1')).toHaveCount(0);
+  // Elaun
+  await page.goto('/?demo=1#/allowance');
+  await expect(rows('Tutor Contoh 1')).not.toHaveCount(0);
+  await search().fill('Tutor Contoh 2');
+  await expect(rows('Tutor Contoh 1')).toHaveCount(0);
+  // Yuran: carian umum dan carian invois
+  await page.goto('/?demo=1#/finance');
+  await search().fill('Murid Contoh 03');
+  await expect(rows('Murid Contoh 03')).not.toHaveCount(0);
+  await expect(rows('Murid Contoh 01')).toHaveCount(0);
+  await search().fill('');
+  await singleFrame('Cari invois');
+  // Kurikulum
+  await page.goto('/?demo=1#/classes');
+  await search().fill('Asas');
+  await expect(rows('Asas')).not.toHaveCount(0);
+  await expect(rows('Latihan')).toHaveCount(0);
+  // Laporan: carian laporan sendiri sahaja
+  await page.goto('/?demo=1#/reports');
+  await expect(search()).toHaveCount(0);
+  await singleFrame('Cari dalam laporan');
+  // Utama: tiada carian kerana tiada senarai untuk ditapis
+  await page.goto('/?demo=1#/dashboard');
+  await expect(search()).toHaveCount(0);
+  // Tutor: rekod kehadiran ditapis ikut nama murid
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  const picker = page.locator('.student-picker button');
+  const first = (await picker.first().locator('strong').textContent())!.trim();
+  await search().fill(first);
+  await expect(picker).not.toHaveCount(0);
+  for (const name of await picker.locator('strong').allTextContents())
+    expect(name).toContain(first);
+  await search().fill('tiada-murid-sebegini');
+  await expect(picker).toHaveCount(0);
 });

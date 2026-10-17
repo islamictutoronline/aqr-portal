@@ -342,3 +342,9 @@ Untuk sambung kerja:
 ## Daftar murid tanpa medan tarikh — 17 Oktober 2026
 
 - Atas permintaan pengguna, borang "Daftar murid" / "Daftar adik-beradik" tidak lagi memaparkan "Mula tarikh" dan "Sehingga tarikh". Nilai lalai dihantar terus: mula 1hb bulan semasa (waktu Malaysia), tamat 2027-12-31. Tarikh boleh diubah kemudian melalui "Ubah jadual" (medan tarikh di situ dikekalkan). Tiada migrasi.
+
+## Kotak carian: satu bingkai dan semua berfungsi — 17 Oktober 2026
+
+- Bingkai berganda semasa fokus (gaya `input:focus-visible` umum pada input di dalam bingkai) dibuang: input dalam `.search`, `.month-filter`, `.delivery-search`, `.report-search` tanpa outline/bayang; bingkai luar menyerlah melalui `:focus-within`.
+- "Cari rekod" hanya dipaparkan pada senarai yang ditapisnya (`searchable`: Murid, Penjaga, Tutor, Kurikulum, Rekod kehadiran/sesi, Kewangan, Elaun; bukan halaman profil, Utama atau Laporan yang ada carian sendiri). Penapisan baharu: Elaun (tutor, murid · program, kehadiran) dan Kurikulum. `matches` tidak lagi memadankan `id`/`*_id` (dahulu "4" memadankan hampir semua rekod melalui UUID). Rekod kehadiran tutor kini padan nama murid/kelas (dahulu hanya padan UUID secara tidak sengaja); bayaran dan invois padan nama penjaga. Carian dikosongkan apabila halaman bertukar melalui hash/Back.
+- Ujian Pages baharu meliputi setiap kotak carian + gaya satu bingkai; Pages 78/78, `npm test` 134/134, E2E 8/8, build OK.
