@@ -95,7 +95,8 @@ export function SurahPicker({
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setActive((a) => Math.max(a - 1, 0));
-          } else if (e.key === 'Enter' && open && matches[active]) {
+          } else if (e.key === 'Enter' && open && text !== null && matches[active]) {
+            // Enter hanya memilih selepas tutor menaip (bukan menukar surah sedia ada).
             e.preventDefault();
             choose(matches[active].no);
           } else if (e.key === 'Escape') {
@@ -125,6 +126,7 @@ export function SurahPicker({
                   e.preventDefault();
                   choose(s.no);
                 }}
+                onClick={() => choose(s.no)}
                 onMouseEnter={() => setActive(i)}
               >
                 <strong>{s.no}.</strong> {s.name} <small>{s.ayahs} ayat</small>

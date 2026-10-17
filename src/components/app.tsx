@@ -532,7 +532,7 @@ export function App({
       } else if (event.key === 'Tab') {
         const items = controls();
         const first = items[0];
-        const last = items.at(-1);
+        const last = items.slice(-1)[0];
         if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
           last?.focus();
@@ -1465,25 +1465,30 @@ export function App({
           i.status !== 'void' &&
           (i.idempotency_key === base || String(i.idempotency_key).startsWith(`${base}:`)),
       );
+      // Bayaran yang ditolak/dibalikkan tidak mengunci invois.
       const paidSome = (i: Row) =>
-        (next.payment_allocations || []).some((a) => a.invoice_id === i.id);
+        (next.payment_allocations || []).some(
+          (a) =>
+            a.invoice_id === i.id &&
+            !['rejected', 'reversed'].includes(
+              String(next.payments.find((p) => p.id === a.payment_id)?.status),
+            ),
+        );
       const open = mine
         .filter((i) => ['issued', 'draft', 'overdue'].includes(String(i.status)) && !paidSome(i))
-        .at(-1);
-      const billed = (f: (typeof rows)[number]) =>
-        next.invoice_items
-          .filter(
-            (x) =>
-              x.invoice_id !== open?.id &&
-              mine.some((i) => i.id === x.invoice_id) &&
-              x.student_id === f.studentId &&
-              x.unit_price_sen === f.rate_sen &&
-              x.description === `${f.student} · ${f.program} (${f.minutes} minit)`,
-          )
-          .reduce((n, x) => n + Number(x.quantity), 0);
+        .slice(-1)[0];
+      // Sesi yang sudah dibilkan dikira mengikut murid (sama seperti migrasi 48), bukan teks/harga.
+      const billed = new Map<unknown, number>();
+      for (const x of next.invoice_items)
+        if (x.invoice_id !== open?.id && mine.some((i) => i.id === x.invoice_id))
+          billed.set(x.student_id, (billed.get(x.student_id) ?? 0) + Number(x.quantity));
       const rest = rows
         .filter((f) => f.guardianId === gid)
-        .map((f) => ({ f, quantity: f.sessions - billed(f) }))
+        .map((f) => {
+          const skip = Math.min(billed.get(f.studentId) ?? 0, f.sessions);
+          billed.set(f.studentId, (billed.get(f.studentId) ?? 0) - skip);
+          return { f, quantity: f.sessions - skip };
+        })
         .filter((x) => x.quantity > 0);
       if (!rest.length) {
         if (open) open.status = 'void';
@@ -3812,7 +3817,7 @@ export function App({
   const lastTutorPayment = (tid: string) =>
     tutorPayments(tid)
       .filter((p) => p.status === 'paid')
-      .at(-1);
+      .slice(-1)[0];
   const markTutorPaid = (tid: string) => {
     const due = allowanceOf(tid) - tutorPaidSen(tid);
     setDialog({

@@ -433,3 +433,67 @@ describe('penilaian pilihan berbilang (migrasi 46)', () => {
     await expect(record(sid, { ...multi, masteries: [2, 9] })).rejects.toThrow(/penguasaan/);
   });
 });
+
+describe('invois tambahan: pembetulan migrasi 48', () => {
+  it('tukar nama murid atau kadar selepas bayaran tidak mengecaj semula sesi', async () => {
+    await db.exec(`reset role; insert into program_fee_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from)
+      values('${org}','TAHFIZ',30,1000,'2026-01-01') on conflict do nothing;`);
+    const day = (d: number) => `2026-07-${String(d).padStart(2, '0')}T20:00:00+08:00`;
+    const add = async (d: number) => {
+      await asUser(tutor);
+      await record(await create(day(d)));
+    };
+    const invoices = async () => {
+      await asUser(owner);
+      await db.query('select generate_session_invoices($1,$2)', [org, '2026-07']);
+      return (
+        await db.query<{ id: string; total_sen: string; status: string }>(
+          "select id,total_sen,status from invoices where period='2026-07' order by created_at,idempotency_key",
+        )
+      ).rows.map((r) => ({ id: r.id, total: Number(r.total_sen), status: r.status }));
+    };
+    await add(1);
+    await add(8);
+    const [first] = await invoices();
+    expect(first.total).toBe(2000);
+    await db.query('select mark_invoice_paid($1,$2)', [org, first.id]);
+    // Admin menukar nama murid dan kadar kelas selepas bayaran.
+    await db.exec(`reset role; update students set full_name='Murid Tahfiz (nama baharu)' where id='${student}';
+      insert into class_rate_overrides(organization_id,class_id,fee_sen,effective_from) values('${org}','${cls}',1500,'2026-07-01');`);
+    expect((await invoices()).map((i) => i.total)).toEqual([2000]);
+    // Sesi baharu: hanya sesi itu dibilkan, pada kadar baharu.
+    await add(15);
+    expect((await invoices()).map((i) => i.total)).toEqual([2000, 1500]);
+    await db.exec(`reset role; delete from class_rate_overrides where class_id='${cls}'`);
+  });
+  it('bayaran yang dibalikkan: invois boleh dikemas kini semula, tanpa invois tambahan', async () => {
+    await db.exec(`reset role; insert into program_fee_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from)
+      values('${org}','TAHFIZ',30,1000,'2026-01-01') on conflict do nothing;`);
+    const day = (d: number) => `2026-08-${String(d).padStart(2, '0')}T20:00:00+08:00`;
+    const add = async (d: number) => {
+      await asUser(tutor);
+      await record(await create(day(d)));
+    };
+    const invoices = async () => {
+      await asUser(owner);
+      await db.query('select generate_session_invoices($1,$2)', [org, '2026-08']);
+      return (
+        await db.query<{ id: string; total_sen: string }>(
+          "select id,total_sen from invoices where period='2026-08' and status<>'void' order by created_at",
+        )
+      ).rows.map((r) => ({ id: r.id, total: Number(r.total_sen) }));
+    };
+    await add(3);
+    const [inv] = await invoices();
+    await db.query('select mark_invoice_paid($1,$2)', [org, inv.id]);
+    const pid = (
+      await one<{ id: string }>(
+        'select payment_id id from payment_allocations where invoice_id=$1',
+        [inv.id],
+      )
+    ).id;
+    await db.query('select reverse_payment($1,$2,$3)', [org, pid, 'Salah rekod bayaran']);
+    await add(10);
+    expect((await invoices()).map((i) => i.total)).toEqual([2000]);
+  });
+});

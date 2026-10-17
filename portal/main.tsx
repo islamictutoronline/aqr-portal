@@ -55,7 +55,11 @@ function Root() {
     const REFRESH_MS = 5 * 60 * 1000;
     let lastLoad = 0;
     let lastUser = '';
+    // Pengguna yang sedang dimuatkan (elak muat berganda apabila SIGNED_IN tiba semasa muat pertama).
+    let pendingUser = '';
     let inFlight: Promise<void> | null = null;
+    // Ditambah setiap kali pengguna log keluar/bertukar: hasil muat lama tidak dipaparkan.
+    let generation = 0;
     const load = (background = false) => {
       if (inFlight) return inFlight;
       inFlight = run(background).finally(() => {
@@ -64,6 +68,7 @@ function Root() {
       return inFlight;
     };
     const run = async (background: boolean) => {
+      const gen = generation;
       if (!configured || demo) {
         setLoading(false);
         return;
@@ -87,9 +92,10 @@ function Root() {
           setLoaded(null);
           return;
         }
+        pendingUser = session.user.id;
         const ctx = await getContext();
         const data = await loadData(ctx);
-        if (alive) {
+        if (alive && gen === generation) {
           lastLoad = Date.now();
           lastUser = session.user.id;
           setLoaded({ ctx, data });
@@ -97,7 +103,7 @@ function Root() {
         }
       } catch (e) {
         // Muat semula latar yang gagal (contoh: rangkaian terputus seketika) mengekalkan data sedia ada.
-        if (alive && !background) {
+        if (alive && !background && gen === generation) {
           setLoaded(null);
           setMessage(e instanceof Error ? e.message : 'Akses gagal');
         }
@@ -110,12 +116,19 @@ function Root() {
       data: { subscription },
     } = db.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        generation++;
         lastUser = '';
         setLoaded(null);
         setSigned(false);
-      } else if (event === 'SIGNED_IN' && session?.user.id !== lastUser) {
+      } else if (
+        event === 'SIGNED_IN' &&
+        session?.user.id !== lastUser &&
+        !(inFlight && session?.user.id === pendingUser)
+      ) {
         // supabase-js juga menghantar SIGNED_IN apabila tab kembali aktif; muat hanya untuk pengguna baharu.
-        setTimeout(() => void load(), 0);
+        // Muat yang sedang berjalan (pengguna lama) diabaikan; muat semula selepas ia selesai.
+        if (lastUser) generation++;
+        setTimeout(() => void (inFlight ?? Promise.resolve()).then(() => load()), 0);
       }
     });
     const visible = () => {

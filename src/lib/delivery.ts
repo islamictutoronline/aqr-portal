@@ -65,7 +65,9 @@ export function familyBundles(data: Dataset, month: string): Family[] {
 
 // Senarai nama dalam Bahasa Melayu: "A", "A dan B", "A, B dan C".
 const joinNames = (names: string[]) =>
-  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} dan ${names.at(-1)}`;
+  names.length <= 1
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')} dan ${names[names.length - 1]}`;
 
 export function familyMessage(family: Family, month: string, data: Dataset) {
   const names = joinNames(family.children.map((c) => String(c.full_name)));

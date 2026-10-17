@@ -618,6 +618,11 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
     .getByRole('option', { name: /112\. Al-Ikhlas/ })
     .click();
   await expect(surah).toHaveValue('112. Al-Ikhlas');
+  // Fokus semula dan tekan Enter tanpa menaip: surah tidak bertukar kepada Al-Fatihah.
+  await surah.focus();
+  await surah.press('Enter');
+  await surah.blur();
+  await expect(surah).toHaveValue('112. Al-Ikhlas');
   await page.getByLabel('Ayat hingga').fill('9');
   await expect(page.locator('.reading-issue')).toContainText('hanya 4 ayat');
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeDisabled();

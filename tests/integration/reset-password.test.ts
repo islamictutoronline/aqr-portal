@@ -84,3 +84,13 @@ describe('reset kata laluan tutor', () => {
     await expect(reset(id(15), 'Sementara123')).rejects.toThrow(/Tutor aktif/);
   });
 });
+
+describe('reset kata laluan: pembetulan migrasi 48', () => {
+  it('akaun yang juga admin di organisasi lain ditolak', async () => {
+    const org2 = id(2);
+    await db.exec(`reset role; insert into organizations(id,slug) values('${org2}','lain');
+      insert into staff_memberships(organization_id,staff_id,role) values('${org2}','${otherTutor}','admin');`);
+    await asUser(owner);
+    await expect(reset(otherTutor, 'Sementara123')).rejects.toThrow(/peranan pentadbir/);
+  });
+});

@@ -136,7 +136,12 @@ export function surahsOnPages(
   pageTo?: number | null,
 ): { surah: number; surah_to?: number } | null {
   if (!page || page < 1 || page > 604) return null;
-  const current = (p: number) => surahStartPages.findLastIndex((start) => start <= p) + 1;
+  // Surah terakhir yang bermula pada/sebelum p (tanpa findLastIndex: iOS < 15.4).
+  const current = (p: number) => {
+    let n = 0;
+    while (n < surahStartPages.length && surahStartPages[n] <= p) n++;
+    return n;
+  };
   const startsHere = surahStartPages.indexOf(page) + 1;
   const first = startsHere || current(page);
   const last = current(pageTo && pageTo >= page && pageTo <= 604 ? pageTo : page);
