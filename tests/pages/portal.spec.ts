@@ -218,8 +218,9 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   await page.getByLabel('No. WhatsApp penjaga').fill('019-888 7777');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
-  await expect(page.getByLabel('Sehingga tarikh')).toHaveValue('2027-12-31');
-  await expect(page.getByLabel('Mula tarikh')).toHaveValue(/-01$/);
+  // Tiada medan tarikh semasa daftar (tarikh lalai digunakan).
+  await expect(page.getByLabel('Sehingga tarikh')).toHaveCount(0);
+  await expect(page.getByLabel('Mula tarikh')).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Sesi seminggu' }).selectOption('2');
   await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
   await page.getByLabel('Jam').nth(0).fill('20:00');

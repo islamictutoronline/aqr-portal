@@ -1697,13 +1697,6 @@ export function App({
             ['20', '20 minit'],
           ],
         },
-        {
-          name: 'start_date',
-          label: 'Mula tarikh',
-          type: 'date',
-          value: `${klDate(new Date().toISOString()).slice(0, 8)}01`,
-        },
-        { name: 'end_date', label: 'Sehingga tarikh', type: 'date', value: '2027-12-31' },
       ],
       extra: (
         <>
@@ -1715,8 +1708,10 @@ export function App({
         student_name: v.student_name,
         program_id: v.program_id,
         minutes: Number(v.minutes),
-        end_date: v.end_date,
-        start_date: v.start_date,
+        // Tiada medan tarikh semasa daftar: mula dari awal bulan semasa (rekod sesi lepas bulan ini
+        // dibenarkan), berterusan sehingga 31/12/2027. Boleh diubah kemudian melalui Ubah jadual.
+        end_date: '2027-12-31',
+        start_date: `${klDate(new Date().toISOString()).slice(0, 8)}01`,
         guardian_name: v.guardian_name || '',
         guardian_phone: joinPhone(v.guardian_cc, v.guardian_phone) ?? '',
         tutor_id: academic ? v.tutor_id : null,
