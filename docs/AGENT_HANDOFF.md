@@ -2,7 +2,7 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Laporan ringkas, tiada sesi dijadualkan, skrip reset janaan — 17 Oktober 2026 (setempat, belum push/deploy)
+## Laporan ringkas, tiada sesi dijadualkan, skrip reset janaan — 17 Oktober 2026 (deploy b850a78, Pages + AQR checks lulus; aset live disahkan)
 
 - **Laporan Excel & CSV:** pratonton dalam kotak skrol (`.report-scroll`, maks 60vh, tajuk lajur melekat) dengan carian (`reportQuery`); "Sejarah eksport" dilipat (`details.export-history`). Muat turun kekal penuh.
 - **Tiada sesi dijadualkan dalam paparan:** Laporan mengajar bulanan hanya kelas `completed`, lajur Status → **Kehadiran** (status murid), disusun ikut tarikh. Tab Tutor: kad "Sesi dijadualkan" dibuang; "Sesi bulan ini" hanya kelas dilaksanakan dengan lajur Kehadiran; senarai tutor memaparkan bilangan sesi selesai sahaja.
@@ -315,3 +315,7 @@ Untuk sambung kerja:
 ## Prompt ringkas untuk agen seterusnya
 
 > Sambung projek AQR di `/Users/sufyanthawry/Desktop/AQR_Pakej_Codex_v2_1`. Baca `AGENTS.md`, `docs/AGENT_HANDOFF.md` dan `docs/PROGRESS.md` dahulu. Semak keadaan fail semasa, kemudian teruskan baki kerja yang boleh dibuat mengikut spesifikasi asal. Kekalkan data kanak-kanak sebagai peribadi, jangan reset pangkalan data, dan jangan anggap demo atau ujian PGlite sebagai bukti produksi. Laporkan ujian sebenar dan kemas kini konteks sebelum berhenti.
+
+## Penilaian rawak tutor Ahmad Muzzammil — 17 Oktober 2026
+
+- Atas permintaan pengguna, skrip peribadi `~/Desktop/AQR-data-peribadi/isi-penilaian-rawak-ahmad-muzzammil.sql` (di luar repo) mengisi penilaian bagi kehadiran Hadir/Lewat/Ganti tutor itu yang belum dinilai: tahap 3–5, kemahiran/penglibatan/fokus rawak daripada `assessment_options` aktif; bacaan dikekalkan; ulasan diterbitkan melalui `record_assessment`. Idempoten (langkau yang sudah dinilai). Diuji PGlite; larian di cloud bergantung pada pengguna.

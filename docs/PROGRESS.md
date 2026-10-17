@@ -113,3 +113,4 @@ Ujian pelayar membuka kesemua 10 skrin modul tanpa ralat JavaScript atau overflo
 3. Sahkan tarikh kadar, tetapkan yuran pusat sendiri, kemudian uji satu kitaran sesi → semak → lulus → payout, serta invois → bayaran separa → resit → pembalikan.
 4. Sambungkan OAuth Google dengan akaun ujian dan uji kegagalan, revocation serta retry. Tiada URL kejayaan cloud diberikan tanpa pengakuan API.
 5. Tutup baki modul yang disenaraikan di atas sebelum go-live. Tiada tuntutan bahawa sistem penuh telah dideploy atau bersedia produksi dibuat.
+- 17 Okt 2026: deploy b850a78 (laporan kotak skrol/carian, hanya sesi selesai, skrip reset janaan); skrip peribadi penilaian rawak tutor Ahmad Muzzammil disediakan (di luar repo).
