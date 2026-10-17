@@ -257,6 +257,10 @@ const schemas = {
   extend_schedule: z.object({}),
   void_session: z.object({ sid: uuid }),
   remove_tutor: z.object({ staff_id: uuid }),
+  reset_tutor_password: z.object({
+    staff_id: uuid,
+    temp_password: z.string().min(1).max(72),
+  }),
   invoice_paid: z.object({
     inv: uuid,
     paid_on: z.iso.date(),
@@ -405,6 +409,7 @@ export async function executeMutation(
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',
       remove_tutor: 'remove_tutor',
+      reset_tutor_password: 'reset_tutor_password',
       generate_session_invoices: 'generate_session_invoices',
       save_payment_details: 'save_payment_details',
       move_session: 'move_session',

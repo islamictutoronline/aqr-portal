@@ -58,6 +58,7 @@ export async function getContext() {
         staffId: profile.id as string,
         guardianId: undefined,
         passwordSet: Boolean(user.user_metadata?.password_set),
+        mustChangePassword: Boolean(user.user_metadata?.must_change_password),
       };
   }
   const claimed = await db.rpc('claim_guardian_access');
@@ -79,6 +80,7 @@ export async function getContext() {
     staffId: undefined,
     guardianId: g.id as string,
     passwordSet: Boolean(user.user_metadata?.password_set),
+    mustChangePassword: false,
   };
 }
 export async function staticTransport(input: string, init?: RequestInit) {
@@ -100,7 +102,10 @@ export async function staticTransport(input: string, init?: RequestInit) {
       const { password } = JSON.parse(String(init?.body || '{}')) as { password?: string };
       const problem = passwordProblem(String(password || ''));
       if (problem) throw new Error(problem);
-      const { error } = await db.auth.updateUser({ password, data: { password_set: true } });
+      const { error } = await db.auth.updateUser({
+        password,
+        data: { password_set: true, must_change_password: false },
+      });
       if (error) throw new Error('Kata laluan tidak dapat disimpan. Cuba log masuk semula.');
       return Response.json({ saved: true });
     }

@@ -151,6 +151,7 @@ function Root() {
         path={location.hash.slice(2) || 'dashboard'}
         role={tutorDemo ? 'tutor' : 'owner'}
         name={tutorDemo ? 'Tutor contoh' : 'Pentadbir contoh'}
+        mustChangePassword={tutorDemo && new URLSearchParams(location.search).get('reset') === '1'}
       />
     );
   }

@@ -38,6 +38,7 @@ import {
   Layers,
   Pencil,
   MessageCircle,
+  KeyRound,
 } from 'lucide-react';
 import {
   Dataset,
@@ -445,6 +446,7 @@ export function App({
   staffId,
   guardianId,
   passwordSet = false,
+  mustChangePassword = false,
 }: {
   initial: Dataset;
   demo: boolean;
@@ -454,9 +456,12 @@ export function App({
   staffId?: string;
   guardianId?: string;
   passwordSet?: boolean;
+  mustChangePassword?: boolean;
 }) {
   const [data, setData] = useState(initial);
   const [hasPassword, setHasPassword] = useState(passwordSet);
+  // Kata laluan ditetapkan semula oleh admin: tutor wajib menukarnya sebelum meneruskan.
+  const [mustChange, setMustChange] = useState(mustChangePassword);
   const [page, setPage] = useState(path);
   useEffect(() => {
     setData(initial);
@@ -4339,16 +4344,24 @@ export function App({
       setBusy(false);
     }
   }
-  function passwordCard(reminder = false) {
+  function passwordCard(reminder = false, forced = false) {
     return (
       <Card
-        title={reminder ? 'Tetapkan kata laluan anda' : 'Kata laluan log masuk'}
+        title={
+          forced
+            ? 'Tukar kata laluan sementara'
+            : reminder
+              ? 'Tetapkan kata laluan anda'
+              : 'Kata laluan log masuk'
+        }
         subtitle={
-          reminder
-            ? 'Selepas ini log masuk terus dengan e-mel dan kata laluan, tanpa menunggu kod e-mel'
-            : hasPassword
-              ? 'Kata laluan sudah ditetapkan. Isi di bawah untuk menukarnya.'
-              : 'Log masuk dengan e-mel dan kata laluan, tanpa kod e-mel'
+          forced
+            ? 'Admin telah menetapkan semula kata laluan anda. Tetapkan kata laluan baharu sebelum meneruskan.'
+            : reminder
+              ? 'Selepas ini log masuk terus dengan e-mel dan kata laluan, tanpa menunggu kod e-mel'
+              : hasPassword
+                ? 'Kata laluan sudah ditetapkan. Isi di bawah untuk menukarnya.'
+                : 'Log masuk dengan e-mel dan kata laluan, tanpa kod e-mel'
         }
       >
         <form
@@ -4362,7 +4375,10 @@ export function App({
               return setNotice('Kata laluan dan pengesahan tidak sama.');
             const problem = passwordProblem(password);
             if (problem) return setNotice(problem);
-            if (demo) return setNotice('Demo: kata laluan tidak disimpan.');
+            if (demo) {
+              setMustChange(false);
+              return setNotice('Demo: kata laluan tidak disimpan.');
+            }
             setBusy(true);
             try {
               const r = await apiFetch('/api/password', {
@@ -4374,6 +4390,7 @@ export function App({
               if (!r.ok) throw new Error(result.error);
               form.reset();
               setHasPassword(true);
+              setMustChange(false);
               setNotice(
                 'Kata laluan disimpan. Lain kali log masuk dengan e-mel dan kata laluan — tiada kod e-mel diperlukan.',
               );
@@ -4507,6 +4524,29 @@ export function App({
       </>
     );
   }
+  // Tutor terlupa kata laluan: admin menaip kata laluan sementara; tutor wajib menukarnya.
+  const resetTutorPassword = (tutor: Row) =>
+    setDialog({
+      title: `Reset kata laluan · ${String(tutor.display_name)}`,
+      operation: 'reset_tutor_password',
+      fields: [
+        {
+          name: 'temp_password',
+          label: 'Kata laluan sementara (min. 8 aksara, huruf dan nombor)',
+        },
+      ],
+      extra: (
+        <div className="inline-note">
+          Berikan kata laluan ini kepada tutor (contohnya melalui WhatsApp). Tutor log masuk dengan
+          e-mel dan kata laluan ini, kemudian diminta menukarnya serta-merta.
+        </div>
+      ),
+      transform: (v) => ({ staff_id: tutor.id, temp_password: v.temp_password }),
+      after: () =>
+        setNotice(
+          `Kata laluan ${String(tutor.display_name)} telah ditetapkan semula. Tutor perlu menukarnya selepas log masuk.`,
+        ),
+    });
   // Padam tutor dengan pengesahan dua langkah: amaran + menaip nama tutor.
   const removeTutor = (tutor: Row) => {
     const name = String(tutor.display_name);
@@ -4590,6 +4630,12 @@ export function App({
               <button className="secondary" onClick={() => go('tutors')}>
                 Semua tutor
               </button>
+              {academic && Boolean(tutor.active) && (
+                <button className="secondary" onClick={() => resetTutorPassword(tutor)}>
+                  <KeyRound size={16} />
+                  Reset kata laluan
+                </button>
+              )}
               {academic && (
                 <button className="danger-button" onClick={() => removeTutor(tutor)}>
                   Padam tutor
@@ -4912,7 +4958,9 @@ export function App({
               </button>
             </div>
           )}
-          {!allowedPage ? (
+          {mustChange ? (
+            passwordCard(true, true)
+          ) : !allowedPage ? (
             <Empty text="Halaman ini tidak tersedia bagi peranan anda." />
           ) : section === 'dashboard' ? (
             dashboard()

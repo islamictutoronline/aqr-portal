@@ -1060,3 +1060,28 @@ test('session invoices: regenerating after payment does not bill the same sessio
   await expect(page.locator('tbody tr')).toHaveCount(before);
   await expect(page.getByText('Invois tambahan', { exact: true })).toHaveCount(0);
 });
+test('admin resets a tutor password; tutor must change it before continuing', async ({ page }) => {
+  await page.goto('/?demo=1#/tutors');
+  await page
+    .getByRole('button', { name: /^Lihat/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Reset kata laluan' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Tutor log masuk dengan e-mel dan kata laluan ini');
+  await expect(dialog.getByLabel(/Kata laluan sementara/)).toHaveValue('');
+  await dialog.getByRole('button', { name: 'Tutup borang' }).click();
+  // Tutor yang kata laluannya di-reset: hanya kad tukar kata laluan dipaparkan.
+  await page.goto('/?demo=1&role=tutor&reset=1#/dashboard');
+  await expect(page.getByRole('heading', { name: 'Tukar kata laluan sementara' })).toBeVisible();
+  await expect(page.locator('.metrics')).toHaveCount(0);
+  await page.getByLabel('Kata laluan baharu').fill('abcde12345');
+  await page.getByLabel('Ulang kata laluan').fill('abcde12345');
+  await page.getByRole('button', { name: 'Simpan kata laluan' }).click();
+  await expect(page.getByText('terlalu mudah diteka')).toBeVisible();
+  await page.getByLabel('Kata laluan baharu').fill('Murid2026Baru');
+  await page.getByLabel('Ulang kata laluan').fill('Murid2026Baru');
+  await page.getByRole('button', { name: 'Simpan kata laluan' }).click();
+  await expect(page.getByRole('heading', { name: 'Tukar kata laluan sementara' })).toHaveCount(0);
+  await expect(page.locator('.metrics').first()).toBeVisible();
+});
