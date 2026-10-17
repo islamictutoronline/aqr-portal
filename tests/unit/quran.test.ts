@@ -114,3 +114,15 @@ describe('surah dan juzuk automatik daripada muka surat', () => {
     );
   });
 });
+
+describe('ayat terakhir dibaca', () => {
+  it('label dan semakan dalam surah terakhir', () => {
+    const r = { kind: 'quran' as const, page: 100, page_to: 102, surah: 4, last_ayah: 45 };
+    expect(readingLabel(r)).toBe(
+      "Surah An-Nisa', juzuk 5–6, muka surat 100–102, berhenti di ayat 45",
+    );
+    expect(readingShort(r)).toBe("An-Nisa' · Juz 5–6 · ms 100–102 · berhenti ayat 45");
+    expect(readingProblem({ kind: 'quran', page: 591, last_ayah: 20 })).toMatch(/hanya 19 ayat/);
+    expect(readingProblem({ kind: 'quran', page: 591, last_ayah: 19 })).toBeNull();
+  });
+});

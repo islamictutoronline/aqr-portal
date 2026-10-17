@@ -122,3 +122,4 @@ Ujian pelayar membuka kesemua 10 skrin modul tanpa ralat JavaScript atau overflo
 - 17 Okt 2026: migrasi 44 `202610170044_tutor_sees_upcoming.sql` — tutor nampak murid sebaik didaftar walaupun tarikh mula akan datang (RLS baca). Diuji PGlite.
 - 17 Okt 2026: migrasi 45 `202610170045_reading_surah_juz.sql` — surah & juzuk automatik daripada muka surat dalam label bacaan; senarai penjaga di profil tutor. Diuji PGlite + Pages demo.
 - 17 Okt 2026: prestasi (tiada muat semula penuh pada setiap fokus; indeks id). Migrasi 46 `202610170046_multi_skill.sql` — penilaian pilihan berbilang + julat tahap penguasaan. Diuji PGlite + Pages demo.
+- 17 Okt 2026: carian surah dengan cadangan; migrasi 47 `202610170047_last_ayah.sql` — ayat terakhir dibaca (pilihan) untuk Kelancaran/Tahsin.

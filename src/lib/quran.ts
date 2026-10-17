@@ -169,6 +169,8 @@ export const readingSchema = z.object({
   surah_to: z.number().int().min(1).max(114).optional(),
   ayah_from: z.number().int().min(1).max(286).optional(),
   ayah_to: z.number().int().min(1).max(286).optional(),
+  // Bacaan Kelancaran/Tahsin (pilihan): ayat terakhir dibaca dalam surah terakhir pada muka surat.
+  last_ayah: z.number().int().min(1).max(286).optional(),
   // Juzuk (pilihan): diisi tutor; jika kosong, dikira daripada muka surat.
   juz: z.number().int().min(1).max(30).optional(),
 });
@@ -201,10 +203,21 @@ export function juzLabel(r: Partial<Reading>): string {
 }
 
 // Semakan julat ayat; mesej sama seperti pangkalan data.
+// Surah tempat bacaan berhenti: surah terakhir pada julat muka surat.
+export function lastSurah(r: Partial<Reading>): number | undefined {
+  const derived = r.surah ? r : { ...r, ...surahsOnPages(r.page, r.page_to) };
+  return derived.surah_to ?? derived.surah;
+}
 export function readingProblem(r: Reading): string | null {
   if (r.page_to && !r.page) return 'Isi muka surat mula';
   if (r.page && r.page_to && r.page_to < r.page)
     return 'Muka surat akhir mesti selepas muka surat mula';
+  if (r.last_ayah) {
+    const s = lastSurah(r);
+    if (!s) return 'Isi muka surat dahulu';
+    if (r.last_ayah > surahs[s - 1][1])
+      return `Surah ${surahs[s - 1][0]} hanya ${surahs[s - 1][1]} ayat`;
+  }
   if (r.kind === 'iqra') return null;
   const max = r.surah ? surahs[r.surah - 1][1] : 286;
   if ((r.ayah_from || r.ayah_to) && !r.surah) return 'Pilih surah dahulu';
@@ -243,6 +256,7 @@ export function readingLabel(input?: Partial<Reading> | null): string {
     if (juz) parts.push(`juzuk ${juz}`);
   }
   if (r!.page) parts.push(`muka surat ${formatPages(r)}`);
+  if (r!.kind === 'quran' && r!.last_ayah) parts.push(`berhenti di ayat ${r!.last_ayah}`);
   const text = parts.join(', ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -262,5 +276,6 @@ export function readingShort(input?: Partial<Reading> | null): string {
   }
   if (r!.kind === 'quran' && juzLabel(r!)) parts.push(`Juz ${juzLabel(r!)}`);
   if (r!.page) parts.push(`ms ${formatPages(r)}`);
+  if (r!.kind === 'quran' && r!.last_ayah) parts.push(`berhenti ayat ${r!.last_ayah}`);
   return parts.join(' · ');
 }

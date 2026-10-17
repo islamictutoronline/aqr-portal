@@ -373,3 +373,8 @@ Untuk sambung kerja:
 ## Carian surah dengan cadangan — 17 Oktober 2026
 
 - `src/components/surah-picker.tsx` (`SurahPicker`, ARIA combobox) menggantikan `<select>` surah (Pra Tahfiz/Tahfiz): taip sebahagian nama atau nombor; padanan abaikan huruf besar, sempang, tanda petik dan awalan Al-/An-/Ar-…; maksimum 8 cadangan; ↑/↓/Enter/Escape; teks yang sepadan tepat satu surah dipilih semasa blur. `.card:has(.surah-picker)` overflow visible supaya senarai tidak dipotong. Pages 82/82, `npm test` 141/141.
+
+## Ayat terakhir dibaca (migrasi 47) — 17 Oktober 2026
+
+- Kelancaran/Tahsin: kotak pilihan "Ayat terakhir dibaca" (`reading.last_ayah`) di bawah paparan surah/juzuk automatik, untuk bacaan yang berhenti di tengah muka surat (pilihan pengguna: satu kotak, tiada butang). Disemak dalam surah terakhir pada julat muka surat (`lastSurah`). Label: "…, muka surat 100–102, berhenti di ayat 45"; ringkas "… · berhenti ayat 45"; jadual rekod bacaan memaparkannya dalam lajur muka surat.
+- `supabase/migrations/202610170047_last_ayah.sql`: `private.reading_label` (berasaskan migrasi 45) dengan `last_ayah`. Memerlukan fungsi migrasi 45. Ujian pariti DB = portal; `npm test` 142/142, Pages 82/82, E2E 8/8.

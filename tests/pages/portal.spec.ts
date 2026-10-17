@@ -587,6 +587,13 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
   );
   await page.getByLabel('Muka surat').fill('100-102');
   await expect(page.locator('.reading-auto')).toContainText("Surah An-Nisa' · Juzuk 5–6");
+  // Ayat terakhir dibaca (pilihan) apabila berhenti di tengah muka surat.
+  await page.getByLabel('Ayat terakhir dibaca').fill('999');
+  await expect(page.locator('.reading-issue')).toContainText("An-Nisa' hanya 176 ayat");
+  await page.getByLabel('Ayat terakhir dibaca').fill('45');
+  await expect(page.locator('.preview-comment')).toContainText(
+    'muka surat 100–102, berhenti di ayat 45.',
+  );
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
   // Pra Tahfiz: surah dipilih sendiri (wajib); muka surat mencadangkan surah jika kosong.
   await page.goto('/?demo=1#/sessions/session-14');

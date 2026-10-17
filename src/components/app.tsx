@@ -5413,6 +5413,7 @@ function SessionEditor({
     kind: 'quran',
     page: r.page,
     page_to: r.page_to,
+    last_ayah: r.last_ayah,
     ...(surahsOnPages(r.page, r.page_to) ?? {}),
   });
   const readingInput = (): Reading | undefined =>
@@ -5762,6 +5763,26 @@ function SessionEditor({
                             );
                           })()}
                         </p>
+                        <label>
+                          <span>
+                            Ayat terakhir dibaca <small className="opt">pilihan</small>
+                          </span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            max={286}
+                            disabled={locked}
+                            placeholder="jika berhenti di tengah muka surat"
+                            value={reading.last_ayah ?? ''}
+                            onChange={(e) =>
+                              setReading((r) => ({
+                                ...r,
+                                last_ayah: e.target.value ? Number(e.target.value) : undefined,
+                              }))
+                            }
+                          />
+                        </label>
                       </>
                     ) : (
                       <>
@@ -5992,7 +6013,13 @@ function ReadingRecord({
         ]
       : [
           ['JUZUK', (r) => juzLabel(r) || null],
-          ['MUKA SURAT', (r) => formatPages(r) || null],
+          [
+            'MUKA SURAT',
+            (r) =>
+              formatPages(r)
+                ? `${formatPages(r)}${r.last_ayah ? ` · berhenti ayat ${r.last_ayah}` : ''}`
+                : null,
+          ],
           [
             'SURAH',
             (r) => {

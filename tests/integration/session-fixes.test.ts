@@ -354,6 +354,8 @@ describe('label bacaan surah dan juzuk (migrasi 45)', () => {
       { kind: 'quran', page: 562, surah: 67, ayah_from: 1, ayah_to: 10 },
       { kind: 'quran', page: 293, surah: 18, juz: 15 },
       { kind: 'iqra', jilid: 3, page: 12 },
+      { kind: 'quran', page: 100, page_to: 102, surah: 4, last_ayah: 45 },
+      { kind: 'quran', page: 591, last_ayah: 19 },
     ]) {
       const db_label = (
         await one<{ l: string }>('select private.reading_label($1::jsonb) l', [JSON.stringify(r)])
@@ -365,6 +367,12 @@ describe('label bacaan surah dan juzuk (migrasi 45)', () => {
         JSON.stringify({ kind: 'quran', page: 100, surah: 5, surah_to: 4 }),
       ]),
     ).rejects.toThrow(/Surah tidak sah/);
+    // Ayat terakhir melebihi bilangan ayat surah terakhir (Al-A'la 19 ayat) ditolak.
+    await expect(
+      db.query('select private.reading_label($1::jsonb)', [
+        JSON.stringify({ kind: 'quran', page: 591, last_ayah: 20 }),
+      ]),
+    ).rejects.toThrow(/hanya 19 ayat/);
   });
 });
 
