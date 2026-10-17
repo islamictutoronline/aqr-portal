@@ -79,6 +79,7 @@ import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/pa
 import { loadBrandBytes } from '@/lib/brand';
 import { demoSnapshot } from '@/lib/student-reports';
 import { TutorClassReports } from './tutor-reports';
+import { SurahPicker } from './surah-picker';
 import {
   Reading,
   hasReading,
@@ -5764,31 +5765,12 @@ function SessionEditor({
                       </>
                     ) : (
                       <>
-                        <label className="reading-surah">
-                          <span>
-                            Surah{' '}
-                            <small className="req" title="Wajib diisi">
-                              *
-                            </small>
-                          </span>
-                          <select
-                            disabled={locked}
-                            value={reading.surah ?? ''}
-                            onChange={(e) =>
-                              setReading((r) => ({
-                                ...r,
-                                surah: e.target.value ? Number(e.target.value) : undefined,
-                              }))
-                            }
-                          >
-                            <option value="">—</option>
-                            {surahs.map(([name, ayahs], i) => (
-                              <option key={name} value={i + 1}>
-                                {i + 1}. {name} ({ayahs} ayat)
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        <SurahPicker
+                          required
+                          disabled={locked}
+                          value={reading.surah}
+                          onChange={(surah) => setReading((r) => ({ ...r, surah }))}
+                        />
                         {pageField}
                         {(['ayah_from', 'ayah_to'] as const).map((f) => (
                           <label key={f}>

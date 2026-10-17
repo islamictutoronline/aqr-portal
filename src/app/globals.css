@@ -3858,3 +3858,46 @@ textarea {
   color: var(--teal);
   font-size: 12px;
 }
+/* Carian surah dengan senarai cadangan. */
+.surah-picker {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  grid-column: 1 / -1;
+}
+.surah-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--line, #dfe5e1);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(18, 67, 61, 0.14);
+  max-height: 280px;
+  overflow: auto;
+}
+.surah-options li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.surah-options li.active {
+  background: var(--mint, #eef5f1);
+}
+.surah-options li small {
+  color: var(--slate);
+  margin-left: 6px;
+}
+.surah-options li.empty {
+  color: var(--slate);
+  cursor: default;
+}
+/* Senarai cadangan surah tidak dipotong oleh kad. */
+.card:has(.surah-picker) {
+  overflow: visible;
+}

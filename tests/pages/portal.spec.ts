@@ -593,9 +593,24 @@ test('session reading: Iqra jilid/page and Quran surah/ayah appear in the parent
   await page.reload();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   await page.getByLabel('Muka surat').fill('582');
-  await expect(page.getByLabel('Surah')).toHaveValue('78');
+  await expect(page.getByRole('combobox', { name: 'Surah' })).toHaveValue("78. An-Naba'");
   await page.getByLabel('Muka surat').fill('');
-  await page.getByLabel('Surah').selectOption('112');
+  // Carian surah: taip sebahagian nama, pilih daripada cadangan.
+  const surah = page.getByRole('combobox', { name: 'Surah' });
+  await surah.fill('mulk');
+  await expect(
+    page.getByRole('listbox', { name: 'Cadangan surah' }).getByRole('option').first(),
+  ).toContainText('67. Al-Mulk');
+  await surah.fill('36');
+  await expect(
+    page.getByRole('listbox', { name: 'Cadangan surah' }).getByRole('option').first(),
+  ).toContainText('Yasin');
+  await surah.fill('ikhl');
+  await page
+    .getByRole('listbox', { name: 'Cadangan surah' })
+    .getByRole('option', { name: /112\. Al-Ikhlas/ })
+    .click();
+  await expect(surah).toHaveValue('112. Al-Ikhlas');
   await page.getByLabel('Ayat hingga').fill('9');
   await expect(page.locator('.reading-issue')).toContainText('hanya 4 ayat');
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeDisabled();

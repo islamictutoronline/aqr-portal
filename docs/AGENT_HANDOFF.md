@@ -369,3 +369,7 @@ Untuk sambung kerja:
 - `src/lib/core.ts`: `pickedCodes`, `optionsLabel`, `joinMalay`, `skillsLabel`; `reporting.ts` lajur kemahiran/penglibatan/fokus digabung, tahap julat "3–4".
 - `supabase/migrations/202610170046_multi_skill.sql`: `private.selected_codes`, `private.option_list`, `private.record_assessment` (julat tahap, label digabung, kod tidak sah ditolak; `assessment_responses` satu baris setiap murid/sesi, kod dipisah koma). Ujian pariti ulasan DB = portal.
 - Ujian: `npm test` 141/141, Pages 82/82, E2E 8/8, build OK.
+
+## Carian surah dengan cadangan — 17 Oktober 2026
+
+- `src/components/surah-picker.tsx` (`SurahPicker`, ARIA combobox) menggantikan `<select>` surah (Pra Tahfiz/Tahfiz): taip sebahagian nama atau nombor; padanan abaikan huruf besar, sempang, tanda petik dan awalan Al-/An-/Ar-…; maksimum 8 cadangan; ↑/↓/Enter/Escape; teks yang sepadan tepat satu surah dipilih semasa blur. `.card:has(.surah-picker)` overflow visible supaya senarai tidak dipotong. Pages 82/82, `npm test` 141/141.
