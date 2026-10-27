@@ -164,7 +164,8 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
       await db.query<{ create_invoice: string }>('select create_invoice($1,$2,$3,$4,$5,$6)', [
         org,
         id(21),
-        '2026-10-20',
+        // Tarikh akhir masa depan supaya status selepas reverse kekal 'issued', bukan 'overdue'.
+        '2099-12-31',
         '2026-10',
         JSON.stringify([
           { student_id: id(31), description: 'Configured fee', quantity: 1, unit_price_sen: 15000 },
