@@ -292,6 +292,9 @@ const schemas = {
   }),
   move_session: z.object({ sid: uuid, new_start: z.iso.datetime({ offset: true }) }),
   add_program: z.object({ student_id: uuid, program_id: uuid, tutor_id: uuid.optional() }),
+  // Tukar program kelas individu: tanpa tarikh = betulkan semua rekod; dengan tarikh = mulai tarikh itu.
+  change_program: z.object({ cid: uuid, new_program: uuid, from_date: z.iso.date().nullable() }),
+  remove_program: z.object({ cid: uuid }),
   tutor_class: z.object({
     program_id: uuid,
     class_name: text,
@@ -397,6 +400,8 @@ export async function executeMutation(
       tutor_class: 'tutor_create_class',
       tutor_add_student: 'tutor_add_student',
       add_program: 'add_student_program',
+      change_program: 'change_student_program',
+      remove_program: 'remove_student_program',
       tutor_enrol: 'tutor_enrol_student',
       save_guardian: 'save_student_guardian',
       invoice_paid: 'mark_invoice_paid',

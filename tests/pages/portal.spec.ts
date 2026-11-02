@@ -355,6 +355,10 @@ test('voiding the open class returns to the list; a voided class is locked', asy
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  // Senarai hanya bulan dipilih; kelas baharu bertarikh hari ini (demo lalai Oktober 2026).
+  await page
+    .getByLabel('Bulan laporan')
+    .fill(new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 7));
   const history = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
@@ -1281,4 +1285,72 @@ test('assessment sections allow several choices and the parent comment follows e
   await page.goto('/?demo=1#/sessions/session-13');
   await expect(section(/Penglibatan/).locator('button[aria-pressed="true"]')).toHaveCount(2);
   await expect(section(/Penguasaan/).locator('button[aria-pressed="true"]')).toHaveCount(1);
+});
+test('attendance list and reading record show the selected month only', async ({ page }) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  await page.locator('.student-picker button').first().click();
+  await page.getByLabel('Tarikh kelas').first().fill('2026-10-07');
+  await page.getByLabel('Jam').first().fill('21:00');
+  const first = page.locator('.student-tabs button').first();
+  await first.click();
+  await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+  await page.getByLabel("Jilid Iqra'").selectOption('3');
+  await page.getByLabel('Muka surat').fill('12');
+  await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
+  await expect(page.locator('.save-notice')).toContainText('memori tab');
+  await first.click();
+  const record = page.locator('.reading-record');
+  const history = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await expect(record).toContainText("Iqra' 3");
+  await expect(history).toContainText(/\/10\/2026/);
+  await page.getByLabel('Bulan laporan').fill('2026-09');
+  await expect(record).not.toContainText("Iqra' 3");
+  await expect(record).toContainText('Belum direkod');
+  await expect(history).toContainText('Belum ada kelas direkod');
+  await page.getByLabel('Bulan laporan').fill('2026-10');
+  await expect(record).toContainText("Iqra' 3");
+});
+test('tutor changes a student programme and removes an extra programme without re-registering', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Murid', exact: true }).click();
+  await enrol(page, 'Murid Tukar Program', "Iqra'");
+  await page
+    .getByRole('row', { name: /Murid Tukar Program/ })
+    .getByRole('button', { name: /Lihat profil/ })
+    .click();
+  const programs = page.locator('.program-detail');
+  // Satu program sahaja: tiada Padam program (guna Tukar program).
+  await expect(programs.getByRole('button', { name: 'Padam program' })).toHaveCount(0);
+  await programs.first().getByRole('button', { name: 'Tukar program' }).click();
+  await page
+    .getByRole('combobox', { name: 'Program baharu' })
+    .selectOption({ label: 'Kelancaran al-Quran' });
+  await page
+    .getByRole('combobox', { name: 'Sebab' })
+    .selectOption({ label: 'Tersalah pilih program (betulkan semua rekod)' });
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(programs).toHaveCount(1);
+  await expect(programs.first().getByRole('heading', { level: 3 })).toHaveText(
+    'Kelancaran al-Quran',
+  );
+  await expect(programs.first().locator('.slot-chip')).toHaveText(['Isnin 20:00']);
+  // Program tambahan boleh dipadam; murid dan program asal kekal.
+  await page.getByRole('button', { name: 'Tambah program' }).click();
+  await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: 'Bahasa Arab' });
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(programs).toHaveCount(2);
+  await programs
+    .filter({ hasText: 'Bahasa Arab' })
+    .getByRole('button', { name: 'Padam program' })
+    .click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(programs).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Murid Tukar Program', level: 1 })).toBeVisible();
 });

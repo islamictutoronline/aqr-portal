@@ -906,6 +906,101 @@ export function App({
             status: 'active',
             starts_on: new Date().toISOString().slice(0, 10),
           });
+        } else if (operation === 'change_program') {
+          // Sama seperti change_student_program: tanpa tarikh atau tiada kehadiran sebelum tarikh →
+          // betulkan di tempatnya; jika tidak, kelas baharu mulai tarikh itu dan rekod lama kekal.
+          const cls = next.classes.find((c) => c.id === payload.cid)!;
+          const enr = next.enrollments.find(
+            (e) => e.class_id === payload.cid && e.status === 'active',
+          )!;
+          const program = next.programs.find((x) => x.id === payload.new_program)!;
+          if (cls.program_id === program.id)
+            throw new Error('Program baharu sama dengan program semasa');
+          const name = `${next.students.find((x) => x.id === enr.student_id)!.full_name} · ${program.name}`;
+          const from = payload.from_date ? String(payload.from_date) : '';
+          const inClass = (s: Row | undefined) => s?.class_id === cls.id;
+          const history =
+            from &&
+            next.attendance.some((a) => {
+              const s = next.class_sessions.find((x) => x.id === a.session_id);
+              return inClass(s) && klDay(String(s!.starts_at)) < from;
+            });
+          if (!history) {
+            cls.program_id = program.id;
+            cls.name = name;
+          } else {
+            const before = new Date(Date.parse(from) - 86400000).toISOString().slice(0, 10);
+            next.classes.push({ ...cls, id, program_id: program.id, name });
+            cls.active = false;
+            const tutor = next.class_tutors.find((t) => t.class_id === cls.id && !t.ends_on);
+            next.class_tutors.push({
+              id: `${id}-tutor`,
+              class_id: id,
+              staff_id: tutor?.staff_id || activeTutor,
+              starts_on: from,
+            });
+            next.class_schedules
+              .filter(
+                (r) => r.class_id === cls.id && (!r.effective_to || String(r.effective_to) >= from),
+              )
+              .forEach((r, k) =>
+                next.class_schedules.push({
+                  ...r,
+                  id: `${id}-rule-${k}`,
+                  class_id: id,
+                  effective_from: String(r.effective_from) > from ? r.effective_from : from,
+                }),
+              );
+            next.class_schedules = next.class_schedules.filter(
+              (r) => !(r.class_id === cls.id && String(r.effective_from) >= from),
+            );
+            next.class_schedules
+              .filter(
+                (r) => r.class_id === cls.id && (!r.effective_to || String(r.effective_to) >= from),
+              )
+              .forEach((r) => (r.effective_to = before));
+            (next.class_rate_overrides || [])
+              .filter((o) => o.class_id === cls.id)
+              .forEach((o) =>
+                next.class_rate_overrides.push({ ...o, id: `${o.id}-${id}`, class_id: id }),
+              );
+            next.class_sessions
+              .filter((s) => inClass(s) && klDay(String(s.starts_at)) >= from)
+              .forEach((s) => (s.class_id = id));
+            enr.status = 'completed';
+            next.enrollments.push({
+              id: `${id}-enrollment`,
+              student_id: enr.student_id,
+              class_id: id,
+              status: 'active',
+              starts_on: from,
+            });
+          }
+        } else if (operation === 'remove_program') {
+          const enr = next.enrollments.find(
+            (e) => e.class_id === payload.cid && e.status === 'active',
+          )!;
+          if (
+            !next.enrollments.some(
+              (e) =>
+                e.student_id === enr.student_id &&
+                e.status === 'active' &&
+                e.class_id !== payload.cid,
+            )
+          )
+            throw new Error(
+              'Ini satu-satunya program murid. Guna Tukar program, atau Padam murid jika murid berhenti.',
+            );
+          enr.status = 'withdrawn';
+          next.classes.find((c) => c.id === payload.cid)!.active = false;
+          next.class_sessions
+            .filter(
+              (s) =>
+                s.class_id === payload.cid &&
+                s.status === 'scheduled' &&
+                !next.attendance.some((a) => a.session_id === s.id),
+            )
+            .forEach((s) => (s.status = 'cancelled'));
         } else if (operation === 'tutor_class') {
           next.classes.push({
             id,
@@ -1780,6 +1875,52 @@ export function App({
       ],
       transform: (v) => ({ ...v, student_id: studentId }),
     });
+  // Tukar program tanpa memadam murid: murid bertukar (cth. Iqra' → al-Quran) atau tersalah pilih.
+  const changeProgram = (classId: unknown, program: string, programId: unknown) =>
+    setDialog({
+      title: `Tukar program · ${program}`,
+      operation: 'change_program',
+      fields: [
+        {
+          name: 'new_program',
+          label: 'Program baharu',
+          options: options('programs', 'name').filter(([pid]) => pid !== String(programId)),
+        },
+        {
+          name: 'mode',
+          label: 'Sebab',
+          options: [
+            ['move', 'Murid bertukar program (rekod lama kekal)'],
+            ['fix', 'Tersalah pilih program (betulkan semua rekod)'],
+          ],
+        },
+        {
+          name: 'from_date',
+          label: 'Mulai tarikh (jika murid bertukar program)',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+      ],
+      extra: (
+        <p className="schedule-note">
+          Nama murid, penjaga, tutor dan jadual kekal. Bertukar program: kehadiran dan bacaan
+          sebelum tarikh dikekalkan pada program lama. Tersalah pilih: semua sesi dipindah ke
+          program baharu.
+        </p>
+      ),
+      transform: (v) => ({
+        cid: classId,
+        new_program: v.new_program,
+        from_date: v.mode === 'fix' ? null : v.from_date,
+      }),
+    });
+  const removeProgram = (classId: unknown, program: string) =>
+    setDialog({
+      title: `Padam program · ${program}`,
+      operation: 'remove_program',
+      fields: [],
+      transform: () => ({ cid: classId }),
+    });
   // Kadar khas kelas yang berkuat kuasa hari ini (terkini dengan tarikh mula <= hari ini).
   const latestRate = (rows: Row[]) => {
     const today = klDate(new Date().toISOString());
@@ -1925,6 +2066,7 @@ export function App({
         return {
           id: String(e.id),
           classId: e.class_id,
+          programId: c?.program_id,
           program,
           tutor: tutorName === '—' ? '' : tutorName,
           tutorId: t ? String(t.staff_id) : '',
@@ -2179,7 +2321,8 @@ export function App({
   };
   function sessionHistory(current: Row) {
     const counts = classCounts(current.class_id);
-    const done = all('class_sessions')
+    // Bulan dipilih sahaja (lalai bulan semasa); bulan lain dilihat melalui penapis bulan.
+    const done = monthlySessions
       .filter((s) => s.class_id === current.class_id && s.status === 'completed')
       .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)));
     const markOf = (sid: unknown) =>
@@ -2191,10 +2334,11 @@ export function App({
           title="Kelas telah dilaksanakan"
           subtitle={
             byId('classes').get(current.class_id)?.flexible
-              ? `Bulan ${month}: ${counts.done} kelas direkod · jadual fleksibel`
-              : `Bulan ${month}: ${counts.done} selesai · ${counts.left} sesi berbaki`
+              ? `${monthLabel(month)}: ${counts.done} kelas direkod · jadual fleksibel`
+              : `${monthLabel(month)}: ${counts.done} selesai · ${counts.left} sesi berbaki`
           }
         >
+          {!done.length && <Empty text={`Belum ada kelas direkod pada ${monthLabel(month)}.`} />}
           <Table
             headers={['Tarikh', 'Masa', 'Kehadiran', '']}
             rows={done.map((s) => [
@@ -2656,6 +2800,26 @@ export function App({
                           Ubah jadual
                         </button>
                       )}
+                      {(academic || role === 'tutor') && p.status === 'active' && (
+                        <button
+                          className="schedule-button"
+                          onClick={() => changeProgram(p.classId, p.program, p.programId)}
+                        >
+                          <Pencil size={15} />
+                          Tukar program
+                        </button>
+                      )}
+                      {(academic || role === 'tutor') &&
+                        p.status === 'active' &&
+                        programsOf(id).length > 1 && (
+                          <button
+                            className="schedule-button danger-button"
+                            onClick={() => removeProgram(p.classId, p.program)}
+                          >
+                            <X size={15} />
+                            Padam program
+                          </button>
+                        )}
                       {academic && p.status === 'active' && (
                         <button
                           className="schedule-button"
@@ -5139,6 +5303,7 @@ export function App({
               mutate={mutate}
               reschedule={rescheduleSession}
               onOpen={(sid) => go(`sessions/${sid}`)}
+              month={month}
               notice={notice}
               onAdd={role === 'tutor' ? () => addSessionFor(currentSession.class_id) : undefined}
             />
@@ -5287,9 +5452,11 @@ export function App({
                 <p>
                   {dialog.operation === 'remove_student'
                     ? 'Murid dikeluarkan dan sesi akan datang dibatalkan. Rekod kehadiran dan elaun yang lepas dikekalkan.'
-                    : dialog.operation === 'void_session'
-                      ? 'Kelas ini dibatalkan: tidak dikira elaun dan ulasan ditarik daripada ibu bapa.'
-                      : 'Sahkan tindakan ini. Rekod sejarah tidak dipadam.'}
+                    : dialog.operation === 'remove_program'
+                      ? 'Program ini sahaja ditamatkan; murid dan program lain kekal. Sesi yang belum direkod dibatalkan; kehadiran dan elaun lepas dikekalkan.'
+                      : dialog.operation === 'void_session'
+                        ? 'Kelas ini dibatalkan: tidak dikira elaun dan ulasan ditarik daripada ibu bapa.'
+                        : 'Sahkan tindakan ini. Rekod sejarah tidak dipadam.'}
                 </p>
               )}
               {/* Ralat ditunjukkan dalam borang supaya tidak terlindung di belakang tetingkap. */}
@@ -5316,6 +5483,7 @@ function SessionEditor({
   mutate,
   reschedule,
   onOpen,
+  month,
   notice,
   onAdd,
 }: {
@@ -5325,6 +5493,7 @@ function SessionEditor({
   mutate: (operation: string, payload: Record<string, unknown>) => Promise<boolean>;
   reschedule: (session: Row, start: string) => Promise<boolean>;
   onOpen: (sid: string) => void;
+  month: string;
   notice?: string;
   onAdd?: () => void;
 }) {
@@ -5980,6 +6149,7 @@ function SessionEditor({
           kind={kind}
           student={String(studentId)}
           current={String(session.id)}
+          month={month}
           onOpen={onOpen}
         />
       )}
@@ -5988,22 +6158,32 @@ function SessionEditor({
 }
 
 // Rekod bacaan gaya rekod Tahfiz: setiap perkara (juzuk / muka surat / surah, atau jilid Iqra')
-// dengan tiga rekod terkini, status, catatan dan guru. Edit membuka sesi pada tarikh itu.
+// dengan tiga rekod terkini dalam bulan dipilih, catatan dan guru. Edit membuka sesi pada tarikh itu.
+// Bacaan jenis lain (cth. Iqra' sebelum murid bertukar ke al-Quran) tidak dicampur.
 function ReadingRecord({
   data,
   kind,
   student,
   current,
+  month,
   onOpen,
 }: {
   data: Dataset;
   kind: 'iqra' | 'quran';
   student: string;
   current: string;
+  month: string;
   onOpen: (sid: string) => void;
 }) {
+  const range = monthBounds(month);
+  const [from, to] = [Date.parse(range.start), Date.parse(range.end)];
   const entries = data.attendance
-    .filter((a) => a.student_id === student && hasReading(a.reading as Reading))
+    .filter(
+      (a) =>
+        a.student_id === student &&
+        hasReading(a.reading as Reading) &&
+        ((a.reading as Reading).kind || ((a.reading as Reading).jilid ? 'iqra' : 'quran')) === kind,
+    )
     .map((a) => {
       const sess = data.class_sessions.find((x) => x.id === a.session_id);
       const tutor = (data.staff_profiles || []).find((t) => t.id === sess?.tutor_id);
@@ -6014,7 +6194,7 @@ function ReadingRecord({
         tutor: String(tutor?.display_name || tutor?.full_name || '—'),
       };
     })
-    .filter((x) => x.at)
+    .filter((x) => x.at && Date.parse(x.at) >= from && Date.parse(x.at) < to)
     .sort((a, b) => b.at.localeCompare(a.at));
   const items: [string, (r: Reading) => string | number | null | undefined][] =
     kind === 'iqra'
@@ -6073,7 +6253,7 @@ function ReadingRecord({
   return (
     <Card
       title={`Rekod bacaan${name ? ` · ${name}` : ''}`}
-      subtitle="Tiga rekod terkini bagi setiap perkara. Rekod yang disimpan dikira selesai. Tekan Edit untuk membetulkan rekod pada tarikh lain."
+      subtitle={`${monthLabel(month)} · tiga rekod terkini bagi setiap perkara. Tekan Edit untuk membetulkan rekod pada tarikh lain.`}
       className="reading-record"
     >
       <Table headers={['#', 'Perkara', 'Tarikh', 'Catatan', 'Guru', 'Operasi']} rows={rows} />
