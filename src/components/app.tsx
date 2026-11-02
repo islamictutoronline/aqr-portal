@@ -2324,18 +2324,10 @@ export function App({
     return (
       <>
         <div className="welcome">
-          <img
-            className="welcome-watermark"
-            src={assetUrl('brand/aqr-emblem.png')}
-            alt=""
-            aria-hidden="true"
-          />
           <div className="welcome-text">
-            <p className="welcome-kicker">Akademi Al-Quran Ar-Riyadh</p>
             <h1>
               Assalamualaikum,{' '}
               {role === 'guardian' ? 'ibu bapa' : role === 'tutor' ? 'tutor' : 'pentadbir'}
-              <span className="gold">.</span>
             </h1>
             <p className="welcome-date">
               {new Intl.DateTimeFormat('ms-MY', {
@@ -4302,8 +4294,7 @@ export function App({
         <div className="parent-welcome">
           <HeartHandshake size={32} />
           <div>
-            <p className="eyebrow">RUANG KELUARGA</p>
-            <h1>Perjalanan ilmu anak anda</h1>
+            <h1>Kemajuan anak anda</h1>
             <p>Ikuti kehadiran dan ulasan yang diterbitkan oleh tutor.</p>
           </div>
         </div>
@@ -4903,9 +4894,7 @@ export function App({
             </span>
           )}
           <span className="sidebar-brand-copy">
-            <strong>
-              AQR<span className="gold">.</span>
-            </strong>
+            <strong>AQR</strong>
             <small>Akademi Al-Quran Ar-Riyadh</small>
           </span>
           <button
@@ -4916,7 +4905,6 @@ export function App({
             <X />
           </button>
         </div>
-        <p className="nav-caption">RUANG ANDA</p>
         <nav aria-label="Navigasi utama">
           {groups.map(({ id, label, Icon, members }) => (
             <button
@@ -4927,7 +4915,6 @@ export function App({
             >
               <Icon size={19} aria-hidden="true" />
               <span>{label}</span>
-              {group?.id === id && <span className="active-dot" aria-hidden="true" />}
             </button>
           ))}
         </nav>
@@ -5005,7 +4992,7 @@ export function App({
               <h2>{group && group.members.length > 1 ? group.label : title}</h2>
               <p className="page-description">
                 {section === 'dashboard'
-                  ? 'Ringkasan akademi, dalam satu pandangan.'
+                  ? 'Ringkasan akademi bagi bulan dipilih.'
                   : section === 'parent'
                     ? 'Ikuti kehadiran dan perkembangan anak anda.'
                     : section === 'students' || section === 'guardians' || section === 'classes'
@@ -5933,7 +5920,7 @@ function SessionEditor({
               )}
             </div>
             <aside className="preview-comment">
-              <p className="eyebrow">PRATONTON ULASAN IBU BAPA</p>
+              <p className="eyebrow">Pratonton ulasan ibu bapa</p>
               <BookOpen size={28} />
               <p>{preview}</p>
               <small>Template v1 · berdasarkan pilihan sebenar sahaja</small>

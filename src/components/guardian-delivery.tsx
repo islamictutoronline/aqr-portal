@@ -346,7 +346,7 @@ export function GuardianDelivery({
     <section className="card family-delivery">
       <div className="card-heading">
         <div>
-          <p className="eyebrow">HANTAR KEPADA PENJAGA</p>
+          <p className="eyebrow">Hantar kepada penjaga</p>
           <h2>Laporan + invois sekeluarga</h2>
           <p>
             {monthLabel(month)} · satu PDF setiap keluarga (laporan semua anak + invois).

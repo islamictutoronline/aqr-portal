@@ -107,7 +107,7 @@ test('admin approves a report, downloads actual PDF and ZIP, then parent sees on
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Lihat laporan' }).click();
   await page.getByRole('button', { name: 'Luluskan laporan ini' }).click();
-  await expect(card.getByText('DILULUSKAN', { exact: true })).toBeVisible();
+  await expect(card.getByText('Diluluskan', { exact: true })).toBeVisible();
   const pdfWait = page.waitForEvent('download');
   await card.getByRole('button', { name: 'Muat turun PDF' }).click();
   const pdf = await pdfWait;
@@ -126,7 +126,7 @@ test('admin approves a report, downloads actual PDF and ZIP, then parent sees on
   await card.getByRole('combobox').first().selectOption('sent');
   await expect(card.getByRole('combobox').first()).toHaveValue('sent');
   await page.getByLabel('Pratonton peranan demo').selectOption('guardian');
-  await expect(page.getByRole('heading', { name: 'Perjalanan ilmu anak anda' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Kemajuan anak anda' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Muat turun PDF', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Hantar bayaran' })).toHaveCount(0);
   await expect(page.locator('input[type=file]')).toHaveCount(0);
@@ -410,7 +410,7 @@ test('admin approves all drafts of one tutor at once from the tutor group', asyn
   await approveAll.click();
   await expect(group.locator('summary')).not.toContainText('draf');
   await expect(approveAll).toBeDisabled();
-  await expect(group.getByText('DILULUSKAN', { exact: true }).first()).toBeVisible();
+  await expect(group.getByText('Diluluskan', { exact: true }).first()).toBeVisible();
 });
 test('admin saves bank details and downloads tutor payslips; tutor sees own payslip', async ({
   page,

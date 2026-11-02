@@ -32,7 +32,13 @@ beforeAll(async () => {
    insert into programs(id,organization_id,subject_id,code,name) values('${id(42)}','${org}','${id(41)}','IQRA','Iqra');
    insert into program_fee_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from) values('${org}','IQRA',30,1000,'2020-01-01');
    insert into tutor_allowance_rates(organization_id,program_code,duration_minutes,amount_sen,effective_from,source,created_by) values('${org}','IQRA',30,900,'2020-01-01','ujian','${owner}');`);
-  const slots = JSON.stringify([{ day: 1, time: '20:00' }]);
+  // Slot hari ini 00:00 (KL): sentiasa ada sesi yang sudah lepas dalam bulan semasa, walaupun pada awal bulan.
+  const today = (
+    await db.query<{ d: number }>(
+      "select extract(dow from now() at time zone 'Asia/Kuala_Lumpur')::int d",
+    )
+  ).rows[0].d;
+  const slots = JSON.stringify([{ day: today, time: '00:00' }]);
   const enrol = async (tutor: string, name: string, phone: string) => {
     await asUser(tutor);
     return (
@@ -46,7 +52,7 @@ beforeAll(async () => {
     await asUser(tutor);
     const s = (
       await db.query<{ id: string }>(
-        'select s.id from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 and s.starts_at<now() order by s.starts_at limit 1',
+        'select s.id from class_sessions s join enrollments e on e.class_id=s.class_id where e.student_id=$1 and s.starts_at<now() order by s.starts_at desc limit 1',
         [student],
       )
     ).rows[0];

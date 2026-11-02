@@ -153,7 +153,7 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
     const snapshot = r.snapshot as StudentSnapshot;
     return (
       <article className="report-item" key={r.id}>
-        <p className="eyebrow">{r.status === 'approved' ? 'DILULUSKAN' : 'DRAF'}</p>
+        <p className="eyebrow">{r.status === 'approved' ? 'Diluluskan' : 'Draf'}</p>
         <h3>{snapshot.student_name}</h3>
         <p>
           {snapshot.attendance.length} rekod kehadiran · {snapshot.feedback.length} ulasan
@@ -258,7 +258,6 @@ export function MonthlyReports({ data, role, month, demo, studentId, onData }: P
     <section className="card monthly-reports">
       <div className="card-heading">
         <div>
-          <p className="eyebrow">LAPORAN BULANAN</p>
           <h2>{admin ? 'Semakan & penghantaran laporan' : 'Laporan pembelajaran anak'}</h2>
           <p>
             {month} ·{' '}

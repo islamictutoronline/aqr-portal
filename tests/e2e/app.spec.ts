@@ -9,7 +9,7 @@ test('dashboard, role scoping and mobile layout', async ({ page }) => {
   );
   expect(overflow).toBe(false);
   await page.getByLabel('Pratonton peranan demo').selectOption('guardian');
-  await expect(page.getByRole('heading', { name: 'Perjalanan ilmu anak anda' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Kemajuan anak anda' })).toBeVisible();
   await expect(page.getByText('Murid Contoh 02', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Elaun tutor', exact: true })).toHaveCount(0);
 });

@@ -212,7 +212,7 @@ function Root() {
         {/* Panel jenama (desktop) — gaya dua panel, identiti AQR sendiri. */}
         <aside className="auth-brand" aria-hidden="true">
           <img className="auth-mark" src="brand/aqr-mark.png" alt="" />
-          <p className="auth-brand-name">AKADEMI AL-QURAN AR-RIYADH</p>
+          <p className="auth-brand-name">Akademi Al-Quran Ar-Riyadh</p>
           <h2>Portal pembelajaran individu</h2>
           <ul>
             <li>Kehadiran dan ulasan setiap kelas</li>
@@ -231,7 +231,7 @@ function Root() {
           <span className="auth-mobile-logo" aria-hidden="true">
             <img src="brand/aqr-emblem.png" alt="" />
           </span>
-          <p className="eyebrow">AKADEMI AL-QURAN AR-RIYADH</p>
+          <p className="eyebrow">Akademi Al-Quran Ar-Riyadh</p>
           <h1>Selamat kembali ke AQR</h1>
           <p className="auth-lead">Log masuk untuk melihat kelas, kehadiran dan laporan.</p>
           {!configured ? (

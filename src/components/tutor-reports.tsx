@@ -40,7 +40,6 @@ export function TutorClassReports({
     <section className="card tutor-class-reports">
       <div className="card-heading">
         <div>
-          <p className="eyebrow">LAPORAN KELAS</p>
           <h2>Laporan kelas murid saya</h2>
           <p>
             {monthLabel(month)} · kehadiran, bacaan dan ulasan setiap kelas yang dijalankan. Tanpa
