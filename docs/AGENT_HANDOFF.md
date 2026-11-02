@@ -2,6 +2,18 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## CADANGAN DISIMPAN (belum dilaksana): bayaran separuh / lebih — 2 November 2026
+
+Pengguna minta "simpan dulu"; jangan laksana tanpa arahan. Keadaan kod sekarang: "Yuran telah dibayar" (`mark_invoice_paid`) sentiasa merekod baki penuh tanpa medan amaun; "Rekod bayaran" → "Semak bayaran" (`submit_payment`/`verify_payment`) membenarkan amaun sendiri tetapi diperuntukkan ke satu invois sahaja, dan lebihan tergantung (tiada kredit, tidak boleh diperuntukkan kemudian, tidak ditolak bulan depan; resit menunjukkan jumlah penuh).
+
+Cadangan yang dipersetujui secara prinsip (matlamat: mudahkan admin):
+1. Satu butang **Rekod bayaran** pada invois; amaun diisi lalai = baki, boleh diubah; tarikh + kaedah + rujukan.
+2. Amaun < baki → "Dibayar sebahagian · baki RM X"; baki kekal pada invois itu (tidak dibawa ke bulan depan).
+3. Amaun > baki → lebihan auto ke invois tertunggak lain penjaga sama (paling lama dahulu), baki lebihan jadi **kredit penjaga** yang ditolak automatik semasa jana invois bulan berikut (baris "Kredit bulan lepas −RM X"). "Pulangan kredit" untuk kes refund.
+4. Resit = amaun sebenar diterima + peruntukan. Kredit/baki dipapar kepada admin dan Parent Portal (baca sahaja).
+5. Buang kad lama "Bayaran & pengesahan"; rekod lama kekal dan dikira.
+Perlu migrasi 50 (jadual kredit, fungsi bayaran, tolakan kredit dalam `generate_session_invoices`) + UI Kewangan.
+
 ## Kehadiran bulan semasa + Tukar/Padam program — 2 November 2026 (commit `11cf1da`, belum deploy Pages)
 
 Arahan pengguna: (1) rekod bacaan dan senarai kehadiran di skrin sesi hanya bulan semasa; (2) tutor boleh tukar/padam program tanpa padam murid dan daftar semula (murid naik Iqra' → al-Quran, atau tersalah isi).

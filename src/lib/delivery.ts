@@ -1,6 +1,6 @@
 // Penghantaran bulanan ikut keluarga: seorang penjaga bil → semua anak (adik-beradik digabung),
 // laporan bulanan setiap anak + invois penjaga untuk bulan itu, dihantar sekali melalui WhatsApp.
-import { Dataset, Row, dateLabel, formatMoney, invoiceBalance, monthLabel } from './core';
+import { Dataset, Row, formatMoney, invoiceBalance, monthLabel } from './core';
 
 export type Family = {
   guardian: Row;
@@ -83,12 +83,8 @@ export function familyMessage(family: Family, month: string, data: Dataset) {
       data.payments || [],
       data.payment_allocations || [],
     ).outstanding;
-    lines.push(
-      `• Invois ${String(family.invoice.number)} · baki ${formatMoney(balance)}` +
-        (family.invoice.due_on
-          ? ` (tarikh akhir ${dateLabel(String(family.invoice.due_on))})`
-          : ''),
-    );
+    // Tiada tarikh akhir: ibu bapa kadang-kadang membayar lewat (keputusan pengguna 2 Nov 2026).
+    lines.push(`• Invois ${String(family.invoice.number)} · baki ${formatMoney(balance)}`);
   }
   lines.push('', 'Terima kasih kerana bersama Akademi Al-Quran Ar-Riyadh (AQR).');
   return lines.join('\n');

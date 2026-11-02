@@ -638,13 +638,8 @@ export async function financialPdf(
   };
   if (isInvoice) {
     field('Kepada', extra.guardian || '—', M + 18, 200);
+    // Tiada tarikh akhir pada invois ibu bapa (keputusan pengguna 2 Nov 2026).
     field('Bulan', record.period ? monthLabel(String(record.period)) : '—', M + 236, 120);
-    field(
-      'Tarikh akhir',
-      record.due_on ? dateLabel(`${record.due_on}T04:00:00Z`) : '—',
-      M + 380,
-      120,
-    );
   } else {
     field('Diterima daripada', extra.guardian || '—', M + 18, 200);
     field(
