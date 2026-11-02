@@ -1275,6 +1275,7 @@ test('assessment sections allow several choices and the parent comment follows e
   await expect(preview).not.toContainText(` dan ${s2}`);
   await expect(page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ })).toBeEnabled();
   await page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ }).click();
+  await expect(page.getByRole('status')).toContainText('memori tab');
   // Pilihan yang disimpan dimuat semula apabila sesi dibuka semula.
   await page.goto('/?demo=1#/sessions/session-14');
   await page.goto('/?demo=1#/sessions/session-13');
