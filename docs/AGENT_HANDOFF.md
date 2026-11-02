@@ -14,7 +14,7 @@ Cadangan yang dipersetujui secara prinsip (matlamat: mudahkan admin):
 5. Buang kad lama "Bayaran & pengesahan"; rekod lama kekal dan dikira.
 Perlu migrasi 50 (jadual kredit, fungsi bayaran, tolakan kredit dalam `generate_session_invoices`) + UI Kewangan.
 
-## Kehadiran bulan semasa + Tukar/Padam program — 2 November 2026 (commit `11cf1da`, belum deploy Pages)
+## Kehadiran bulan semasa + Tukar/Padam program — 2 November 2026 (dideploy bersama `d4f9244`)
 
 Arahan pengguna: (1) rekod bacaan dan senarai kehadiran di skrin sesi hanya bulan semasa; (2) tutor boleh tukar/padam program tanpa padam murid dan daftar semula (murid naik Iqra' → al-Quran, atau tersalah isi).
 
