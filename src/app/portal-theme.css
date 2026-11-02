@@ -13,7 +13,9 @@
     min-height: 100dvh;
     padding: 24px 0;
     color: var(--portal-text);
-    background: #e3ede4;
+    background:
+      radial-gradient(ellipse at 0 10%, #bde6cb 0, transparent 48%),
+      radial-gradient(ellipse at 100% 90%, #c8dda8 0, transparent 46%), #dfede1;
   }
   .portal-theme .sidebar {
     inset: 24px auto 24px 24px;
@@ -28,12 +30,14 @@
     color: var(--portal-text);
   }
   .portal-theme .sidebar-brand-copy small,
+  .portal-theme .sidebar .nav-caption,
   .portal-theme .account small {
     color: var(--portal-muted);
   }
   .portal-theme .sidebar-emblem {
-    background: #12433d;
+    background: linear-gradient(145deg, #16865b, #12433d);
     border-color: #dae8dc;
+    box-shadow: 0 6px 16px #17523b20;
   }
   .portal-theme .sidebar nav {
     gap: 8px;
@@ -51,12 +55,16 @@
   }
   .portal-theme .sidebar nav button.active {
     color: white;
-    background: #0b5e44;
+    background: linear-gradient(110deg, #087653, #12433d);
+    box-shadow: 0 6px 16px #08765324;
   }
   .portal-theme .sidebar nav button.active svg {
     color: #b5f0ce;
     background: #ffffff16;
     border-radius: 6px;
+  }
+  .portal-theme .active-dot {
+    background: #c6f1b3;
   }
   .portal-theme .account {
     border-color: var(--portal-border);
@@ -126,9 +134,32 @@
   .portal-theme .welcome {
     min-height: 224px;
     padding: 34px 36px;
-    background: #12433d;
+    background:
+      radial-gradient(ellipse at 85% 20%, #50965d99, transparent 55%),
+      linear-gradient(115deg, #12433d, #176b4b 70%, #347a48);
     border: 0;
     border-radius: 26px;
+    box-shadow: 0 14px 28px #12433d1a;
+  }
+  .portal-theme .welcome::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    width: 300px;
+    height: 300px;
+    right: -30px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #cbefb718;
+    border: 1px solid #cbefb72a;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 42px #cbefb70b,
+      0 0 0 90px #cbefb706;
+    pointer-events: none;
+  }
+  .portal-theme .welcome::after {
+    display: none;
   }
   .portal-theme .welcome h1 {
     font-size: clamp(26px, 2.5vw, 36px);
@@ -137,6 +168,10 @@
     max-width: 680px;
     text-wrap: balance;
   }
+  .portal-theme .welcome-kicker {
+    color: #d2eeb6;
+    margin-bottom: 14px;
+  }
   .portal-theme .welcome-date {
     color: #d3e8d9;
     margin-top: 12px;
@@ -144,6 +179,10 @@
   .portal-theme .welcome-mark {
     width: 104px;
     margin: 0 24px;
+    filter: drop-shadow(0 6px 12px #0c38232a);
+  }
+  .portal-theme .welcome-watermark {
+    opacity: 0.04;
   }
   .portal-theme .partner-chip {
     background: #ffffff12;
@@ -156,9 +195,22 @@
   .portal-theme .metric {
     min-width: 0;
     padding: 24px;
-    background: white;
-    border: 1px solid #e4ece3;
+    background: #d8eddf;
+    border: 1px solid #ffffff88;
     border-radius: 22px;
+    box-shadow: 0 8px 20px #2352380c;
+  }
+  .portal-theme .metric:nth-child(2) {
+    background: #e5efd3;
+  }
+  .portal-theme .metric:nth-child(3) {
+    background: #cce9dc;
+  }
+  .portal-theme .metric:nth-child(4) {
+    background: #e3eee4;
+  }
+  .portal-theme .metric:nth-child(5) {
+    background: #d8e8c5;
   }
   .portal-theme .metric-top,
   .portal-theme .metric > small {
@@ -168,7 +220,7 @@
     width: 36px;
     height: 36px;
     padding: 8px;
-    background: #eaf3e8;
+    background: #ffffffb3;
     color: #176c4a;
     border-radius: 12px;
   }
@@ -229,7 +281,7 @@
     height: 12px;
   }
   .portal-theme .bar-track > div {
-    background: #087653;
+    background: linear-gradient(90deg, #087653, #82bc70);
   }
   .portal-theme .avatar {
     background: #e0f0df;
@@ -250,9 +302,10 @@
     border-radius: 12px;
   }
   .portal-theme .primary {
-    background: #087653;
+    background: linear-gradient(115deg, #087653, #12433d);
     border-color: #126148;
     color: white;
+    box-shadow: 0 4px 12px #08765318;
   }
   .portal-theme .primary:hover {
     background: #124c3a;
@@ -334,9 +387,10 @@
   .portal-theme .parent-welcome {
     padding: 28px;
     margin-bottom: 24px;
-    background: #e4f0e6;
-    border: 1px solid #d7e7da;
+    background: linear-gradient(115deg, #d4eadd, #edf3d9);
+    border: 1px solid #ffffff;
     border-radius: 24px;
+    box-shadow: 0 8px 24px #2352380a;
   }
   .portal-theme .profile-hero h1,
   .portal-theme .parent-welcome h1 {
@@ -355,6 +409,9 @@
     border-radius: 18px;
     background: white;
   }
+  .portal-theme .class-card {
+    background: linear-gradient(145deg, #f0f7e9, #ffffff);
+  }
   .portal-theme .class-icon {
     color: #207446;
     background: #d9edcf;
@@ -362,7 +419,7 @@
   }
   .portal-theme .program-head,
   .portal-theme .tutor-group > summary {
-    background: #f1f7ee;
+    background: linear-gradient(105deg, #edf5e7, #f6faf3);
     border-color: #dce8d7;
   }
   .portal-theme .tutor-group[open] > summary {
@@ -431,6 +488,7 @@
   .portal-theme .modal-overlay,
   .portal-theme .report-preview {
     background: #153f32a6;
+    backdrop-filter: blur(4px);
   }
   .portal-theme .modal,
   .portal-theme .report-preview-body {
@@ -514,6 +572,15 @@
   .portal-theme .welcome-mark {
     width: 52px;
     margin: 4px 0 0;
+  }
+  .portal-theme .welcome::before {
+    width: 240px;
+    height: 240px;
+    right: -135px;
+  }
+  .portal-theme .welcome-kicker {
+    letter-spacing: 1px;
+    margin-bottom: 12px;
   }
   .portal-theme .partner-chip {
     font-size: 10px;

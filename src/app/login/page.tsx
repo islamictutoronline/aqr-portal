@@ -27,9 +27,13 @@ export default function Login() {
     <main className="login">
       <div className="login-panel">
         <BookOpen size={36} />
-        <p className="eyebrow">Akademi Al-Quran Ar-Riyadh</p>
-        <h1>Portal AQR</h1>
-        <p>Kehadiran, ulasan kelas dan laporan bulanan untuk tutor, pentadbir dan ibu bapa.</p>
+        <p className="eyebrow">AKADEMI AL-QURAN AR-RIYADH</p>
+        <h1>
+          Ilmu dipantau.
+          <br />
+          Potensi dibimbing.
+        </h1>
+        <p>Selamat datang ke AQR, ruang untuk tutor, pentadbir dan ibu bapa bergerak bersama.</p>
         <div className="arabic" lang="ar" dir="rtl">
           رَبِّ زِدْنِي عِلْمًا
         </div>
@@ -38,7 +42,7 @@ export default function Login() {
         <span className="auth-mobile-logo login-logo" aria-hidden="true">
           <img src="/brand/aqr-emblem.png" alt="" />
         </span>
-        <h2>Log masuk</h2>
+        <h2>Buka ruang anda</h2>
         <p>
           Sahkan e-mel pada peranti ini sekali. Sesi selamat dikekalkan sehingga tamat tempoh atau
           dibatalkan.

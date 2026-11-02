@@ -125,3 +125,4 @@ Ujian pelayar membuka kesemua 10 skrin modul tanpa ralat JavaScript atau overflo
 - 17 Okt 2026: carian surah dengan cadangan; migrasi 47 `202610170047_last_ayah.sql` — ayat terakhir dibaca (pilihan) untuk Kelancaran/Tahsin.
 - 17 Okt 2026: prestasi render (pemformat Intl dikongsi, indeks); migrasi 48 `202610170048_invoice_reset_fixes.sql` — invois tambahan tidak mengecaj semula sesi dibayar, reset kata laluan lebih ketat.
 - 2 Nov 2026: buang hiasan "AI slop" daripada UI (gradient, bulatan bercahaya, tera air, label huruf besar, kad metrik pelbagai warna) dan daripada tiga slaid Panduan\_\*.pptx. Tiada perubahan fungsi atau pangkalan data.
+- 2 Nov 2026: perubahan UI "AI slop" dibatalkan atas permintaan pengguna; pembetulan ujian bergantung tarikh dikekalkan.
