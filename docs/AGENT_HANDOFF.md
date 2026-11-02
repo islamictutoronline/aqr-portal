@@ -2,7 +2,7 @@
 
 Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Kehadiran bulan semasa + Tukar/Padam program — 2 November 2026 (belum commit/deploy)
+## Kehadiran bulan semasa + Tukar/Padam program — 2 November 2026 (commit `11cf1da`, belum deploy Pages)
 
 Arahan pengguna: (1) rekod bacaan dan senarai kehadiran di skrin sesi hanya bulan semasa; (2) tutor boleh tukar/padam program tanpa padam murid dan daftar semula (murid naik Iqra' → al-Quran, atau tersalah isi).
 
@@ -10,7 +10,7 @@ Arahan pengguna: (1) rekod bacaan dan senarai kehadiran di skrin sesi hanya bula
 - **Migrasi 49** `202611020049_change_program.sql`: `change_student_program(org,cid,new_program,from_date)` — `from_date` null = betulkan di tempatnya (semua sesi ikut program baharu); dengan tarikh dan ada kehadiran sebelum tarikh = kelas baharu (tutor, jadual, fleksibel, kadar khas disalin), sesi mulai tarikh dipindah, pendaftaran lama `completed`, kelas lama tidak aktif. Tarikh: dua bulan lepas hingga hari ini. `remove_student_program(org,cid)` — tamatkan satu program (sesi belum direkod dibatalkan, rekod lepas kekal); program terakhir ditolak. Akses: `can_manage_class` (tutor kelas atau pemilik/admin); audit `CHANGE_PROGRAM`/`REMOVE_PROGRAM`.
 - **UI profil murid:** butang **Tukar program** (pilih program baharu + sebab "Murid bertukar program" dengan tarikh / "Tersalah pilih program") dan **Padam program** (hanya jika murid ada >1 program). Operasi `change_program`/`remove_program` dalam `mutations.ts` + tiruan demo.
 - Bukti: `npm test` **149/149** (baharu `tests/integration/change-program.test.ts` 4 ujian PGlite), `test:pages` **86/86** (baharu: tapisan bulan; tukar/padam program; ujian padam kelas kini memilih bulan semasa), typecheck/lint/Prettier, binaan Pages + Next. `setup-all.sql` = 49 migrasi.
-- **Belum:** migrasi 49 belum dipasang di Supabase (pengguna perlu jalankan); belum commit/push/deploy; belum diuji dengan log masuk tutor sebenar.
+- **Status:** commit `11cf1da` dipush; [AQR checks #41443570643](https://github.com/islamictutoronline/aqr-portal/actions/runs/41443570643) **success**. **Migrasi 49 dipasang pengguna** di Supabase (2 Nov, "Success"). **Belum:** workflow AQR GitHub Pages (manual, `workflow_dispatch`) belum dijalankan — agen disekat kebenaran deploy produksi; belum diuji dengan log masuk tutor sebenar.
 
 ## Laporan ringkas, tiada sesi dijadualkan, skrip reset janaan — 17 Oktober 2026 (deploy b850a78, Pages + AQR checks lulus; aset live disahkan)
 
