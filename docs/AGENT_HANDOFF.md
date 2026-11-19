@@ -1,18 +1,30 @@
 # Konteks serahan agen — AQR
 
-Kemas kini: 15 Oktober 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+Kemas kini: 19 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
+
+## Sesi dikira ikut bulan + butang Selesai bulan — 19 November 2026 (setempat, BELUM commit/deploy)
+
+Arahan pengguna: sesi dikira ikut bulan, bukan minggu (dulu 1×seminggu kadang-kadang jadi 5 sesi); "tutor tanda 4 sesi, fix 4 sesi sahaja"; bar kemajuan bawah sesi murid; tutor wajib tekan **Selesai** di akhir bulan dan hanya dibayar ikut sesi yang direkod bulan itu. Keputusan pengguna (soalan pilihan): satu butang Selesai sebulan untuk semua murid; rekod **tidak dikunci** selepas Selesai; elaun **tidak boleh dibayar** sebelum Selesai; yuran ibu bapa ikut sesi direkod dengan had N.
+
+- **Migrasi 50** `202611190050_monthly_quota.sql`: `classes.sessions_per_month` (1–31; kelas sedia ada diisi 4 × slot mingguan aktif). `private.class_quota`/`quota_used`/`quota_check`; pencetus `attendance_monthly_quota` (rekod Hadir/Lewat/Ganti/Tidak hadir baharu atau daripada Cuti bermaklum ditolak jika kuota bulan sesi penuh; simpan semula rekod sedia ada dibenarkan; Cuti bermaklum tidak dikira) dan `class_sessions_monthly_quota` (alih kelas direkod ke bulan lain). `set_class_quota(org,cid,n)` (tutor kelas atau pemilik/admin). Jadual `tutor_month_closures` + `close_tutor_month(org,period)` (tutor sendiri; bulan lepas bila-bila masa, bulan semasa pada 7 hari terakhir; simpan bilangan sesi sebagai rujukan). `mark_tutor_paid` ditolak jika tiada Selesai. Rekod lama tidak disentuh (pencetus hanya pada tulisan baharu).
+- **Aplikasi:** `src/lib/monthly-quota.ts` (cermin logik DB). Borang daftar/Ubah jadual: **Sesi sebulan** (1–20, lalai 4) + **Hari kelas seminggu** (disegerakkan: 4 sesi ↔ 1 hari). `mutations.ts`: `tutor_enrol`/`update_schedule` memanggil `set_class_quota` selepas RPC asal (tandatangan RPC lama tidak berubah); operasi `close_month`. Tutor → Sesi & kehadiran: kad "Selesai bulan · <bulan>" di atas senarai murid, bar kemajuan `x/N sesi` setiap murid, dalam "Kelas telah dilaksanakan" dan profil murid ("Sebulan N sesi"). Elaun admin: "Belum tekan Selesai" menggantikan butang bayar. `data.ts` membaca `sessions_per_month` dengan sandaran jika migrasi 50 belum dipasang; `tutor_month_closures` jadual pilihan. Demo: Tutor Contoh 2 & 3 sudah Selesai Oktober 2026, Tutor Contoh 1 belum.
+- **Sesi tambahan (susulan pengguna, 19 Nov):** tutor boleh melebihi kuota selepas mengesahkan. `class_sessions.extra` + `mark_extra_session(org,sid)` (akses `can_session`); pencetus kuota mengecualikan sesi `extra`. Editor sesi memaparkan kotak "Rekod sebagai sesi tambahan" apabila rekod baharu melebihi kuota (Simpan tidak aktif sehingga ditanda); operasi `extra_session` dipanggil sebelum `assessment`. Keputusan pengguna: sesi tambahan dikira seperti biasa — tutor dibayar, ibu bapa dicaj. Paparan `5/4 sesi · +1 tambahan` (bar kekal penuh) dan pil "Tambahan" dalam senarai kelas. Demo `mutate` kini membina atas `demoData` (ref data terkini) supaya tindakan berturut-turut tidak memakai data lama.
+- **Skrip:** `reset-test-data.sql`, `reset-generated-data.sql`, `remove-tutor-data.sql` turut membersihkan `tutor_month_closures` (perlu migrasi 50 dipasang dahulu).
+- **Bukti:** `npm test` 152/152 (baharu `tests/integration/monthly-quota.test.ts` termasuk sesi tambahan; ujian lama yang merekod >4 sesi sebulan menetapkan lalai kuota 31), `test:pages` 92/92 (baharu: Selesai + bar kemajuan; borang sesi sebulan; sesi tambahan 5/4), typecheck/lint/Prettier, binaan Pages + Next, `setup-all.sql` = 50 migrasi. Pratonton: `npm run dev:pages -- --host 127.0.0.1 --port 4173` → `/?demo=1&role=tutor#/calendar`.
+- **Belum:** commit/push; pasang migrasi 50 di Supabase **sebelum** deploy; deploy Pages; uji dengan log masuk tutor sebenar. Pertimbangkan: admin menanda Selesai bagi pihak tutor (belum ada); kelas baharu daripada Tukar program (mulai tarikh) tidak menyalin kuota — guna 4 × slot.
 
 ## CADANGAN DISIMPAN (belum dilaksana): bayaran separuh / lebih — 2 November 2026
 
 Pengguna minta "simpan dulu"; jangan laksana tanpa arahan. Keadaan kod sekarang: "Yuran telah dibayar" (`mark_invoice_paid`) sentiasa merekod baki penuh tanpa medan amaun; "Rekod bayaran" → "Semak bayaran" (`submit_payment`/`verify_payment`) membenarkan amaun sendiri tetapi diperuntukkan ke satu invois sahaja, dan lebihan tergantung (tiada kredit, tidak boleh diperuntukkan kemudian, tidak ditolak bulan depan; resit menunjukkan jumlah penuh).
 
 Cadangan yang dipersetujui secara prinsip (matlamat: mudahkan admin):
+
 1. Satu butang **Rekod bayaran** pada invois; amaun diisi lalai = baki, boleh diubah; tarikh + kaedah + rujukan.
 2. Amaun < baki → "Dibayar sebahagian · baki RM X"; baki kekal pada invois itu (tidak dibawa ke bulan depan).
 3. Amaun > baki → lebihan auto ke invois tertunggak lain penjaga sama (paling lama dahulu), baki lebihan jadi **kredit penjaga** yang ditolak automatik semasa jana invois bulan berikut (baris "Kredit bulan lepas −RM X"). "Pulangan kredit" untuk kes refund.
 4. Resit = amaun sebenar diterima + peruntukan. Kredit/baki dipapar kepada admin dan Parent Portal (baca sahaja).
 5. Buang kad lama "Bayaran & pengesahan"; rekod lama kekal dan dikira.
-Perlu migrasi 50 (jadual kredit, fungsi bayaran, tolakan kredit dalam `generate_session_invoices`) + UI Kewangan.
+   Perlu migrasi 50 (jadual kredit, fungsi bayaran, tolakan kredit dalam `generate_session_invoices`) + UI Kewangan.
 
 ## Kehadiran bulan semasa + Tukar/Padam program — 2 November 2026 (dideploy bersama `d4f9244`)
 

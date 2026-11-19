@@ -321,6 +321,16 @@ export function demoData(): Dataset {
     audit_events: [],
     private_import_rows: [],
     tutor_month_payments: [],
+    // Selesai bulan (migrasi 50): Tutor Contoh 2 dan 3 sudah menekan Selesai; Tutor Contoh 1 belum,
+    // supaya pratonton tutor memaparkan butang Selesai dan pratonton admin memaparkan sekatan elaun.
+    tutor_month_closures: [1, 2].map((i) =>
+      row(`closure-${i}`, {
+        staff_id: `tutor-${i}`,
+        period: '2026-10',
+        sessions: 0,
+        closed_at: '2026-10-31T12:00:00+08:00',
+      }),
+    ),
     monthly_tutor_remarks: [],
     class_rate_overrides: [],
     tutor_rate_overrides: [],
@@ -386,6 +396,8 @@ export function scopeDemo(
     role === 'tutor' ? data.tutor_adjustments.filter((p) => p.tutor_id === tutor) : [];
   result.tutor_month_payments =
     role === 'tutor' ? (data.tutor_month_payments || []).filter((p) => p.staff_id === tutor) : [];
+  result.tutor_month_closures =
+    role === 'tutor' ? (data.tutor_month_closures || []).filter((p) => p.staff_id === tutor) : [];
 
   result.staff_profiles = role === 'tutor' ? data.staff_profiles.filter((t) => t.id === tutor) : [];
   result.student_guardians = data.student_guardians.filter((l) =>

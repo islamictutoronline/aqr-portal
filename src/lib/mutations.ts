@@ -208,6 +208,8 @@ const schemas = {
     tutor_id: uuid.nullable().default(null),
     // Jadual fleksibel: slot mingguan hanya masa pilihan; sesi tidak dijana automatik.
     flexible: z.boolean().default(false),
+    // Kuota sesi sebulan (migrasi 50); disimpan melalui set_class_quota selepas daftar.
+    sessions_per_month: z.number().int().min(1).max(31).nullable().default(null),
   }),
   save_guardian: z.object({
     student_id: uuid,
@@ -236,7 +238,12 @@ const schemas = {
     effective_from: z.iso.date(),
     end_date: z.iso.date(),
     flexible: z.boolean().nullable().default(null),
+    sessions_per_month: z.number().int().min(1).max(31).nullable().default(null),
   }),
+  // Tutor menekan Selesai bagi bulannya (satu butang untuk semua murid).
+  // Tutor mengesahkan sesi melebihi kuota sebulan sebagai sesi tambahan.
+  extra_session: z.object({ sid: uuid }),
+  close_month: z.object({ period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
   // Admin: pindah kelas kepada tutor lain mulai tarikh dipilih.
   transfer_class: z.object({ cid: uuid, new_tutor: uuid, effective_from: z.iso.date() }),
   // Admin: yuran/elaun khas setiap sesi bagi satu kelas (null = kadar standard).
@@ -388,6 +395,37 @@ export async function executeMutation(
         org: ctx.org,
         billing_period: period,
       });
+  } else if (operation === 'tutor_enrol' || operation === 'update_schedule') {
+    // Kuota sesi sebulan disimpan berasingan supaya tandatangan fungsi DB sedia ada tidak berubah.
+    const { sessions_per_month: quota, ...rest } = fields as unknown as {
+      sessions_per_month: number | null;
+    };
+    result = await ctx.db.rpc(
+      operation === 'tutor_enrol' ? 'tutor_enrol_student' : 'update_schedule',
+      { org: ctx.org, ...rest },
+    );
+    if (!result.error && quota) {
+      let cid = (rest as { cid?: string }).cid;
+      if (!cid) {
+        const enrolled = await ctx.db
+          .from('enrollments')
+          .select('class_id')
+          .eq('organization_id', ctx.org)
+          .eq('student_id', String(result.data))
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (enrolled.error)
+          throw new Error('Murid didaftar tetapi kuota sesi sebulan gagal disimpan');
+        cid = String(enrolled.data.class_id);
+      }
+      const saved = await ctx.db.rpc('set_class_quota', {
+        org: ctx.org,
+        cid,
+        sessions_per_month: quota,
+      });
+      if (saved.error) result = saved;
+    }
   } else {
     if (['transfer_class', 'class_rates', 'tutor_rate', 'reopen_report'].includes(operation))
       requireRoles(ctx, ['owner', 'admin']);
@@ -402,7 +440,6 @@ export async function executeMutation(
       add_program: 'add_student_program',
       change_program: 'change_student_program',
       remove_program: 'remove_student_program',
-      tutor_enrol: 'tutor_enrol_student',
       save_guardian: 'save_student_guardian',
       invoice_paid: 'mark_invoice_paid',
       tutor_paid: 'mark_tutor_paid',
@@ -410,7 +447,8 @@ export async function executeMutation(
       remove_student: 'remove_student',
       update_student: 'update_student',
       save_tutor_remark: 'save_tutor_remark',
-      update_schedule: 'update_schedule',
+      close_month: 'close_tutor_month',
+      extra_session: 'mark_extra_session',
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',
       remove_tutor: 'remove_tutor',

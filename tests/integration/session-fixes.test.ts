@@ -49,6 +49,8 @@ beforeAll(async () => {
   await db.exec(stub);
   for (const f of (await readdir('supabase/migrations')).filter((x) => x.endsWith('.sql')).sort())
     await db.exec(await readFile(`supabase/migrations/${f}`, 'utf8'));
+  // Kuota sesi sebulan (migrasi 50) tidak diuji di sini: kelas baharu ujian ini tanpa had.
+  await db.exec('alter table classes alter column sessions_per_month set default 31');
   await db.exec(`insert into auth.users(id) values('${owner}'),('${tutor}');
    insert into organizations(id,slug) values('${org}','aqr-test');
    insert into staff_profiles(id,auth_user_id,display_name) values('${owner}','${owner}','Pemilik'),('${tutor}','${tutor}','Tutor Ujian');

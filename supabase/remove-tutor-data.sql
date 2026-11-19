@@ -90,6 +90,7 @@ delete from public.guardians where id in (select guardian_id from rm_guardians);
 delete from public.students where id in (select student_id from rm_students);
 delete from public.tutor_payment_details where staff_id in (select staff_id from rm_staff);
 delete from public.tutor_month_payments where staff_id in (select staff_id from rm_staff);
+delete from public.tutor_month_closures where staff_id in (select staff_id from rm_staff);
 delete from public.tutor_applications where auth_user_id in (select auth_user_id from rm_staff);
 -- Log audit tutor ini dan log admin ke atas data yang dipadam.
 delete from public.audit_events where actor_id in (select auth_user_id from rm_staff)

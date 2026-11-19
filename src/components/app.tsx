@@ -76,6 +76,15 @@ import {
   monthLabel,
 } from '@/lib/core';
 import { buildReport, allowanceRows, feeRows } from '@/lib/reporting';
+import {
+  canCloseMonth,
+  classQuota,
+  closeOpensOn,
+  countsTowardQuota,
+  monthClosure,
+  quotaProblem,
+  quotaUsed,
+} from '@/lib/monthly-quota';
 import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/payslip';
 import { loadBrandBytes } from '@/lib/brand';
 import { demoSnapshot } from '@/lib/student-reports';
@@ -128,7 +137,8 @@ const weekDays: [string, string][] = [
   ['6', 'Sabtu'],
   ['0', 'Ahad'],
 ];
-// Slot mingguan: bilangan sesi seminggu menentukan berapa pasangan hari + jam dipaparkan.
+// Sesi dikira ikut bulan: tutor memilih sesi sebulan (kuota tetap); pasangan hari + jam ialah masa
+// kelas mingguan, lalai satu slot bagi setiap 4 sesi sebulan.
 // No. WhatsApp: kod negara + nombor ditaip bebas; pratonton menunjukkan nombor yang akan disimpan.
 function PhoneField({
   label,
@@ -272,16 +282,53 @@ function FlexibleField({ initial = false }: { initial?: boolean }) {
     </div>
   );
 }
-function WeeklySlots({ initial = [] }: { initial?: { day: number; time: string }[] }) {
-  const [count, setCount] = useState(Math.max(1, initial.length));
+function WeeklySlots({
+  initial = [],
+  quota = 4,
+}: {
+  initial?: { day: number; time: string }[];
+  quota?: number;
+}) {
+  const [perMonth, setPerMonth] = useState(quota);
+  const [count, setCount] = useState(Math.max(1, initial.length || Math.ceil(quota / 4)));
   return (
     <>
       <label>
-        Sesi seminggu
-        <select name="per_week" value={count} onChange={(e) => setCount(Number(e.target.value))}>
-          {[1, 2, 3, 4, 5].map((n) => (
+        Sesi sebulan
+        <select
+          name="per_month"
+          value={perMonth}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            setPerMonth(n);
+            setCount(Math.min(5, Math.max(1, Math.ceil(n / 4))));
+          }}
+        >
+          {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
             <option key={n} value={n}>
               {n} sesi
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="schedule-note">
+        Tetap {perMonth} sesi setiap bulan walaupun bulan itu ada 5 minggu. Rekod melebihi{' '}
+        {perMonth} sesi ditolak; Cuti bermaklum tidak dikira.
+      </p>
+      <label>
+        Hari kelas seminggu
+        <select
+          name="per_week"
+          value={count}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            setCount(n);
+            setPerMonth(Math.min(20, n * 4));
+          }}
+        >
+          {[1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>
+              {n} hari
             </option>
           ))}
         </select>
@@ -289,7 +336,7 @@ function WeeklySlots({ initial = [] }: { initial?: { day: number; time: string }
       {Array.from({ length: count }, (_, i) => (
         <div className="slot-row" key={i}>
           <label>
-            Sesi {i + 1}: hari
+            Kelas {i + 1}: hari
             <select
               name={`day_${i + 1}`}
               required
@@ -317,6 +364,30 @@ function WeeklySlots({ initial = [] }: { initial?: { day: number; time: string }
         </div>
       ))}
     </>
+  );
+}
+// Bar kemajuan kuota sesi sebulan: sesi direkod / sesi sebulan.
+function QuotaBar({ done, quota, label }: { done: number; quota: number; label: string }) {
+  return (
+    <span className={`quota-bar${done >= quota ? ' full' : ''}`}>
+      <span className="quota-text">
+        <span>{label}</span>
+        <span className="quota-count">
+          {done}/{quota} sesi
+          {done > quota ? ` · +${done - quota} tambahan` : done === quota ? ' · penuh' : ''}
+        </span>
+      </span>
+      <span
+        className="progress-track"
+        role="progressbar"
+        aria-label={`${label}: ${done} daripada ${quota} sesi`}
+        aria-valuemin={0}
+        aria-valuemax={quota}
+        aria-valuenow={done}
+      >
+        <i style={{ width: `${Math.min(100, (done / quota) * 100)}%` }} />
+      </span>
+    </span>
   );
 }
 const nav = [
@@ -465,6 +536,11 @@ export function App({
   mustChangePassword?: boolean;
 }) {
   const [data, setData] = useState(initial);
+  // Demo: tindakan berturut-turut (cth. sesi tambahan → kehadiran) membina atas data terkini.
+  const demoData = useRef(initial);
+  useEffect(() => {
+    demoData.current = data;
+  }, [data]);
   const [hasPassword, setHasPassword] = useState(passwordSet);
   // Kata laluan ditetapkan semula oleh admin: tutor wajib menukarnya sebelum meneruskan.
   const [mustChange, setMustChange] = useState(mustChangePassword);
@@ -697,7 +773,7 @@ export function App({
     setNotice('');
     try {
       if (demo) {
-        const next = structuredClone(data);
+        const next = structuredClone(demoData.current);
         const id = `demo-${crypto.randomUUID()}`;
         const table: Record<string, string> = {
           student: 'students',
@@ -810,6 +886,7 @@ export function App({
             max_capacity: 1,
             active: true,
             flexible: !!payload.flexible,
+            sessions_per_month: payload.sessions_per_month ?? null,
           });
           const today = new Date().toISOString().slice(0, 10);
           next.class_tutors.push({
@@ -1028,6 +1105,16 @@ export function App({
             starts_on: new Date().toISOString().slice(0, 10),
           });
         } else if (operation === 'assessment') {
+          // Kuota sesi sebulan (sama seperti pencetus DB): rekod murid yang sama disimpan semula dibenarkan.
+          const already = next.attendance.some(
+            (a) =>
+              a.session_id === payload.sid &&
+              ['present', 'late', 'makeup', 'absent'].includes(String(a.status)),
+          );
+          const over = already
+            ? null
+            : quotaProblem(next, payload.sid, String(payload.attendance_status));
+          if (over) throw new Error(over);
           const sess = next.class_sessions.find((s) => s.id === payload.sid)!;
           const cls = next.classes.find((c) => c.id === sess.class_id)!;
           const program = next.programs.find((p) => p.id === cls.program_id)!;
@@ -1327,6 +1414,8 @@ export function App({
           const cls = next.classes.find((c) => c.id === cid);
           if (cls && payload.flexible !== null && payload.flexible !== undefined)
             cls.flexible = !!payload.flexible;
+          if (cls && payload.sessions_per_month)
+            cls.sessions_per_month = payload.sessions_per_month;
           (payload.slots as { day: number; time: string }[]).forEach((slot, k) => {
             next.class_schedules.push({
               id: `${id}-rule-${k}`,
@@ -1436,7 +1525,26 @@ export function App({
             status: 'valid',
           });
           inv.status = 'paid';
+        } else if (operation === 'extra_session') {
+          next.class_sessions.find((s) => s.id === payload.sid)!.extra = true;
+        } else if (operation === 'close_month') {
+          if (monthClosure(next, activeTutor, String(payload.period)))
+            throw new Error('Bulan ini sudah ditanda Selesai');
+          if (!canCloseMonth(String(payload.period)))
+            throw new Error('Butang Selesai dibuka pada 7 hari terakhir bulan');
+          (next.tutor_month_closures ||= []).push({
+            id,
+            staff_id: activeTutor,
+            period: payload.period,
+            sessions: allowances.filter((r) => r.tutorId === activeTutor && r.payable_sen > 0)
+              .length,
+            closed_at: new Date().toISOString(),
+          });
         } else if (operation === 'tutor_paid') {
+          if (!monthClosure(next, payload.staff_id, String(payload.period)))
+            throw new Error(
+              'Tutor belum menekan Selesai bagi bulan ini; elaun belum boleh dibayar',
+            );
           (next.tutor_month_payments ||= []).push({
             id,
             staff_id: payload.staff_id,
@@ -1453,6 +1561,7 @@ export function App({
           pay.status = 'void';
           pay.void_reason = payload.reason;
         } else throw new Error('Tindakan ini memerlukan sambungan sebenar');
+        demoData.current = next;
         setData(next);
         setNotice('Demo: perubahan disimpan dalam memori tab sahaja.');
       } else {
@@ -1759,7 +1868,7 @@ export function App({
       ],
       extra: (
         <>
-          <WeeklySlots initial={initial} />
+          <WeeklySlots initial={initial} quota={classQuota(visible, classId)} />
           <FlexibleField initial={flexible} />
           <p className="schedule-note">
             Sesi yang sudah direkod dan sesi tambahan tidak berubah. Sesi akan datang yang belum
@@ -1773,6 +1882,7 @@ export function App({
         effective_from: v.effective_from,
         end_date: v.end_date,
         flexible: v.flexible === 'on',
+        sessions_per_month: Number(v.per_month),
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],
@@ -1844,6 +1954,7 @@ export function App({
         guardian_phone: joinPhone(v.guardian_cc, v.guardian_phone) ?? '',
         tutor_id: academic ? v.tutor_id : null,
         flexible: v.flexible === 'on',
+        sessions_per_month: Number(v.per_month),
         slots: Array.from({ length: Number(v.per_week) }, (_, i) => ({
           day: Number(v[`day_${i + 1}`]),
           time: v[`time_${i + 1}`],
@@ -2261,14 +2372,11 @@ export function App({
       setPendingMove({ cid, start });
   };
   // Ringkasan sesi bagi satu murid (kelas individu): selesai dan berbaki bulan dipilih.
+  // Kemajuan kuota bulan dipilih: sesi yang dikira (Cuti bermaklum tidak) berbanding sesi sebulan.
   const classCounts = (cid: unknown) => {
-    const inMonth = monthlySessions.filter(
-      (s) => s.class_id === cid && !['cancelled', 'rescheduled'].includes(String(s.status)),
-    );
-    return {
-      done: inMonth.filter((s) => s.status === 'completed').length,
-      left: inMonth.filter((s) => s.status !== 'completed').length,
-    };
+    const quota = classQuota(visible, cid);
+    const done = quotaUsed(visible, cid, month);
+    return { done, quota, left: Math.max(0, quota - done) };
   };
   // Tambah rekod sesi terus dari skrin rekod: tarikh lalai hari ini, boleh backdated. Jam diisi
   // daripada masa pilihan kelas (slot hari ini jika ada, jika tidak slot pertama), atau jam sekarang.
@@ -2332,19 +2440,24 @@ export function App({
       <>
         <Card
           title="Kelas telah dilaksanakan"
-          subtitle={
-            byId('classes').get(current.class_id)?.flexible
-              ? `${monthLabel(month)}: ${counts.done} kelas direkod · jadual fleksibel`
-              : `${monthLabel(month)}: ${counts.done} selesai · ${counts.left} sesi berbaki`
-          }
+          subtitle={`${monthLabel(month)}: ${counts.done} daripada ${counts.quota} sesi sebulan${
+            byId('classes').get(current.class_id)?.flexible ? ' · jadual fleksibel' : ''
+          }`}
         >
+          <QuotaBar done={counts.done} quota={counts.quota} label="Sesi bulan ini" />
           {!done.length && <Empty text={`Belum ada kelas direkod pada ${monthLabel(month)}.`} />}
           <Table
             headers={['Tarikh', 'Masa', 'Kehadiran', '']}
             rows={done.map((s) => [
               dateLabel(String(s.starts_at)),
               timeLabel(String(s.starts_at)),
-              markOf(s.id),
+              s.extra ? (
+                <span key="m">
+                  {markOf(s.id)} <span className="pill">Tambahan</span>
+                </span>
+              ) : (
+                markOf(s.id)
+              ),
               <div key="a" className="button-row">
                 {s.id === current.id ? (
                   <span className="pill">Sedang dibuka di atas</span>
@@ -2720,7 +2833,6 @@ export function App({
           <div className="program-list">
             {programsOf(id).map((p) => {
               const counts = classCounts(p.classId);
-              const total = counts.done + counts.left;
               return (
                 <article key={p.id} className="program-detail">
                   <header className="program-head">
@@ -2760,8 +2872,8 @@ export function App({
                       </dd>
                     </div>
                     <div>
-                      <dt>Seminggu</dt>
-                      <dd>{p.slots.length ? `${p.slots.length} sesi` : '—'}</dd>
+                      <dt>Sebulan</dt>
+                      <dd>{counts.quota} sesi</dd>
                     </div>
                     <div>
                       <dt>Tempoh sesi</dt>
@@ -2774,21 +2886,7 @@ export function App({
                   </dl>
                   <footer className="program-foot">
                     <div className="month-progress">
-                      {p.flexible ? (
-                        <span>
-                          {monthLabel(month)} · <strong>{counts.done} kelas direkod</strong>
-                        </span>
-                      ) : (
-                        <>
-                          <span>
-                            {monthLabel(month)} · <strong>{counts.done} selesai</strong> ·{' '}
-                            {counts.left} berbaki
-                          </span>
-                          <span className="progress-track" aria-hidden="true">
-                            <i style={{ width: `${total ? (counts.done / total) * 100 : 0}%` }} />
-                          </span>
-                        </>
-                      )}
+                      <QuotaBar done={counts.done} quota={counts.quota} label={monthLabel(month)} />
                     </div>
                     <div className="button-row compact">
                       {(academic || role === 'tutor') && p.status === 'active' && (
@@ -3138,6 +3236,64 @@ export function App({
       </>
     );
   }
+  // Butang Selesai bulan (satu untuk semua murid): wajib ditekan sebelum elaun bulan itu dibayar.
+  // Rekod tidak dikunci; elaun tetap dikira daripada sesi yang direkod pada bulan itu sahaja.
+  function monthCloseCard() {
+    const today = klDate(new Date().toISOString());
+    if (month > today.slice(0, 7)) return null;
+    const closed = monthClosure(visible, activeTutor, month);
+    const mine = allowances.filter((r) => r.tutorId === activeTutor && r.payable_sen > 0);
+    const summary = `${mine.length} sesi direkod · elaun ${formatMoney(allowanceOf(activeTutor))}`;
+    const open = canCloseMonth(month, today);
+    return (
+      <Card
+        title={`Selesai bulan · ${monthLabel(month)}`}
+        subtitle={
+          closed
+            ? `${summary}. Rekod masih boleh dikemas kini.`
+            : `${summary}. Elaun dibayar ikut sesi yang direkod bulan ini sahaja, dan hanya selepas butang Selesai ditekan.`
+        }
+        // Belum Selesai: kad dan butang merah supaya tutor perasan.
+        className={`month-close${closed ? '' : ' pending'}`}
+        action={
+          closed ? (
+            <span className="badge success">
+              <Check size={14} /> Selesai · {dateLabel(String(closed.closed_at))}
+            </span>
+          ) : (
+            <button
+              className="primary alert-button"
+              disabled={busy || !open}
+              onClick={() =>
+                setDialog({
+                  title: `Selesai ${monthLabel(month)} · ${summary}`,
+                  operation: 'close_month',
+                  fields: [],
+                  transform: () => ({ period: month }),
+                })
+              }
+            >
+              <Check size={16} />
+              Selesai {monthLabel(month)}
+            </button>
+          )
+        }
+      >
+        {!closed && !open && (
+          <p className="schedule-note">
+            Butang Selesai dibuka pada 7 hari terakhir bulan, mulai{' '}
+            {dateLabel(`${closeOpensOn(month)}T12:00:00+08:00`)}.
+          </p>
+        )}
+        {!closed && open && (
+          <p className="schedule-note alert">
+            Wajib tekan Selesai selepas semua kelas {monthLabel(month)} direkod. Elaun bulan ini
+            tidak boleh dibayar selagi butang ini belum ditekan.
+          </p>
+        )}
+      </Card>
+    );
+  }
   function calendarScreen() {
     if (role === 'tutor') {
       const mine = all('class_tutors')
@@ -3147,37 +3303,44 @@ export function App({
         (e) => e.status === 'active' && mine.includes(e.class_id),
       );
       return (
-        <Card title="Rekod kehadiran" subtitle="Tekan nama murid untuk merekod kelas">
-          <div className="student-picker">
-            {rows
-              .filter((e) =>
-                matches({
-                  id: '',
-                  name: lookup('students', e.student_id),
-                  program: lookup('classes', e.class_id, 'name'),
-                }),
-              )
-              .map((e) => {
-                const c = byId('classes').get(e.class_id);
-                return (
-                  <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
-                    <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
-                    <span>
-                      <strong>{lookup('students', e.student_id)}</strong>
-                      <small>
-                        {lookup('programs', c?.program_id, 'name')} ·{' '}
-                        {c?.flexible
-                          ? `Jadual fleksibel · ${classCounts(e.class_id).done} kelas direkod`
-                          : `Selesai ${classCounts(e.class_id).done} · Berbaki ${classCounts(e.class_id).left}`}
-                      </small>
-                    </span>
-                    <ChevronRight size={18} />
-                  </button>
-                );
-              })}
-          </div>
-          {!rows.length && <Empty text="Belum ada murid. Daftar murid di menu Murid." />}
-        </Card>
+        <>
+          {monthCloseCard()}
+          <Card title="Rekod kehadiran" subtitle="Tekan nama murid untuk merekod kelas">
+            <div className="student-picker">
+              {rows
+                .filter((e) =>
+                  matches({
+                    id: '',
+                    name: lookup('students', e.student_id),
+                    program: lookup('classes', e.class_id, 'name'),
+                  }),
+                )
+                .map((e) => {
+                  const c = byId('classes').get(e.class_id);
+                  const counts = classCounts(e.class_id);
+                  return (
+                    <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
+                      <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
+                      <span>
+                        <strong>{lookup('students', e.student_id)}</strong>
+                        <small>
+                          {lookup('programs', c?.program_id, 'name')}
+                          {c?.flexible ? ' · Jadual fleksibel' : ''}
+                        </small>
+                        <QuotaBar
+                          done={counts.done}
+                          quota={counts.quota}
+                          label={monthLabel(month)}
+                        />
+                      </span>
+                      <ChevronRight size={18} />
+                    </button>
+                  );
+                })}
+            </div>
+            {!rows.length && <Empty text="Belum ada murid. Daftar murid di menu Murid." />}
+          </Card>
+        </>
       );
     }
     // Pentadbir hanya melihat ringkasan bulan dan sesi hari ini; butiran penuh di profil tutor.
@@ -4020,6 +4183,17 @@ export function App({
       return (
         <span key="pay" className="badge success">
           Dibayar · {dateLabel(String(last?.paid_on))}
+        </span>
+      );
+    // Elaun hanya boleh dibayar selepas tutor menekan Selesai bagi bulan itu.
+    if (due - paid > 0 && !monthClosure(visible, tid, month))
+      return (
+        <span
+          key="pay"
+          className="badge danger"
+          title="Tutor perlu tekan Selesai di Sesi & kehadiran"
+        >
+          Belum tekan Selesai
         </span>
       );
     if (!finance)
@@ -5560,6 +5734,7 @@ function SessionEditor({
   // Muka surat ditaip sebagai teks: "100" atau julat "100-102".
   const [pageText, setPageText] = useState(formatPages(savedReading(students[0]?.id)));
   const [attendance, setAttendance] = useState(savedAttendance(students[0]?.id));
+  const [extraOk, setExtraOk] = useState(false);
   const [assessment, setAssessment] = useState<Partial<Assessment>>(
     savedAssessment(students[0]?.id),
   );
@@ -5675,6 +5850,15 @@ function SessionEditor({
   } catch {
     /* Explicit choices required. */
   }
+  // Kuota sebulan: rekod baharu melebihi kuota hanya disimpan selepas disahkan sebagai sesi tambahan.
+  const monthQuota = classQuota(data, session.class_id);
+  const monthUsed = quotaUsed(data, session.class_id, classDate.slice(0, 7), session.id);
+  const overQuota =
+    !session.extra &&
+    countsTowardQuota(attendance) &&
+    !data.attendance.some((a) => a.session_id === session.id && countsTowardQuota(a.status)) &&
+    monthUsed >= monthQuota;
+  if (overQuota && !extraOk) valid = false;
   // Pilihan berbilang: medan jamak menyimpan semua pilihan; medan tunggal = pilihan pertama.
   const plural = {
     skill: 'skills',
@@ -5764,6 +5948,7 @@ function SessionEditor({
       if (other) sid = String(other.id);
       else if (!(await reschedule(session, newStart))) return;
     }
+    if (overQuota && extraOk && !(await mutate('extra_session', { sid }))) return;
     const success = await mutate('assessment', {
       sid,
       student: studentId,
@@ -6106,6 +6291,20 @@ function SessionEditor({
               <BookOpen size={28} />
               <p>{preview}</p>
               <small>Template v1 · berdasarkan pilihan sebenar sahaja</small>
+              {overQuota && (
+                <label className="extra-confirm">
+                  <input
+                    type="checkbox"
+                    checked={extraOk}
+                    disabled={locked}
+                    onChange={(e) => setExtraOk(e.target.checked)}
+                  />
+                  <span>
+                    Ini sesi ke-{monthUsed + 1}, melebihi {monthQuota} sesi sebulan. Rekod sebagai{' '}
+                    <strong>sesi tambahan</strong> (dikira dalam elaun dan yuran).
+                  </span>
+                </label>
+              )}
               <div className="button-row">
                 <button
                   className="primary wide"
@@ -6120,13 +6319,15 @@ function SessionEditor({
                 <small className="save-hint">
                   {!attendance
                     ? 'Pilih kehadiran dahulu.'
-                    : readingIssue
-                      ? `Betulkan bacaan: ${readingIssue}.`
-                      : topicMissing
-                        ? 'Isi tajuk/topik pembelajaran dahulu.'
-                        : topicMode
-                          ? 'Lengkapkan penilaian (tahap, penglibatan dan fokus), atau biarkan kosong.'
-                          : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
+                    : overQuota && !extraOk
+                      ? 'Tandakan kotak sesi tambahan dahulu.'
+                      : readingIssue
+                        ? `Betulkan bacaan: ${readingIssue}.`
+                        : topicMissing
+                          ? 'Isi tajuk/topik pembelajaran dahulu.'
+                          : topicMode
+                            ? 'Lengkapkan penilaian (tahap, penglibatan dan fokus), atau biarkan kosong.'
+                            : 'Lengkapkan penilaian (kemahiran, tahap, penglibatan dan fokus), atau biarkan kosong.'}
                 </small>
               )}
               {notice && !busy && (

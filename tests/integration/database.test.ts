@@ -1399,7 +1399,16 @@ describe('PostgreSQL RLS / transaction boundaries', () => {
     ).rows[0];
     expect(pay.status).toBe('verified');
     expect(pay.reference).toBeNull();
-    // Elaun tutor.
+    // Elaun tutor: ditolak sehingga tutor menekan Selesai bagi bulan itu (migrasi 50).
+    await expect(
+      db.query("select mark_tutor_paid($1,$2,'2026-10',12500,9,'2026-10-10','FT123')", [
+        org,
+        tutor,
+      ]),
+    ).rejects.toThrow(/belum menekan Selesai/);
+    await asUser(tutor);
+    await db.query("select close_tutor_month($1,'2026-10')", [org]);
+    await asUser(owner);
     const p1 = (
       await db.query<{ id: string }>(
         "select mark_tutor_paid($1,$2,'2026-10',12500,9,'2026-10-10','FT123') id",

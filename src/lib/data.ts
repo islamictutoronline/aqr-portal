@@ -11,6 +11,8 @@ export const projections: Record<string, string> = {
   tutor_payment_details: 'id,staff_id,job_title,department,bank_name,account_holder,account_number',
   tutor_month_payments:
     'id,staff_id,period,amount_sen,sessions,paid_on,reference,status,void_reason,created_at',
+  // Selesai bulan oleh tutor (migrasi 50).
+  tutor_month_closures: 'id,staff_id,period,sessions,closed_at',
   tutor_applications: 'id,display_name,status,created_at',
   student_guardians: 'id,student_id,guardian_id,portal_allowed,is_billing_contact',
   organizations: 'id,name,phone,address,logo_path',
@@ -21,13 +23,13 @@ export const projections: Record<string, string> = {
   subjects: 'id,slug,name',
   programs: 'id,subject_id,code,name,curriculum_version',
   curriculum_units: 'id,program_id,code,name,outcome,sort_order',
-  classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible',
+  classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible,sessions_per_month',
   class_tutors: 'id,class_id,staff_id,starts_on,ends_on',
   class_schedules:
     'id,class_id,day_of_week,start_time,duration_minutes,effective_from,effective_to',
   enrollments: 'id,student_id,class_id,starts_on,ends_on,status,planned_quota',
   class_sessions:
-    'id,class_id,tutor_id,starts_at,ends_at,status,review_status,topic,verified_by,approved_by',
+    'id,class_id,tutor_id,starts_at,ends_at,status,review_status,topic,verified_by,approved_by,extra',
   attendance: 'id,session_id,student_id,status,reason,reading',
   generated_parent_comments:
     'id,session_id,student_id,selections,template_version,text,status,published_at,created_at',
@@ -56,7 +58,13 @@ export const projections: Record<string, string> = {
     'id,reported_name,note,program_code,duration_minutes,reported_date,planned_quota,status,student_id,session_id',
   private_import_batches: 'id,period,reported_count,planned_count,indicative_sen,status',
 };
-const OPTIONAL_TABLES = ['class_rate_overrides', 'tutor_rate_overrides'];
+const OPTIONAL_TABLES = ['class_rate_overrides', 'tutor_rate_overrides', 'tutor_month_closures'];
+// Lajur baharu yang belum wujud sebelum migrasinya dipasang: baca semula tanpa lajur itu.
+const FALLBACK_FIELDS: Record<string, string> = {
+  classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible',
+  class_sessions:
+    'id,class_id,tutor_id,starts_at,ends_at,status,review_status,topic,verified_by,approved_by',
+};
 export async function loadData(ctx: { db: SupabaseClient; org: string }): Promise<Dataset> {
   const pairs = await Promise.all(
     Object.entries(projections).map(async ([table, fields]) => {
@@ -65,13 +73,20 @@ export async function loadData(ctx: { db: SupabaseClient; org: string }): Promis
         if (error) throw new Error('Gagal membaca direktori tutor');
         return [table, data ?? []] as const;
       }
-      let query = ctx.db.from(table).select(fields).order('created_at');
-      if (table === 'organizations') query = query.eq('id', ctx.org);
-      else if (table !== 'staff_profiles') query = query.eq('organization_id', ctx.org);
+      const build = (columns: string) => {
+        const query = ctx.db.from(table).select(columns).order('created_at');
+        if (table === 'organizations') return query.eq('id', ctx.org);
+        return query.eq('organization_id', ctx.org);
+      };
+      let query = build(fields);
       // Pagination avoids Supabase's default 1000-row truncation. Every page remains under RLS.
       const rows = [];
       for (let offset = 0; ; offset += 1000) {
-        const { data, error } = await query.range(offset, offset + 999);
+        let { data, error } = await query.range(offset, offset + 999);
+        if (error && offset === 0 && FALLBACK_FIELDS[table]) {
+          query = build(FALLBACK_FIELDS[table]);
+          ({ data, error } = await query.range(offset, offset + 999));
+        }
         // Jadual kadar khas belum wujud sebelum migrasi 38 dipasang: anggap kosong.
         if (error && OPTIONAL_TABLES.includes(table)) break;
         if (error) throw new Error(`Gagal membaca ${table}`);

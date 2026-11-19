@@ -2915,6 +2915,80 @@ label {
   border-radius: 999px;
   background: linear-gradient(90deg, #3a7369, #12433d);
 }
+/* Kuota sesi sebulan: sesi direkod / sesi sebulan. */
+.quota-bar {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  max-width: 360px;
+  margin-top: 6px;
+}
+.card > .quota-bar {
+  margin: 0 0 14px;
+}
+.quota-text {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--slate);
+}
+.quota-count {
+  color: var(--navy);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.quota-bar.full .progress-track i {
+  background: linear-gradient(90deg, #b8892f, #8a6418);
+}
+.extra-confirm {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #eadbb5;
+  border-radius: 10px;
+  background: #fbf6ea;
+  color: #6f5520;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.extra-confirm input {
+  margin-top: 2px;
+  flex: none;
+}
+.month-close .card-heading .badge {
+  gap: 4px;
+  align-items: center;
+}
+/* Butang Selesai bulan yang belum ditekan: merah supaya tutor perasan. */
+.month-close.pending {
+  border-color: #f3c9c2;
+  box-shadow: inset 4px 0 0 #c4321f;
+}
+.month-close .alert-button,
+.portal-theme .month-close .alert-button {
+  background: linear-gradient(115deg, #d23a24, #a5281a);
+  border-color: #a5281a;
+  color: #fff;
+  box-shadow: 0 4px 12px #c4321f2e;
+}
+.month-close .alert-button:hover:not(:disabled),
+.portal-theme .month-close .alert-button:hover:not(:disabled) {
+  background: #9a2416;
+}
+.schedule-note.alert {
+  background: #fdf1ef;
+  border-color: #f3c9c2;
+  color: #8f2516;
+  font-weight: 600;
+}
+.schedule-note.warn {
+  background: #fbf6ea;
+  border-color: #eadbb5;
+  color: #6f5520;
+}
 .schedule-button {
   margin-top: 0;
 }

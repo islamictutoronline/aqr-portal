@@ -24,6 +24,8 @@ beforeAll(async () => {
   await db.exec(stub);
   for (const f of (await readdir('supabase/migrations')).filter((x) => x.endsWith('.sql')).sort())
     await db.exec(await readFile(`supabase/migrations/${f}`, 'utf8'));
+  // Kuota sesi sebulan (migrasi 50) tidak diuji di sini: kelas baharu ujian ini tanpa had.
+  await db.exec('alter table classes alter column sessions_per_month set default 31');
   await db.exec(`insert into auth.users(id) values('${owner}'),('${keep}'),('${gone}');
    insert into organizations(id,slug) values('${org}','aqr-test');
    insert into staff_profiles(id,auth_user_id,display_name) values('${owner}','${owner}','Pemilik'),('${keep}','${keep}','AHMAD MUZZAMMIL BIN MOHAMMAD NAJIB'),('${gone}','${gone}','AHMAD NAJIB');
@@ -87,6 +89,11 @@ beforeAll(async () => {
   ).rows[0].class_id;
   await db.query('select set_class_rates($1,$2,1500,1200,$3)', [org, cls, '2020-01-01']);
   await db.query('select set_tutor_rate($1,$2,100,$3)', [org, gone, '2020-01-01']);
+  // Selesai bulan (migrasi 50) dimasukkan terus: butang tutor hanya dibuka pada minggu terakhir.
+  await db.exec(
+    `reset role; insert into tutor_month_closures(organization_id,staff_id,period) values('${org}','${gone}','${period}');`,
+  );
+  await asUser(owner);
   await db.query('select mark_tutor_paid($1,$2,$3,900,1)', [org, gone, period]);
   for (const st of [k1, g1, g2])
     await db.query('select prepare_student_report($1,$2,$3)', [org, st, period]);
@@ -139,6 +146,7 @@ describe('remove-tutor-data.sql', () => {
       0,
     );
     expect(await count('select count(*) n from tutor_month_payments')).toBe(0);
+    expect(await count('select count(*) n from tutor_month_closures')).toBe(0);
     expect(await count('select count(*) n from tutor_rate_overrides')).toBe(0);
     expect(await count('select count(*) n from class_rate_overrides')).toBe(0);
     expect(await count('select count(*) n from monthly_tutor_remarks')).toBe(0);

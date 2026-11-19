@@ -6,7 +6,7 @@ async function enrol(page: Page, name: string, program: string) {
   await page.getByLabel('No. WhatsApp penjaga').fill('012-345 6789');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: program });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
-  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
+  await page.getByRole('combobox', { name: 'Kelas 1: hari' }).selectOption({ label: 'Isnin' });
   await page.getByLabel('Jam').first().fill('20:00');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
 }
@@ -224,10 +224,10 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   // Tiada medan tarikh semasa daftar (tarikh lalai digunakan).
   await expect(page.getByLabel('Sehingga tarikh')).toHaveCount(0);
   await expect(page.getByLabel('Mula tarikh')).toHaveCount(0);
-  await page.getByRole('combobox', { name: 'Sesi seminggu' }).selectOption('2');
-  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
+  await page.getByRole('combobox', { name: 'Hari kelas seminggu' }).selectOption('2');
+  await page.getByRole('combobox', { name: 'Kelas 1: hari' }).selectOption({ label: 'Isnin' });
   await page.getByLabel('Jam').nth(0).fill('20:00');
-  await page.getByRole('combobox', { name: 'Sesi 2: hari' }).selectOption({ label: 'Khamis' });
+  await page.getByRole('combobox', { name: 'Kelas 2: hari' }).selectOption({ label: 'Khamis' });
   await page.getByLabel('Jam').nth(1).fill('21:00');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   const row = page.getByRole('row').filter({ hasText: 'Murid Jadual' });
@@ -235,7 +235,7 @@ test('tutor registers a student with a weekly schedule, sees sessions, then remo
   await row.getByRole('button', { name: /Lihat profil/ }).click();
   const detail = page.locator('.program-detail').first();
   await expect(detail).toContainText('30 minit');
-  await expect(detail).toContainText('2 sesi');
+  await expect(detail).toContainText('8 sesi');
   await expect(detail.locator('.slot-chip')).toHaveText(['Isnin 20:00', 'Khamis 21:00']);
   await expect(detail).toContainText('31/12/2027');
   if ((page.viewportSize()?.width || 0) <= 700)
@@ -284,12 +284,13 @@ test('tutor edits a recorded attendance, sees remaining sessions and voids a cla
   if ((page.viewportSize()?.width || 0) <= 700)
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await expect(page.locator('.student-picker button').first()).toContainText('Berbaki');
+  await expect(page.locator('.student-picker button').first()).toContainText(/\d+\/\d+ sesi/);
   await page.locator('.student-picker button').first().click();
   const history = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
-  await expect(history).toContainText('sesi berbaki');
+  await expect(history).toContainText('sesi sebulan');
+  await expect(history.getByRole('progressbar')).toBeVisible();
   await expect(history.getByText('Sedang dibuka di atas')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Simpan perubahan' })).toBeVisible();
   // Slot lepas yang tidak direkod tidak dipaparkan lagi.
@@ -686,7 +687,8 @@ test('one-tap payments: tutor allowance paid (with void kept as history) and inv
 }) => {
   await page.goto('/?demo=1#/allowance');
   await page.reload();
-  const firstRow = page.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  // Tutor Contoh 2 sudah menekan Selesai bagi bulan demo; Tutor Contoh 1 belum.
+  const firstRow = page.getByRole('row').filter({ hasText: 'Tutor Contoh 2' });
   await firstRow.getByRole('button', { name: 'Elaun telah dibayar' }).click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(firstRow).toContainText('Dibayar ·');
@@ -723,7 +725,7 @@ test('siblings: pick existing guardian or type the same number; "Daftar adik-ber
   await page.getByLabel('No. WhatsApp penjaga').fill('019-777 8888');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
-  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Isnin' });
+  await page.getByRole('combobox', { name: 'Kelas 1: hari' }).selectOption({ label: 'Isnin' });
   await page.getByLabel('Jam').first().fill('20:00');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   // Taip no. yang sama → amaran adik-beradik terus dipaparkan.
@@ -744,7 +746,7 @@ test('siblings: pick existing guardian or type the same number; "Daftar adik-ber
   await page.getByLabel('Nama penuh', { exact: true }).fill('Adik Ujian');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
-  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Selasa' });
+  await page.getByRole('combobox', { name: 'Kelas 1: hari' }).selectOption({ label: 'Selasa' });
   await page.getByLabel('Jam').first().fill('20:00');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   if ((page.viewportSize()?.width || 0) <= 700)
@@ -768,18 +770,18 @@ test('student profile: rename student and change weekly schedule (prefilled), se
     .click();
   // Ubah jadual: nilai semasa diisi.
   await page.getByRole('button', { name: 'Ubah jadual' }).click();
-  await expect(page.getByRole('combobox', { name: 'Sesi 1: hari' })).toHaveValue('1');
+  await expect(page.getByRole('combobox', { name: 'Kelas 1: hari' })).toHaveValue('1');
   await expect(page.getByLabel('Jam').first()).toHaveValue('20:00');
-  await page.getByRole('combobox', { name: 'Sesi seminggu' }).selectOption('2');
-  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Rabu' });
-  await page.getByRole('combobox', { name: 'Sesi 2: hari' }).selectOption({ label: 'Jumaat' });
+  await page.getByRole('combobox', { name: 'Hari kelas seminggu' }).selectOption('2');
+  await page.getByRole('combobox', { name: 'Kelas 1: hari' }).selectOption({ label: 'Rabu' });
+  await page.getByRole('combobox', { name: 'Kelas 2: hari' }).selectOption({ label: 'Jumaat' });
   await page.getByLabel('Jam').nth(1).fill('17:30');
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('20');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   const detail = page.locator('.program-detail').first();
   await expect(detail.locator('.slot-chip')).toHaveText(['Rabu 20:00', 'Jumaat 17:30']);
   await expect(detail).toContainText('20 minit');
-  await expect(detail).toContainText('2 sesi');
+  await expect(detail).toContainText('8 sesi');
   // Kemaskini nama murid.
   await page.getByRole('button', { name: 'Kemaskini murid' }).click();
   await page.getByLabel('Nama penuh murid').fill('Murid Nama Baharu');
@@ -880,15 +882,19 @@ test('tutor allowance: unpaid and paid tutors in two columns; paying moves the t
   await page.goto('/?demo=1#/allowance');
   const unpaid = page.getByRole('region', { name: 'Belum dibayar' });
   const paid = page.getByRole('region', { name: 'Sudah dibayar' });
-  await expect(unpaid).toContainText('Tutor Contoh 1');
+  await expect(unpaid).toContainText('Tutor Contoh 2');
   await expect(paid).toContainText('Belum ada elaun dibayar bulan ini.');
   await expect(unpaid).toContainText(/\d tutor · baki RM/);
-  const row = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  // Tutor yang belum menekan Selesai tidak boleh dibayar.
+  const blocked = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  await expect(blocked).toContainText('Belum tekan Selesai');
+  await expect(blocked.getByRole('button', { name: 'Elaun telah dibayar' })).toHaveCount(0);
+  const row = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 2' });
   await row.getByRole('button', { name: 'Elaun telah dibayar' }).click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
-  const moved = paid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
+  const moved = paid.getByRole('row').filter({ hasText: 'Tutor Contoh 2' });
   await expect(moved).toContainText('Dibayar ·');
-  await expect(unpaid).not.toContainText('Tutor Contoh 1');
+  await expect(unpaid).not.toContainText('Tutor Contoh 2');
   await expect(paid).toContainText('1 tutor');
   await moved.getByRole('button', { name: /Butiran/ }).click();
   await expect(page.locator('.tab-total')).toContainText('RM');
@@ -901,7 +907,7 @@ async function adminEnrol(page: Page, name: string, tutor: string, flexible = fa
   await page.getByLabel('No. WhatsApp penjaga').fill('019-555 1212');
   await page.getByRole('combobox', { name: 'Program' }).selectOption({ label: "Iqra'" });
   await page.getByRole('combobox', { name: 'Minit setiap sesi' }).selectOption('30');
-  await page.getByRole('combobox', { name: 'Sesi 1: hari' }).selectOption({ label: 'Rabu' });
+  await page.getByRole('combobox', { name: 'Kelas 1: hari' }).selectOption({ label: 'Rabu' });
   await page.getByLabel('Jam').first().fill('18:15');
   if (flexible) {
     await page.getByLabel('Jadual fleksibel').check();
@@ -927,7 +933,7 @@ test('admin registers a flexible student for a tutor; the tutor records a class 
   const detail = page.locator('.program-detail').first();
   await expect(detail).toContainText('Tutor Contoh 1');
   await expect(detail).toContainText('Jadual fleksibel');
-  await expect(detail).toContainText('0 kelas direkod');
+  await expect(detail).toContainText('0/4 sesi');
   await expect(detail).not.toContainText('berbaki');
   await expect(detail.locator('.slot-chip')).toHaveText(['Rabu 18:15']);
   // Ubah jadual: pilihan fleksibel diisi.
@@ -940,7 +946,8 @@ test('admin registers a flexible student for a tutor; the tutor records a class 
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
   const pick = page.locator('.student-picker button').filter({ hasText: 'Murid Fleksibel' });
-  await expect(pick).toContainText('Jadual fleksibel · 0 kelas direkod');
+  await expect(pick).toContainText('Jadual fleksibel');
+  await expect(pick).toContainText('0/4 sesi');
   await pick.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Tambah rekod sesi' })).toBeVisible();
@@ -950,7 +957,7 @@ test('admin registers a flexible student for a tutor; the tutor records a class 
   await expect(page.getByLabel('Tarikh kelas')).toHaveValue('2026-10-07');
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
-  await expect(page.getByText(/1 kelas direkod · jadual fleksibel/)).toBeVisible();
+  await expect(page.getByText(/1 daripada 4 sesi sebulan · jadual fleksibel/)).toBeVisible();
 });
 test('admin transfers a class to another tutor and sets special fee and tutor allowance rates', async ({
   page,
@@ -1353,4 +1360,77 @@ test('tutor changes a student programme and removes an extra programme without r
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(programs).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'Murid Tukar Program', level: 1 })).toBeVisible();
+});
+test('sessions per month: tutor sees a quota bar per student and presses Selesai once; admin can then pay', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  const first = page.locator('.student-picker button').first();
+  await expect(first.getByRole('progressbar')).toBeVisible();
+  await expect(first).toContainText(/\d+\/\d+ sesi/);
+  const card = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Selesai bulan · Oktober 2026' }),
+  });
+  await expect(card).toContainText('Wajib tekan Selesai');
+  await card.getByRole('button', { name: 'Selesai Oktober 2026' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(card).toContainText('Selesai ·');
+  await expect(card.getByRole('button', { name: 'Selesai Oktober 2026' })).toHaveCount(0);
+  // Pentadbir kini boleh merekod elaun Tutor Contoh 1 sebagai dibayar.
+  await page.getByLabel('Pratonton peranan demo').selectOption('admin');
+  await page.goto('/?demo=1#/allowance');
+  const row = page
+    .getByRole('region', { name: 'Belum dibayar' })
+    .getByRole('row')
+    .filter({ hasText: 'Tutor Contoh 1' });
+  await expect(row.getByRole('button', { name: 'Elaun telah dibayar' })).toBeVisible();
+});
+test('schedule form asks for sessions per month; one class day per 4 sessions', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/students');
+  await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Sesi sebulan' })).toHaveValue('4');
+  await expect(page.getByRole('combobox', { name: 'Hari kelas seminggu' })).toHaveValue('1');
+  await page.getByRole('combobox', { name: 'Sesi sebulan' }).selectOption('8');
+  await expect(page.getByRole('combobox', { name: 'Hari kelas seminggu' })).toHaveValue('2');
+  await expect(page.getByText('Tetap 8 sesi setiap bulan')).toBeVisible();
+});
+test('extra session: beyond the monthly quota the tutor confirms a sesi tambahan and sees 5/4', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await expect(page.locator('.student-picker button').first()).toContainText('2/4 sesi');
+  await page.locator('.student-picker button').first().click();
+  const history = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  const save = page.getByRole('button', { name: 'Simpan kehadiran' });
+  for (const day of ['2026-10-20', '2026-10-21', '2026-10-22']) {
+    await page.locator('.card').first().getByRole('button', { name: 'Tambah rekod sesi' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Tarikh kelas').fill(day);
+    await dialog.getByLabel('Jam').fill('20:00');
+    await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+    await expect(page.getByLabel('Tarikh kelas')).toHaveValue(day);
+    await page.getByRole('button', { name: 'Hadir', exact: true }).click();
+    if (day === '2026-10-22') {
+      // Sesi ke-5: perlu disahkan sebagai sesi tambahan sebelum disimpan.
+      await expect(save).toBeDisabled();
+      await expect(page.getByText('Tandakan kotak sesi tambahan dahulu.')).toBeVisible();
+      await page.getByLabel(/Rekod sebagai sesi tambahan/).check();
+    }
+    await save.click();
+    await expect(page.getByRole('status')).toContainText('memori tab');
+  }
+  await expect(history).toContainText('5/4 sesi · +1 tambahan');
+  await expect(history.getByText('Tambahan', { exact: true })).toBeVisible();
 });
