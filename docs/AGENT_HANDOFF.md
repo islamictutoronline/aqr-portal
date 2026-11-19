@@ -2,7 +2,7 @@
 
 Kemas kini: 19 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Sesi dikira ikut bulan + butang Selesai bulan — 19 November 2026 (setempat, BELUM commit/deploy)
+## Sesi dikira ikut bulan + butang Selesai bulan — 19 November 2026 (dideploy `63e7be5`)
 
 Arahan pengguna: sesi dikira ikut bulan, bukan minggu (dulu 1×seminggu kadang-kadang jadi 5 sesi); "tutor tanda 4 sesi, fix 4 sesi sahaja"; bar kemajuan bawah sesi murid; tutor wajib tekan **Selesai** di akhir bulan dan hanya dibayar ikut sesi yang direkod bulan itu. Keputusan pengguna (soalan pilihan): satu butang Selesai sebulan untuk semua murid; rekod **tidak dikunci** selepas Selesai; elaun **tidak boleh dibayar** sebelum Selesai; yuran ibu bapa ikut sesi direkod dengan had N.
 
@@ -11,7 +11,7 @@ Arahan pengguna: sesi dikira ikut bulan, bukan minggu (dulu 1×seminggu kadang-k
 - **Sesi tambahan (susulan pengguna, 19 Nov):** tutor boleh melebihi kuota selepas mengesahkan. `class_sessions.extra` + `mark_extra_session(org,sid)` (akses `can_session`); pencetus kuota mengecualikan sesi `extra`. Editor sesi memaparkan kotak "Rekod sebagai sesi tambahan" apabila rekod baharu melebihi kuota (Simpan tidak aktif sehingga ditanda); operasi `extra_session` dipanggil sebelum `assessment`. Keputusan pengguna: sesi tambahan dikira seperti biasa — tutor dibayar, ibu bapa dicaj. Paparan `5/4 sesi · +1 tambahan` (bar kekal penuh) dan pil "Tambahan" dalam senarai kelas. Demo `mutate` kini membina atas `demoData` (ref data terkini) supaya tindakan berturut-turut tidak memakai data lama.
 - **Skrip:** `reset-test-data.sql`, `reset-generated-data.sql`, `remove-tutor-data.sql` turut membersihkan `tutor_month_closures` (perlu migrasi 50 dipasang dahulu).
 - **Bukti:** `npm test` 152/152 (baharu `tests/integration/monthly-quota.test.ts` termasuk sesi tambahan; ujian lama yang merekod >4 sesi sebulan menetapkan lalai kuota 31), `test:pages` 92/92 (baharu: Selesai + bar kemajuan; borang sesi sebulan; sesi tambahan 5/4), typecheck/lint/Prettier, binaan Pages + Next, `setup-all.sql` = 50 migrasi. Pratonton: `npm run dev:pages -- --host 127.0.0.1 --port 4173` → `/?demo=1&role=tutor#/calendar`.
-- **Belum:** commit/push; pasang migrasi 50 di Supabase **sebelum** deploy; deploy Pages; uji dengan log masuk tutor sebenar. Pertimbangkan: admin menanda Selesai bagi pihak tutor (belum ada); kelas baharu daripada Tukar program (mulai tarikh) tidak menyalin kuota — guna 4 × slot.
+- **Status:** commit `63e7be5` dipush; [AQR checks #44527140098](https://github.com/islamictutoronline/aqr-portal/actions/runs/44527140098) dan [AQR GitHub Pages #44527934511](https://github.com/islamictutoronline/aqr-portal/actions/runs/44527934511) **success**. **Migrasi 50 dipasang pengguna** (19 Nov) sebelum deploy. Laman sebenar HTTP 200, aset `index-DMkcVGA_.js` mengandungi Selesai bulan, `close_month`, `extra_session`, Sesi sebulan. Butang Selesai merah sehingga ditekan. Panduan bergambar untuk tutor (data demo rekaan) disimpan setempat dalam `Panduan_Selesai_Bulan/` (PNG, diabaikan Git). **Belum:** diuji dengan log masuk tutor sebenar. Pertimbangkan: admin menanda Selesai bagi pihak tutor; kelas baharu daripada Tukar program (mulai tarikh) tidak menyalin kuota — guna 4 × slot.
 
 ## CADANGAN DISIMPAN (belum dilaksana): bayaran separuh / lebih — 2 November 2026
 
