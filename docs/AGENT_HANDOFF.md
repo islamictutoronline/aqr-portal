@@ -2,7 +2,7 @@
 
 Kemas kini: 19 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Kunci rekod selepas Selesai + Buka semula admin — 19 November 2026 (setempat, BELUM commit/deploy)
+## Kunci rekod selepas Selesai + Buka semula admin — 19 November 2026 (dideploy `6386fce`)
 
 Arahan pengguna: rekod yang masih boleh diubah selepas Selesai menyukarkan admin membuat bayaran. Keputusan: kunci rekod bulan itu selepas Selesai; admin **Buka semula** jika perlu pembetulan; butang Selesai dibuka pada **hari terakhir bulan** dan masih boleh ditekan pada bulan berikutnya (tiada tarikh akhir).
 
@@ -10,7 +10,7 @@ Arahan pengguna: rekod yang masih boleh diubah selepas Selesai menyukarkan admin
 - **Aplikasi:** `sessionLocked()` dalam `monthly-quota.ts`; editor sesi baca sahaja + nota merah apabila bulan dikunci; butang Padam disembunyikan; kad Selesai "Dikunci · Selesai <tarikh>"; Elaun → Butiran tutor: baris "Selesai <bulan>: Dikunci · ditekan …" + butang **Buka semula** (disekat jika elaun sudah dibayar). Operasi `reopen_month`. Demo: kunci yang sama ditiru; fixture demo kini tanpa Selesai (ujian bayaran menekan Selesai sebagai Tutor Contoh 1 dahulu, `tutorClosesMonth`).
 - `remove-tutor-data.sql`: `tutor_month_closures` dipadam sebelum kehadiran.
 - **Bukti:** `npm test` 154/154 (ujian kunci/Buka semula + hari terakhir bulan), `test:pages` 92/92, typecheck/lint/Prettier, binaan Pages, `setup-all.sql` = 51 migrasi. Gambar panduan `Panduan_Selesai_Bulan/` dijana semula.
-- **Belum:** commit/push; pengguna pasang migrasi 51 **sebelum** deploy; deploy Pages.
+- **Status:** commit `6386fce`; [AQR checks #44531581972](https://github.com/islamictutoronline/aqr-portal/actions/runs/44531581972) dan [AQR GitHub Pages #44532560691](https://github.com/islamictutoronline/aqr-portal/actions/runs/44532560691) **success**. **Migrasi 51 dipasang pengguna** (19 Nov) sebelum deploy. Laman sebenar HTTP 200, aset `index-Mgygx1xp.js` mengandungi Buka semula, `reopen_month`, kunci rekod. **Belum:** diuji dengan log masuk tutor/admin sebenar.
 
 ## Sesi dikira ikut bulan + butang Selesai bulan — 19 November 2026 (dideploy `63e7be5`)
 
