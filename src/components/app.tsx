@@ -84,6 +84,7 @@ import {
   monthClosure,
   quotaProblem,
   quotaUsed,
+  sessionLocked,
 } from '@/lib/monthly-quota';
 import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/payslip';
 import { loadBrandBytes } from '@/lib/brand';
@@ -775,6 +776,23 @@ export function App({
       if (demo) {
         const next = structuredClone(demoData.current);
         const id = `demo-${crypto.randomUUID()}`;
+        // Kunci bulan (sama seperti pencetus DB): sesi direkod dalam bulan yang sudah Selesai.
+        if (['assessment', 'void_session', 'move_session', 'extra_session'].includes(operation)) {
+          const sess = next.class_sessions.find((x) => x.id === payload.sid);
+          const recorded = next.attendance.some((a) => a.session_id === payload.sid);
+          const target =
+            operation === 'move_session' && sess
+              ? { ...sess, starts_at: payload.new_start }
+              : undefined;
+          if (
+            sess &&
+            (operation === 'assessment' || recorded) &&
+            (sessionLocked(next, sess) || (target && sessionLocked(next, target)))
+          )
+            throw new Error(
+              'Rekod bulan ini sudah dikunci kerana tutor telah menekan Selesai. Minta admin Buka semula untuk membuat pembetulan.',
+            );
+        }
         const table: Record<string, string> = {
           student: 'students',
           guardian: 'guardians',
@@ -1525,6 +1543,21 @@ export function App({
             status: 'valid',
           });
           inv.status = 'paid';
+        } else if (operation === 'reopen_month') {
+          if (
+            (next.tutor_month_payments || []).some(
+              (x) =>
+                x.staff_id === payload.staff_id &&
+                x.period === payload.period &&
+                x.status === 'paid',
+            )
+          )
+            throw new Error(
+              'Elaun bulan ini sudah direkod dibayar. Batalkan rekod bayaran dahulu sebelum Buka semula.',
+            );
+          next.tutor_month_closures = (next.tutor_month_closures || []).filter(
+            (k) => !(k.staff_id === payload.staff_id && k.period === payload.period),
+          );
         } else if (operation === 'extra_session') {
           next.class_sessions.find((s) => s.id === payload.sid)!.extra = true;
         } else if (operation === 'close_month') {
@@ -2466,21 +2499,22 @@ export function App({
                     Edit
                   </button>
                 )}
-                {!['verified', 'approved', 'paid'].includes(String(s.review_status)) && (
-                  <button
-                    className="text-link danger"
-                    onClick={() =>
-                      setDialog({
-                        title: `Padam kelas ${dateLabel(String(s.starts_at))}`,
-                        operation: 'void_session',
-                        fields: [],
-                        transform: () => ({ sid: s.id }),
-                      })
-                    }
-                  >
-                    Padam
-                  </button>
-                )}
+                {!['verified', 'approved', 'paid'].includes(String(s.review_status)) &&
+                  !sessionLocked(visible, s) && (
+                    <button
+                      className="text-link danger"
+                      onClick={() =>
+                        setDialog({
+                          title: `Padam kelas ${dateLabel(String(s.starts_at))}`,
+                          operation: 'void_session',
+                          fields: [],
+                          transform: () => ({ sid: s.id }),
+                        })
+                      }
+                    >
+                      Padam
+                    </button>
+                  )}
               </div>,
             ])}
           />
@@ -3250,7 +3284,7 @@ export function App({
         title={`Selesai bulan · ${monthLabel(month)}`}
         subtitle={
           closed
-            ? `${summary}. Rekod masih boleh dikemas kini.`
+            ? `${summary}. Rekod bulan ini dikunci. Jika perlu pembetulan, minta admin Buka semula.`
             : `${summary}. Elaun dibayar ikut sesi yang direkod bulan ini sahaja, dan hanya selepas butang Selesai ditekan.`
         }
         // Belum Selesai: kad dan butang merah supaya tutor perasan.
@@ -3258,7 +3292,7 @@ export function App({
         action={
           closed ? (
             <span className="badge success">
-              <Check size={14} /> Selesai · {dateLabel(String(closed.closed_at))}
+              <Check size={14} /> Dikunci · Selesai {dateLabel(String(closed.closed_at))}
             </span>
           ) : (
             <button
@@ -3266,7 +3300,7 @@ export function App({
               disabled={busy || !open}
               onClick={() =>
                 setDialog({
-                  title: `Selesai ${monthLabel(month)} · ${summary}`,
+                  title: `Selesai ${monthLabel(month)} · ${summary} · selepas ini rekod bulan ini dikunci`,
                   operation: 'close_month',
                   fields: [],
                   transform: () => ({ period: month }),
@@ -3281,14 +3315,16 @@ export function App({
       >
         {!closed && !open && (
           <p className="schedule-note">
-            Butang Selesai dibuka pada 7 hari terakhir bulan, mulai{' '}
-            {dateLabel(`${closeOpensOn(month)}T12:00:00+08:00`)}.
+            Butang Selesai dibuka pada hari terakhir bulan (
+            {dateLabel(`${closeOpensOn(month)}T12:00:00+08:00`)}) dan masih boleh ditekan pada bulan
+            berikutnya.
           </p>
         )}
         {!closed && open && (
           <p className="schedule-note alert">
             Wajib tekan Selesai selepas semua kelas {monthLabel(month)} direkod. Elaun bulan ini
-            tidak boleh dibayar selagi butang ini belum ditekan.
+            tidak boleh dibayar selagi butang ini belum ditekan. Selepas ditekan, rekod bulan ini
+            dikunci.
           </p>
         )}
       </Card>
@@ -4447,6 +4483,42 @@ export function App({
                     </span>
                     {tutorPayStatus(allowanceTab)}
                   </div>
+                  {/* Selesai bulan: rekod dikunci; Buka semula hanya sebelum elaun direkod dibayar. */}
+                  {(() => {
+                    const closed = monthClosure(visible, allowanceTab, month);
+                    return (
+                      <div className="pay-row month-lock-row">
+                        <span>
+                          Selesai {monthLabel(month)}:{' '}
+                          <strong>
+                            {closed
+                              ? `Dikunci · ditekan ${dateLabel(String(closed.closed_at))}`
+                              : 'Belum ditekan tutor'}
+                          </strong>
+                        </span>
+                        {finance && closed && (
+                          <button
+                            disabled={busy || tutorPaidSen(allowanceTab) > 0}
+                            title={
+                              tutorPaidSen(allowanceTab) > 0
+                                ? 'Batalkan rekod bayaran elaun dahulu'
+                                : undefined
+                            }
+                            onClick={() =>
+                              setDialog({
+                                title: `Buka semula ${monthLabel(month)} · ${lookup('staff_profiles', allowanceTab, 'display_name')} · tutor boleh membetulkan rekod dan perlu tekan Selesai sekali lagi`,
+                                operation: 'reopen_month',
+                                fields: [],
+                                transform: () => ({ staff_id: allowanceTab, period: month }),
+                              })
+                            }
+                          >
+                            Buka semula
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/* Elaun khas tutor: tambahan/potongan setiap sesi atas kadar standard. */}
                   <div className="pay-row tutor-rate-row">
                     <span>
@@ -5789,7 +5861,12 @@ function SessionEditor({
   const readingIssue =
     pageFormatIssue || (readingInput() ? readingProblem(readingInput()!) : null) || readingRequired;
   const voided = ['cancelled', 'rescheduled'].includes(String(session.status));
-  const locked = voided || ['verified', 'approved', 'paid'].includes(String(session.review_status));
+  // Bulan sesi sudah Selesai: rekod dikunci sehingga admin Buka semula (migrasi 51).
+  const monthLocked = sessionLocked(data, session);
+  const locked =
+    voided ||
+    monthLocked ||
+    ['verified', 'approved', 'paid'].includes(String(session.review_status));
   const pageField = (
     <label>
       <span>
@@ -6291,6 +6368,12 @@ function SessionEditor({
               <BookOpen size={28} />
               <p>{preview}</p>
               <small>Template v1 · berdasarkan pilihan sebenar sahaja</small>
+              {monthLocked && (
+                <p className="schedule-note alert">
+                  Rekod bulan ini dikunci kerana Selesai sudah ditekan. Minta admin Buka semula
+                  untuk membuat pembetulan.
+                </p>
+              )}
               {overQuota && (
                 <label className="extra-confirm">
                   <input
@@ -6336,9 +6419,11 @@ function SessionEditor({
                 </small>
               )}
               <small>
-                {savedAttendance(studentId)
-                  ? 'Kehadiran sudah direkod. Ubah pilihan di atas dan simpan untuk membetulkannya.'
-                  : 'Selepas disimpan, ibu bapa boleh melihat kehadiran dan ulasan ini.'}
+                {monthLocked
+                  ? 'Rekod ini baca sahaja.'
+                  : savedAttendance(studentId)
+                    ? 'Kehadiran sudah direkod. Ubah pilihan di atas dan simpan untuk membetulkannya.'
+                    : 'Selepas disimpan, ibu bapa boleh melihat kehadiran dan ulasan ini.'}
               </small>
             </aside>
           </div>

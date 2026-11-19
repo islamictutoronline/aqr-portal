@@ -2,6 +2,16 @@
 
 Kemas kini: 19 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Kunci rekod selepas Selesai + Buka semula admin — 19 November 2026 (setempat, BELUM commit/deploy)
+
+Arahan pengguna: rekod yang masih boleh diubah selepas Selesai menyukarkan admin membuat bayaran. Keputusan: kunci rekod bulan itu selepas Selesai; admin **Buka semula** jika perlu pembetulan; butang Selesai dibuka pada **hari terakhir bulan** dan masih boleh ditekan pada bulan berikutnya (tiada tarikh akhir).
+
+- **Migrasi 51** `202611190051_month_lock.sql`: `private.month_closed`; pencetus `attendance_month_lock` (insert/update/delete kehadiran pada sesi bulan yang Selesai bagi tutor sesi itu ditolak) dan `class_sessions_month_lock` (sesi yang sudah direkod tidak boleh dialih/dibatal/dipindah/dipadam keluar atau masuk ke bulan yang Selesai; sesi berjadual tanpa kehadiran tidak terjejas). Dikecualikan apabila `auth.uid()` kosong (SQL Editor/penyelenggaraan). `reopen_tutor_month(org,staff_id,period)` (pemilik/admin; ditolak jika ada `tutor_month_payments` berstatus `paid` — batalkan rekod bayaran dahulu; audit `REOPEN_MONTH`). `close_tutor_month` kini dibuka pada hari terakhir bulan.
+- **Aplikasi:** `sessionLocked()` dalam `monthly-quota.ts`; editor sesi baca sahaja + nota merah apabila bulan dikunci; butang Padam disembunyikan; kad Selesai "Dikunci · Selesai <tarikh>"; Elaun → Butiran tutor: baris "Selesai <bulan>: Dikunci · ditekan …" + butang **Buka semula** (disekat jika elaun sudah dibayar). Operasi `reopen_month`. Demo: kunci yang sama ditiru; fixture demo kini tanpa Selesai (ujian bayaran menekan Selesai sebagai Tutor Contoh 1 dahulu, `tutorClosesMonth`).
+- `remove-tutor-data.sql`: `tutor_month_closures` dipadam sebelum kehadiran.
+- **Bukti:** `npm test` 154/154 (ujian kunci/Buka semula + hari terakhir bulan), `test:pages` 92/92, typecheck/lint/Prettier, binaan Pages, `setup-all.sql` = 51 migrasi. Gambar panduan `Panduan_Selesai_Bulan/` dijana semula.
+- **Belum:** commit/push; pengguna pasang migrasi 51 **sebelum** deploy; deploy Pages.
+
 ## Sesi dikira ikut bulan + butang Selesai bulan — 19 November 2026 (dideploy `63e7be5`)
 
 Arahan pengguna: sesi dikira ikut bulan, bukan minggu (dulu 1×seminggu kadang-kadang jadi 5 sesi); "tutor tanda 4 sesi, fix 4 sesi sahaja"; bar kemajuan bawah sesi murid; tutor wajib tekan **Selesai** di akhir bulan dan hanya dibayar ikut sesi yang direkod bulan itu. Keputusan pengguna (soalan pilihan): satu butang Selesai sebulan untuk semua murid; rekod **tidak dikunci** selepas Selesai; elaun **tidak boleh dibayar** sebelum Selesai; yuran ibu bapa ikut sesi direkod dengan had N.

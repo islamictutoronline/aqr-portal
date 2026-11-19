@@ -161,3 +161,53 @@ describe('Selesai bulan tutor', () => {
     ).resolves.toBeTruthy();
   });
 });
+
+describe('kunci bulan selepas Selesai (migrasi 51)', () => {
+  it('rekod dikunci; admin Buka semula hanya sebelum elaun dibayar', async () => {
+    const { student, cls } = await enrol('Murid Kunci');
+    // Bulan lepas sudah Selesai (ujian di atas): rekod baharu, ubah dan padam ditolak.
+    await expect(record(cls, student, at(10))).rejects.toThrow(/sudah dikunci/);
+    const done = (
+      await one<{ id: string }>(
+        "select s.id from class_sessions s join attendance a on a.session_id=s.id where s.tutor_id=$1 and to_char(s.starts_at at time zone 'Asia/Kuala_Lumpur','YYYY-MM')=$2 limit 1",
+        [tutor, prev],
+      )
+    ).id;
+    await expect(db.query('select void_session($1,$2)', [org, done])).rejects.toThrow(
+      /sudah dikunci/,
+    );
+    await expect(db.query('select move_session($1,$2,$3)', [org, done, at(25)])).rejects.toThrow(
+      /sudah dikunci/,
+    );
+    // Elaun sudah dibayar: Buka semula ditolak sehingga rekod bayaran dibatalkan.
+    await asUser(owner);
+    await expect(
+      db.query('select reopen_tutor_month($1,$2,$3)', [org, tutor, prev]),
+    ).rejects.toThrow(/Batalkan rekod bayaran/);
+    const pay = (
+      await one<{ id: string }>(
+        "select id from tutor_month_payments where staff_id=$1 and period=$2 and status='paid'",
+        [tutor, prev],
+      )
+    ).id;
+    await db.query('select void_tutor_payment($1,$2,$3)', [org, pay, 'Tersilap kira']);
+    await db.query('select reopen_tutor_month($1,$2,$3)', [org, tutor, prev]);
+    await asUser(tutor);
+    await expect(
+      db.query('select reopen_tutor_month($1,$2,$3)', [org, tutor, prev]),
+    ).rejects.toThrow();
+    // Dibuka semula: tutor boleh membetulkan, kemudian tekan Selesai sekali lagi.
+    await expect(record(cls, student, at(10))).resolves.toBeTruthy();
+    await db.query('select close_tutor_month($1,$2)', [org, prev]);
+    await expect(record(cls, student, at(11))).rejects.toThrow(/sudah dikunci/);
+  });
+
+  it('bulan semasa: butang Selesai hanya pada hari terakhir bulan', async () => {
+    await asUser(tutor);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const now = Number(kl.slice(8, 10));
+    const attempt = db.query('select close_tutor_month($1,$2)', [org, kl.slice(0, 7)]);
+    if (now < lastDay) await expect(attempt).rejects.toThrow(/hari terakhir bulan/);
+    else await expect(attempt).resolves.toBeTruthy();
+  });
+});

@@ -682,13 +682,25 @@ test('tutor downloads class reports without invoices; admin generates reports + 
   await page.getByRole('button', { name: 'Jana laporan + invois' }).click();
   await expect(page.locator('.tutor-group-meta').first()).toContainText('draf');
 });
+// Tutor Contoh 1 (pratonton tutor) menekan Selesai Oktober 2026, kemudian kembali sebagai admin ke Elaun.
+async function tutorClosesMonth(page: Page) {
+  await page.goto('/?demo=1#/dashboard');
+  await page.reload();
+  await page.getByLabel('Pratonton peranan demo').selectOption('tutor');
+  if ((page.viewportSize()?.width || 0) <= 700)
+    await page.getByRole('button', { name: 'Buka menu' }).click();
+  await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
+  await page.getByRole('button', { name: 'Selesai Oktober 2026' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.locator('.month-close')).toContainText('Dikunci');
+  await page.getByLabel('Pratonton peranan demo').selectOption('admin');
+  await page.goto('/?demo=1#/allowance');
+}
 test('one-tap payments: tutor allowance paid (with void kept as history) and invoice fee paid without reference', async ({
   page,
 }) => {
-  await page.goto('/?demo=1#/allowance');
-  await page.reload();
-  // Tutor Contoh 2 sudah menekan Selesai bagi bulan demo; Tutor Contoh 1 belum.
-  const firstRow = page.getByRole('row').filter({ hasText: 'Tutor Contoh 2' });
+  await tutorClosesMonth(page);
+  const firstRow = page.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
   await firstRow.getByRole('button', { name: 'Elaun telah dibayar' }).click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(firstRow).toContainText('Dibayar ·');
@@ -882,19 +894,19 @@ test('tutor allowance: unpaid and paid tutors in two columns; paying moves the t
   await page.goto('/?demo=1#/allowance');
   const unpaid = page.getByRole('region', { name: 'Belum dibayar' });
   const paid = page.getByRole('region', { name: 'Sudah dibayar' });
-  await expect(unpaid).toContainText('Tutor Contoh 2');
-  await expect(paid).toContainText('Belum ada elaun dibayar bulan ini.');
-  await expect(unpaid).toContainText(/\d tutor · baki RM/);
   // Tutor yang belum menekan Selesai tidak boleh dibayar.
   const blocked = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
   await expect(blocked).toContainText('Belum tekan Selesai');
   await expect(blocked.getByRole('button', { name: 'Elaun telah dibayar' })).toHaveCount(0);
-  const row = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 2' });
+  await tutorClosesMonth(page);
+  await expect(paid).toContainText('Belum ada elaun dibayar bulan ini.');
+  await expect(unpaid).toContainText(/\d tutor · baki RM/);
+  const row = unpaid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
   await row.getByRole('button', { name: 'Elaun telah dibayar' }).click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
-  const moved = paid.getByRole('row').filter({ hasText: 'Tutor Contoh 2' });
+  const moved = paid.getByRole('row').filter({ hasText: 'Tutor Contoh 1' });
   await expect(moved).toContainText('Dibayar ·');
-  await expect(unpaid).not.toContainText('Tutor Contoh 2');
+  await expect(unpaid).not.toContainText('Tutor Contoh 1');
   await expect(paid).toContainText('1 tutor');
   await moved.getByRole('button', { name: /Butiran/ }).click();
   await expect(page.locator('.tab-total')).toContainText('RM');
@@ -1378,8 +1390,14 @@ test('sessions per month: tutor sees a quota bar per student and presses Selesai
   await expect(card).toContainText('Wajib tekan Selesai');
   await card.getByRole('button', { name: 'Selesai Oktober 2026' }).click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
-  await expect(card).toContainText('Selesai ·');
+  await expect(card).toContainText('Dikunci · Selesai');
   await expect(card.getByRole('button', { name: 'Selesai Oktober 2026' })).toHaveCount(0);
+  // Rekod bulan itu kini dikunci: editor sesi baca sahaja.
+  await first.click();
+  await expect(
+    page.getByText('Rekod bulan ini dikunci kerana Selesai sudah ditekan.'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /Simpan (perubahan|kehadiran)/ })).toBeDisabled();
   // Pentadbir kini boleh merekod elaun Tutor Contoh 1 sebagai dibayar.
   await page.getByLabel('Pratonton peranan demo').selectOption('admin');
   await page.goto('/?demo=1#/allowance');
@@ -1388,6 +1406,14 @@ test('sessions per month: tutor sees a quota bar per student and presses Selesai
     .getByRole('row')
     .filter({ hasText: 'Tutor Contoh 1' });
   await expect(row.getByRole('button', { name: 'Elaun telah dibayar' })).toBeVisible();
+  // Admin Buka semula: bulan tidak lagi Selesai, elaun disekat semula.
+  await row.getByRole('button', { name: /Butiran/ }).click();
+  const lock = page.locator('.pay-row').filter({ hasText: 'Selesai Oktober 2026' });
+  await expect(lock).toContainText('Dikunci · ditekan');
+  await lock.getByRole('button', { name: 'Buka semula' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(lock).toContainText('Belum ditekan tutor');
+  await expect(page.locator('.tab-total')).toContainText('Belum tekan Selesai');
 });
 test('schedule form asks for sessions per month; one class day per 4 sessions', async ({
   page,

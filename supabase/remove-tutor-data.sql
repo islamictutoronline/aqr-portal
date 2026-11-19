@@ -55,6 +55,8 @@ begin
 end $$;
 
 -- 3) Padam data (anak dahulu, induk kemudian).
+-- Selesai bulan dipadam dahulu: kunci bulan (migrasi 51) tidak menghalang pemadaman kehadiran.
+delete from public.tutor_month_closures where staff_id in (select staff_id from rm_staff);
 delete from public.report_deliveries where report_id in (select id from rm_reports) or guardian_id in (select guardian_id from rm_guardians);
 delete from public.monthly_student_reports where id in (select id from rm_reports);
 delete from public.monthly_tutor_remarks where student_id in (select student_id from rm_students);
@@ -90,7 +92,6 @@ delete from public.guardians where id in (select guardian_id from rm_guardians);
 delete from public.students where id in (select student_id from rm_students);
 delete from public.tutor_payment_details where staff_id in (select staff_id from rm_staff);
 delete from public.tutor_month_payments where staff_id in (select staff_id from rm_staff);
-delete from public.tutor_month_closures where staff_id in (select staff_id from rm_staff);
 delete from public.tutor_applications where auth_user_id in (select auth_user_id from rm_staff);
 -- Log audit tutor ini dan log admin ke atas data yang dipadam.
 delete from public.audit_events where actor_id in (select auth_user_id from rm_staff)

@@ -244,6 +244,8 @@ const schemas = {
   // Tutor mengesahkan sesi melebihi kuota sebulan sebagai sesi tambahan.
   extra_session: z.object({ sid: uuid }),
   close_month: z.object({ period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
+  // Admin: buka semula bulan yang sudah Selesai supaya tutor boleh membetulkan rekod.
+  reopen_month: z.object({ staff_id: uuid, period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
   // Admin: pindah kelas kepada tutor lain mulai tarikh dipilih.
   transfer_class: z.object({ cid: uuid, new_tutor: uuid, effective_from: z.iso.date() }),
   // Admin: yuran/elaun khas setiap sesi bagi satu kelas (null = kadar standard).
@@ -427,7 +429,11 @@ export async function executeMutation(
       if (saved.error) result = saved;
     }
   } else {
-    if (['transfer_class', 'class_rates', 'tutor_rate', 'reopen_report'].includes(operation))
+    if (
+      ['transfer_class', 'class_rates', 'tutor_rate', 'reopen_report', 'reopen_month'].includes(
+        operation,
+      )
+    )
       requireRoles(ctx, ['owner', 'admin']);
     const rpc: Record<string, string> = {
       prepare_report: 'prepare_student_report',
@@ -449,6 +455,7 @@ export async function executeMutation(
       save_tutor_remark: 'save_tutor_remark',
       close_month: 'close_tutor_month',
       extra_session: 'mark_extra_session',
+      reopen_month: 'reopen_tutor_month',
       extend_schedule: 'extend_schedule',
       void_session: 'void_session',
       remove_tutor: 'remove_tutor',

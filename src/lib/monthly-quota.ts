@@ -1,4 +1,4 @@
-import { Dataset, klDay } from './core';
+import { Dataset, Row, klDay } from './core';
 import { CHARGEABLE_ATTENDANCE } from './reporting';
 // Sesi dikira ikut bulan (migrasi 50, sama seperti private.class_quota / quota_used dalam DB):
 // kuota sesi sebulan setiap kelas; Hadir, Lewat, Ganti dan Tidak hadir dikira, Cuti bermaklum tidak.
@@ -52,10 +52,14 @@ export function monthClosure(data: Dataset, staffId: unknown, month: string) {
     (k) => k.staff_id === staffId && k.period === month,
   );
 }
-// Butang Selesai: bulan lepas bila-bila masa; bulan semasa pada 7 hari terakhir sahaja.
+// Butang Selesai dibuka pada hari terakhir bulan dan kekal boleh ditekan pada bulan berikutnya.
 export function closeOpensOn(month: string) {
   const [y, m] = month.split('-').map(Number);
-  return new Date(Date.UTC(y, m, 1) - 7 * 86400000).toISOString().slice(0, 10);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+// Rekod sesi dikunci selepas tutor sesi itu menekan Selesai bagi bulan sesi (migrasi 51).
+export function sessionLocked(data: Dataset, session: Row) {
+  return !!monthClosure(data, session.tutor_id, klDay(String(session.starts_at)).slice(0, 7));
 }
 export function canCloseMonth(month: string, today = klDay(new Date().toISOString())) {
   return month <= today.slice(0, 7) && today >= closeOpensOn(month);
