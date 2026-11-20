@@ -2,7 +2,7 @@
 -- BUKAN migrasi: jangan letak dalam supabase/migrations.
 --
 -- DIPADAM: invois, item invois, bayaran yuran, peruntukan, resit, bukti bayaran; laporan bulanan
---   (draf & diluluskan) dan status penghantaran WhatsApp; rumusan tutor bulanan; Selesai bulan tutor; elaun dibayar,
+--   (draf & diluluskan) dan status penghantaran WhatsApp; kredit prabayar dan sesi dibayar; rumusan tutor bulanan; Selesai bulan tutor; elaun dibayar,
 --   kelompok/payout/entri elaun dan pelarasan; sejarah eksport. Kehadiran (beserta ulasan, penilaian
 --   dan kemajuan) pada kelas yang tutornya BUKAN tutor yang dikekalkan; kelas itu kembali "dijadualkan".
 -- DIKEKALKAN: murid, penjaga, kelas, jadual, pendaftaran, akaun tutor/admin, kadar dan tetapan, semua
@@ -31,6 +31,9 @@ truncate table
   public.monthly_tutor_remarks,
   public.receipts,
   public.payment_evidence,
+  public.payment_sessions,
+  public.session_credit_uses,
+  public.session_credits,
   public.payment_allocations,
   public.payments,
   public.invoice_items,

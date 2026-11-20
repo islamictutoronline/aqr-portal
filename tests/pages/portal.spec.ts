@@ -713,9 +713,10 @@ test('one-tap payments: tutor allowance paid (with void kept as history) and inv
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(history).toContainText('Dibatalkan');
   await expect(page.getByRole('button', { name: 'Elaun telah dibayar' })).toBeVisible();
-  // Yuran: satu langkah, tanpa rujukan.
+  // Yuran (invois manual dalam Lagi pilihan): satu langkah, tanpa rujukan.
   await page.goto('/?demo=1#/finance');
   await page.reload();
+  await page.locator('details.finance-more > summary').click();
   const inv = page.getByRole('row').filter({ hasText: 'DEMO-001' });
   await inv.getByRole('button', { name: 'Yuran telah dibayar' }).click();
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
@@ -837,6 +838,7 @@ test('finance invoices: search by parent, student, tutor or number in two paid/u
   page,
 }) => {
   await page.goto('/?demo=1#/finance');
+  await page.locator('details.finance-more > summary').click();
   const due = page.getByRole('region', { name: 'Belum bayar' });
   const done = page.getByRole('region', { name: 'Sudah bayar' });
   await expect(due).toContainText('DEMO-001');
@@ -864,7 +866,6 @@ test('finance invoices: search by parent, student, tutor or number in two paid/u
   await expect(due).not.toContainText('DEMO-');
   await search.fill('Tutor Contoh 3');
   await expect(due).toContainText('DEMO-003');
-  await expect(done).toContainText('DEMO-002');
   await expect(due).not.toContainText('DEMO-001');
   await search.fill('demo-004');
   await expect(due).toContainText('DEMO-004');
@@ -1121,8 +1122,10 @@ test('session invoices: regenerating after payment does not bill the same sessio
   page,
 }) => {
   await page.goto('/?demo=1#/finance');
-  const generate = page.getByRole('button', { name: 'Jana / kemas kini invois' });
+  const generate = page.getByRole('button', { name: 'Jana semua invois' });
   await generate.click();
+  await page.locator('details.finance-more > summary').click();
+
   const due = page.getByRole('region', { name: 'Belum bayar' });
   const done = page.getByRole('region', { name: 'Sudah bayar' });
   const row = due.getByRole('row').filter({ hasText: 'DEMO-5 ' });
@@ -1208,6 +1211,7 @@ test('every search box filters its own list and shows a single frame when focuse
   await expect(rows('Murid Contoh 03')).not.toHaveCount(0);
   await expect(rows('Murid Contoh 01')).toHaveCount(0);
   await search().fill('');
+  await page.locator('details.finance-more > summary').click();
   await singleFrame('Cari invois');
   // Kurikulum
   await page.goto('/?demo=1#/classes');
@@ -1457,6 +1461,60 @@ test('extra session: beyond the monthly quota the tutor confirms a sesi tambahan
     await save.click();
     await expect(page.getByRole('status')).toContainText('memori tab');
   }
-  await expect(history).toContainText('5/4 sesi · +1 tambahan');
+  await expect(history).toContainText('4/4 sesi · +1 tambahan');
   await expect(history.getByText('Tambahan', { exact: true })).toBeVisible();
+});
+test('Sudah bayar per family: one amount; balance first, extra becomes credit shared between children', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1#/finance');
+  const family = page.getByRole('region', { name: 'Penjaga Contoh 3' });
+  await expect(family.locator('.family-pay-kid')).toHaveCount(2);
+  await expect(family.getByRole('button', { name: 'Sudah bayar' })).toHaveCount(1);
+  await family.getByRole('button', { name: 'Sudah bayar' }).click();
+  // Borang ringkas: satu amaun + tarikh (lalai hari ini).
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('input, select')).toHaveCount(2);
+  // Baki RM 40 (2 anak × 2 sesi × RM 10); ibu bapa bayar RM 60 → RM 20 lebihan = 1 sesi kredit setiap anak.
+  await page.getByLabel('Amaun diterima (RM)').fill('60.00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('memori tab');
+  for (const name of ['Murid Contoh 03', 'Murid Contoh 08']) {
+    const kid = family.locator('.family-pay-kid').filter({ hasText: name });
+    await expect(kid.locator('.pay-cell.ok strong')).toHaveText('2');
+    await expect(kid.locator('.pay-cell.credit strong')).toHaveText('1');
+  }
+  await expect(family).toContainText('Tiada baki');
+  // Kosong = baki penuh.
+  const second = page.getByRole('region', { name: 'Penjaga Contoh 5' });
+  await second.getByRole('button', { name: 'Sudah bayar' }).click();
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(second).toContainText('Tiada baki');
+  // Lebihan yang tidak cukup untuk satu sesi ditolak.
+  const third = page.getByRole('region', { name: 'Penjaga Contoh 4' });
+  await third.getByRole('button', { name: 'Sudah bayar' }).click();
+  await page.getByLabel('Amaun diterima (RM)').fill('50.00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByText(/tidak cukup untuk satu sesi/).first()).toBeVisible();
+});
+test('parent portal shows the sessions paid box', async ({ page }) => {
+  await page.goto('/?demo=1#/dashboard');
+  await page.getByLabel('Pratonton peranan demo').selectOption('guardian');
+  const box = page
+    .locator('.card')
+    .filter({ has: page.getByRole('heading', { name: /Sesi dibayar ·/ }) });
+  await expect(box.locator('.pay-cell')).toHaveCount(4);
+  await expect(box).toContainText('Kredit');
+});
+test('sesi ganti: sessions paid last month but not held show as a second amber bar for the tutor', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  const kid = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 12' });
+  await expect(kid.locator('.quota-bar')).toHaveCount(2);
+  await expect(kid.locator('.quota-bar.ganti')).toContainText('Sesi ganti');
+  await expect(kid.locator('.quota-bar.ganti')).toContainText('0/2 sesi');
+  // Murid lain (bayar ikut invois) hanya ada satu bar.
+  const other = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 01' });
+  await expect(other.locator('.quota-bar')).toHaveCount(1);
 });

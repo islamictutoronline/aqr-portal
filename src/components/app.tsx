@@ -77,16 +77,27 @@ import {
 } from '@/lib/core';
 import { buildReport, allowanceRows, feeRows } from '@/lib/reporting';
 import {
+  baseQuota,
   canCloseMonth,
   classQuota,
   closeOpensOn,
   countsTowardQuota,
   monthClosure,
+  quotaCarry,
   quotaProblem,
   quotaUsed,
   sessionLocked,
 } from '@/lib/monthly-quota';
 import { buildPayslip, payslipPdf, payslipsZip, payslipFileName } from '@/lib/payslip';
+import {
+  SessionPay,
+  childOwed,
+  classFee,
+  demoFamilyPayment,
+  demoSessionInvoices,
+  primaryClass,
+  sessionPayStats,
+} from '@/lib/billing';
 import { loadBrandBytes } from '@/lib/brand';
 import { demoSnapshot } from '@/lib/student-reports';
 import { TutorClassReports } from './tutor-reports';
@@ -367,27 +378,90 @@ function WeeklySlots({
     </>
   );
 }
-// Bar kemajuan kuota sesi sebulan: sesi direkod / sesi sebulan.
-function QuotaBar({ done, quota, label }: { done: number; quota: number; label: string }) {
+// Kotak sesi dibayar seorang murid bagi sebulan (admin dan Parent Portal); kredit = sesi dibayar lebih.
+function PayBox({ stats, compact = false }: { stats: SessionPay; compact?: boolean }) {
+  const cells: [string, number, string][] = [
+    ['Direkod', stats.recorded, ''],
+    ['Dibayar', stats.paid, 'ok'],
+    ['Belum dibayar', stats.unpaid, stats.unpaid ? 'due' : ''],
+    ['Kredit', stats.credit, stats.credit ? 'credit' : ''],
+  ];
   return (
-    <span className={`quota-bar${done >= quota ? ' full' : ''}`}>
+    <span className={`pay-box${compact ? ' compact' : ''}`}>
+      {cells.map(([label, n, tone]) => (
+        <span key={label} className={`pay-cell ${tone}`}>
+          <strong>{n}</strong>
+          <small>{label}</small>
+        </span>
+      ))}
+    </span>
+  );
+}
+// Bar kemajuan sesi: bar pertama = sesi bulan semasa (kuota asas); bar kedua (amber, hanya jika ada) =
+// sesi ganti, iaitu sesi yang sudah dibayar bulan lepas tetapi belum dilaksanakan.
+function Bar({
+  done,
+  of,
+  label,
+  note,
+  tone = '',
+}: {
+  done: number;
+  of: number;
+  label: string;
+  note?: string;
+  tone?: string;
+}) {
+  return (
+    <span className={`quota-bar ${tone}${done >= of ? ' full' : ''}`}>
       <span className="quota-text">
         <span>{label}</span>
         <span className="quota-count">
-          {done}/{quota} sesi
-          {done > quota ? ` · +${done - quota} tambahan` : done === quota ? ' · penuh' : ''}
+          {done}/{of} sesi{note ?? (done >= of ? ' · penuh' : '')}
         </span>
       </span>
       <span
         className="progress-track"
         role="progressbar"
-        aria-label={`${label}: ${done} daripada ${quota} sesi`}
+        aria-label={`${label}: ${done} daripada ${of} sesi`}
         aria-valuemin={0}
-        aria-valuemax={quota}
+        aria-valuemax={of}
         aria-valuenow={done}
       >
-        <i style={{ width: `${Math.min(100, (done / quota) * 100)}%` }} />
+        <i style={{ width: `${Math.max(0, Math.min(100, (done / of) * 100))}%` }} />
       </span>
+    </span>
+  );
+}
+function QuotaBar({
+  done,
+  quota,
+  label,
+  carry = 0,
+}: {
+  done: number;
+  quota: number;
+  label: string;
+  carry?: number;
+}) {
+  const base = quota - carry;
+  const extra = done - quota;
+  return (
+    <span className="quota-bars">
+      <Bar
+        done={Math.min(done, base)}
+        of={base}
+        label={label}
+        note={extra > 0 ? ` · +${extra} tambahan` : undefined}
+      />
+      {carry > 0 && (
+        <Bar
+          done={Math.min(Math.max(done - base, 0), carry)}
+          of={carry}
+          label="Sesi ganti"
+          tone="ganti"
+        />
+      )}
     </span>
   );
 }
@@ -811,6 +885,9 @@ export function App({
           next[table[operation]].push({ id, ...payload, status: 'active', active: true });
         else if (operation === 'generate_session_invoices')
           demoInvoices(next, String(payload.billing_period), id);
+        else if (operation === 'guardian_invoice')
+          demoInvoices(next, String(payload.billing_period), id, [payload.guardian]);
+        else if (operation === 'family_payment') demoFamilyPayment(next, payload, id);
         else if (operation === 'month_package') {
           const period = String(payload.billing_period);
           next.monthly_student_reports ||= [];
@@ -1625,6 +1702,14 @@ export function App({
   // Laporan diluluskan dibuka semula, disediakan semula daripada rekod terkini dan diluluskan;
   // kemudian invois ikut sesi dijana. Dibenarkan walaupun kehadiran belum lengkap.
   // Pulangkan data terkini supaya PDF gabungan dibina daripada rekod baharu.
+  // Penjaga bil bagi murid-murid ini (satu invois setiap penjaga).
+  const guardiansOf = (studentIds: string[]) => [
+    ...new Set(
+      all('student_guardians')
+        .filter((l) => l.is_billing_contact && studentIds.includes(String(l.student_id)))
+        .map((l) => String(l.guardian_id)),
+    ),
+  ];
   async function generateFamilies(studentIds: string[]): Promise<Dataset | null> {
     setBusy(true);
     setNotice('');
@@ -1649,7 +1734,7 @@ export function App({
           if (old) Object.assign(old, row);
           else next.monthly_student_reports.push(row);
         }
-        demoInvoices(next, month, `demo-${crypto.randomUUID()}`);
+        demoInvoices(next, month, `demo-${crypto.randomUUID()}`, guardiansOf(studentIds));
         setData(next);
         setNotice('Demo: laporan diluluskan dan invois dijana dalam memori tab sahaja.');
         return next;
@@ -1674,7 +1759,9 @@ export function App({
           const prepared = await save('prepare_report', { student: sid, report_month: month });
           await save('approve_report', { report: prepared.id || old?.id });
         }
-        await save('generate_session_invoices', { billing_period: month });
+        // Invois keluarga terpilih sahaja, bukan semua penjaga.
+        for (const guardian of guardiansOf(studentIds))
+          await save('guardian_invoice', { billing_period: month, guardian });
       } finally {
         const refresh = await apiFetch('/api/data', { cache: 'no-store' });
         // Muat semula walaupun satu langkah gagal, supaya paparan sepadan dengan pangkalan data.
@@ -1692,75 +1779,9 @@ export function App({
       setBusy(false);
     }
   }
-  // Demo: tiru generate_session_invoices (yuran ikut sesi; invois tambahan selepas bayaran).
-  function demoInvoices(next: Dataset, period: string, id: string) {
-    const rows = feeRows(next, period).filter((f) => f.guardianId && f.rate_sen !== null);
-    for (const gid of new Set(rows.map((f) => f.guardianId!))) {
-      const base = `sessions:${period}:${gid}`;
-      const mine = next.invoices.filter(
-        (i) =>
-          i.status !== 'void' &&
-          (i.idempotency_key === base || String(i.idempotency_key).startsWith(`${base}:`)),
-      );
-      // Bayaran yang ditolak/dibalikkan tidak mengunci invois.
-      const paidSome = (i: Row) =>
-        (next.payment_allocations || []).some(
-          (a) =>
-            a.invoice_id === i.id &&
-            !['rejected', 'reversed'].includes(
-              String(next.payments.find((p) => p.id === a.payment_id)?.status),
-            ),
-        );
-      const open = mine
-        .filter((i) => ['issued', 'draft', 'overdue'].includes(String(i.status)) && !paidSome(i))
-        .slice(-1)[0];
-      // Sesi yang sudah dibilkan dikira mengikut murid (sama seperti migrasi 48), bukan teks/harga.
-      const billed = new Map<unknown, number>();
-      for (const x of next.invoice_items)
-        if (x.invoice_id !== open?.id && mine.some((i) => i.id === x.invoice_id))
-          billed.set(x.student_id, (billed.get(x.student_id) ?? 0) + Number(x.quantity));
-      const rest = rows
-        .filter((f) => f.guardianId === gid)
-        .map((f) => {
-          const skip = Math.min(billed.get(f.studentId) ?? 0, f.sessions);
-          billed.set(f.studentId, (billed.get(f.studentId) ?? 0) - skip);
-          return { f, quantity: f.sessions - skip };
-        })
-        .filter((x) => x.quantity > 0);
-      if (!rest.length) {
-        if (open) open.status = 'void';
-        continue;
-      }
-      let key = base;
-      for (let k = 2; next.invoices.some((i) => i.idempotency_key === key); k++)
-        key = `${base}:${k}`;
-      const invId = open?.id || `${id}-${gid}`;
-      next.invoice_items = next.invoice_items.filter((x) => x.invoice_id !== invId);
-      rest.forEach(({ f, quantity }, k) =>
-        next.invoice_items.push({
-          id: `${invId}-${k}`,
-          invoice_id: invId,
-          student_id: f.studentId,
-          description: `${f.student} · ${f.program} (${f.minutes} minit)`,
-          quantity,
-          unit_price_sen: f.rate_sen,
-          discount_sen: 0,
-        }),
-      );
-      const total = rest.reduce((n, x) => n + x.quantity * Number(x.f.rate_sen), 0);
-      if (open) open.total_sen = total;
-      else
-        next.invoices.push({
-          id: invId,
-          number: `DEMO-${next.invoices.length + 1}`,
-          guardian_id: gid,
-          total_sen: total,
-          period: period,
-          due_on: `${period}-28`,
-          status: 'issued',
-          idempotency_key: key,
-        });
-    }
+  // Demo: tiru generate_session_invoices / generate_guardian_invoice (yuran ikut sesi, kredit).
+  function demoInvoices(next: Dataset, period: string, id: string, guardians?: unknown[]) {
+    demoSessionInvoices(next, period, id, guardians);
   }
   // Demo: tiru private.save_student_guardian (nama lalai, no. sama = penjaga sama, penjaga bil).
   function demoGuardian(next: Dataset, studentId: unknown, rawName: unknown, rawPhone: unknown) {
@@ -1901,7 +1922,7 @@ export function App({
       ],
       extra: (
         <>
-          <WeeklySlots initial={initial} quota={classQuota(visible, classId)} />
+          <WeeklySlots initial={initial} quota={baseQuota(visible, classId)} />
           <FlexibleField initial={flexible} />
           <p className="schedule-note">
             Sesi yang sudah direkod dan sesi tambahan tidak berubah. Sesi akan datang yang belum
@@ -2406,10 +2427,12 @@ export function App({
   };
   // Ringkasan sesi bagi satu murid (kelas individu): selesai dan berbaki bulan dipilih.
   // Kemajuan kuota bulan dipilih: sesi yang dikira (Cuti bermaklum tidak) berbanding sesi sebulan.
+  // Sesi ganti: baki bulan lepas yang tidak dihabiskan ditambah pada kuota (warna lain).
   const classCounts = (cid: unknown) => {
-    const quota = classQuota(visible, cid);
+    const carry = quotaCarry(visible, cid, month);
+    const quota = baseQuota(visible, cid) + carry;
     const done = quotaUsed(visible, cid, month);
-    return { done, quota, left: Math.max(0, quota - done) };
+    return { done, quota, carry, left: Math.max(0, quota - done) };
   };
   // Tambah rekod sesi terus dari skrin rekod: tarikh lalai hari ini, boleh backdated. Jam diisi
   // daripada masa pilihan kelas (slot hari ini jika ada, jika tidak slot pertama), atau jam sekarang.
@@ -2468,6 +2491,19 @@ export function App({
       .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)));
     const markOf = (sid: unknown) =>
       statusLabels[String(all('attendance').find((a) => a.session_id === sid)?.status)] || '—';
+    // Sesi yang dikira, ikut tertib masa: selepas kuota asas = sesi ganti (amber).
+    const counted = done
+      .filter((s) =>
+        all('attendance').some((a) => a.session_id === s.id && countsTowardQuota(a.status)),
+      )
+      .slice()
+      .reverse();
+    const gantiIds = new Set(
+      counted
+        .filter((s) => !s.extra)
+        .slice(counts.quota - counts.carry, counts.quota)
+        .map((s) => s.id),
+    );
     // Slot jadual lepas yang tidak direkod tidak dipaparkan: jadual kerap ditukar oleh tutor/ibu bapa.
     return (
       <>
@@ -2477,7 +2513,12 @@ export function App({
             byId('classes').get(current.class_id)?.flexible ? ' · jadual fleksibel' : ''
           }`}
         >
-          <QuotaBar done={counts.done} quota={counts.quota} label="Sesi bulan ini" />
+          <QuotaBar
+            done={counts.done}
+            quota={counts.quota}
+            carry={counts.carry}
+            label="Sesi bulan ini"
+          />
           {!done.length && <Empty text={`Belum ada kelas direkod pada ${monthLabel(month)}.`} />}
           <Table
             headers={['Tarikh', 'Masa', 'Kehadiran', '']}
@@ -2487,6 +2528,10 @@ export function App({
               s.extra ? (
                 <span key="m">
                   {markOf(s.id)} <span className="pill">Tambahan</span>
+                </span>
+              ) : gantiIds.has(s.id) ? (
+                <span key="m">
+                  {markOf(s.id)} <span className="pill ganti">Ganti</span>
                 </span>
               ) : (
                 markOf(s.id)
@@ -2920,7 +2965,12 @@ export function App({
                   </dl>
                   <footer className="program-foot">
                     <div className="month-progress">
-                      <QuotaBar done={counts.done} quota={counts.quota} label={monthLabel(month)} />
+                      <QuotaBar
+                        done={counts.done}
+                        quota={counts.quota}
+                        carry={counts.carry}
+                        label={monthLabel(month)}
+                      />
                     </div>
                     <div className="button-row compact">
                       {(academic || role === 'tutor') && p.status === 'active' && (
@@ -3366,6 +3416,7 @@ export function App({
                         <QuotaBar
                           done={counts.done}
                           quota={counts.quota}
+                          carry={counts.carry}
                           label={monthLabel(month)}
                         />
                       </span>
@@ -3631,9 +3682,10 @@ export function App({
         }));
     return (
       <>
+        {/* Satu baris setiap keluarga: kotak sesi dibayar setiap anak + satu butang "Sudah bayar". */}
         <Card
-          title="Yuran bulan ini"
-          subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Cuti bermaklum tidak. Boleh dijana berulang kali: invois belum dibayar dikemas kini; sesi selepas bayaran masuk invois tambahan.`}
+          title={`Yuran keluarga · ${monthLabel(month)}`}
+          subtitle="Tekan Sudah bayar dan masukkan amaun yang diterima. Lebihan menjadi kredit; sesi yang dibayar tetapi belum dilaksanakan menjadi sesi ganti tutor bulan depan."
           action={
             academic && (
               <button
@@ -3642,7 +3694,7 @@ export function App({
                 onClick={() => void mutate('generate_session_invoices', { billing_period: month })}
               >
                 <FileText size={16} />
-                Jana / kemas kini invois
+                Jana semua invois
               </button>
             )
           }
@@ -3655,25 +3707,68 @@ export function App({
                 `${noRate.length} baris tiada harga sesi untuk program/tempohnya.`}
             </div>
           )}
-          <Table
-            headers={['Murid', 'Program', 'Sesi dicaj', 'Harga sesi', 'Jumlah', 'Penjaga bil']}
-            rows={fees
-              .filter((f) => matches({ id: f.studentId, name: f.student, program: f.program }))
-              .map((f) => [
-                <strong key="n">{f.student}</strong>,
-                `${f.program} (${f.minutes} minit)`,
-                f.sessions,
-                f.rate_sen === null ? 'Tiada harga' : formatMoney(f.rate_sen),
-                formatMoney(f.total_sen),
-                f.guardianId ? lookup('guardians', f.guardianId) : 'Tiada',
-              ])}
-          />
-          {fees.length > 0 && (
-            <p className="tab-total">
-              Jumlah yuran bulan ini:{' '}
-              <strong>{formatMoney(fees.reduce((n, f) => n + f.total_sen, 0))}</strong>
-            </p>
-          )}
+          {(() => {
+            const families = [
+              ...new Set(
+                all('student_guardians')
+                  .filter((l) => l.is_billing_contact)
+                  .map((l) => String(l.guardian_id)),
+              ),
+            ]
+              .map((gid) => ({ gid, kids: billingKids(gid) }))
+              .filter(
+                (f) =>
+                  f.kids.length &&
+                  matches({
+                    id: '',
+                    name: lookup('guardians', f.gid),
+                    kids: f.kids.map((k) => k.full_name).join(' '),
+                  }),
+              )
+              .sort((a, b) => lookup('guardians', a.gid).localeCompare(lookup('guardians', b.gid)));
+            return families.length ? (
+              <div className="family-pay-list">
+                {families.map(({ gid, kids }) => {
+                  const owed = kids.reduce((n, k) => n + childDue(k.id), 0);
+                  return (
+                    <section className="family-pay" key={gid} aria-label={lookup('guardians', gid)}>
+                      <header>
+                        <strong>{lookup('guardians', gid)}</strong>
+                        <span className={owed ? 'family-owed due' : 'family-owed'}>
+                          {owed ? `Baki ${formatMoney(owed)}` : 'Tiada baki'}
+                        </span>
+                        {finance && (
+                          <button
+                            className="pay-button"
+                            disabled={busy}
+                            onClick={() => familyPaymentForm(gid)}
+                          >
+                            <Check size={15} />
+                            Sudah bayar
+                          </button>
+                        )}
+                      </header>
+                      {kids.map((k) => (
+                        <div className="family-pay-kid" key={k.id}>
+                          <span>
+                            {String(k.full_name)}
+                            <small>
+                              {programsOf(k.id)
+                                .map((p) => p.program)
+                                .join(', ')}
+                            </small>
+                          </span>
+                          <PayBox stats={sessionPayStats(visible, k.id, month)} compact />
+                        </div>
+                      ))}
+                    </section>
+                  );
+                })}
+              </div>
+            ) : (
+              <Empty text="Tiada keluarga sepadan." />
+            );
+          })()}
         </Card>
         <div className="metrics">
           {[
@@ -3688,8 +3783,32 @@ export function App({
             </div>
           ))}
         </div>
-        <details className="more-tools">
-          <summary>Kadar yuran setiap sesi</summary>
+        <details className="more-tools finance-more">
+          <summary>Lagi pilihan · butiran yuran, kadar dan senarai invois</summary>
+          <Card
+            title="Butiran yuran ikut program"
+            subtitle={`Ikut sesi yang dijalankan · ${month}. Hadir, Lewat, Ganti dan Tidak hadir dicaj; Cuti bermaklum tidak.`}
+          >
+            <Table
+              headers={['Murid', 'Program', 'Sesi dicaj', 'Harga sesi', 'Jumlah', 'Penjaga bil']}
+              rows={fees
+                .filter((f) => matches({ id: f.studentId, name: f.student, program: f.program }))
+                .map((f) => [
+                  <strong key="n">{f.student}</strong>,
+                  `${f.program} (${f.minutes} minit)`,
+                  f.sessions,
+                  f.rate_sen === null ? 'Tiada harga' : formatMoney(f.rate_sen),
+                  formatMoney(f.total_sen),
+                  f.guardianId ? lookup('guardians', f.guardianId) : 'Tiada',
+                ])}
+            />
+            {fees.length > 0 && (
+              <p className="tab-total">
+                Jumlah yuran bulan ini:{' '}
+                <strong>{formatMoney(fees.reduce((n, f) => n + f.total_sen, 0))}</strong>
+              </p>
+            )}
+          </Card>
           <Card title="Kadar yuran" subtitle="Harga sesi untuk ibu bapa (Borang Pendaftaran AQR)">
             <Table
               headers={['Program', 'Tempoh', 'Harga sesi']}
@@ -3702,360 +3821,365 @@ export function App({
               ])}
             />
           </Card>
-        </details>
-        <Card
-          title="Invois & baki"
-          subtitle="Cari mengikut ibu bapa, murid, tutor atau no. invois"
-          action={
-            <button className="primary" onClick={invoiceForm}>
-              <Plus size={16} />
-              Cipta invois
-            </button>
-          }
-        >
-          {(() => {
-            // Murid invois: daripada item invois; jika tiada, anak-anak penjaga invois itu.
-            const studentsOf = (i: Row) => {
-              const ids = all('invoice_items')
-                .filter((x) => x.invoice_id === i.id && x.student_id)
-                .map((x) => x.student_id);
-              return [
+          <Card
+            title="Invois & baki"
+            subtitle="Cari mengikut ibu bapa, murid, tutor atau no. invois"
+            action={
+              <button className="primary" onClick={invoiceForm}>
+                <Plus size={16} />
+                Cipta invois
+              </button>
+            }
+          >
+            {(() => {
+              // Murid invois: daripada item invois; jika tiada, anak-anak penjaga invois itu.
+              const studentsOf = (i: Row) => {
+                const ids = all('invoice_items')
+                  .filter((x) => x.invoice_id === i.id && x.student_id)
+                  .map((x) => x.student_id);
+                return [
+                  ...new Set(
+                    ids.length
+                      ? ids
+                      : all('student_guardians')
+                          .filter((l) => l.guardian_id === i.guardian_id)
+                          .map((l) => l.student_id),
+                  ),
+                ];
+              };
+              // Tutor semasa murid: pendaftaran aktif + tugasan kelas tanpa tarikh tamat.
+              const tutorsOf = (studentIds: unknown[]) => [
                 ...new Set(
-                  ids.length
-                    ? ids
-                    : all('student_guardians')
-                        .filter((l) => l.guardian_id === i.guardian_id)
-                        .map((l) => l.student_id),
+                  all('enrollments')
+                    .filter((e) => studentIds.includes(e.student_id) && e.status === 'active')
+                    .flatMap((e) =>
+                      all('class_tutors').filter((t) => t.class_id === e.class_id && !t.ends_on),
+                    )
+                    .map((t) => lookup('staff_profiles', t.staff_id, 'display_name')),
                 ),
               ];
-            };
-            // Tutor semasa murid: pendaftaran aktif + tugasan kelas tanpa tarikh tamat.
-            const tutorsOf = (studentIds: unknown[]) => [
-              ...new Set(
-                all('enrollments')
-                  .filter((e) => studentIds.includes(e.student_id) && e.status === 'active')
-                  .flatMap((e) =>
-                    all('class_tutors').filter((t) => t.class_id === e.class_id && !t.ends_on),
-                  )
-                  .map((t) => lookup('staff_profiles', t.staff_id, 'display_name')),
-              ),
-            ];
-            const q = invoiceQuery.trim().toLowerCase();
-            const items = all('invoices')
-              .filter((i) => matches({ ...i, guardian: lookup('guardians', i.guardian_id) }))
-              .map((i) => {
-                const studentIds = studentsOf(i);
-                const students = studentIds.map((id) => lookup('students', id));
-                return {
-                  i,
-                  b: invoiceBalance(i, all('payments'), all('payment_allocations')),
-                  students,
-                  haystack: [
-                    i.number,
-                    lookup('guardians', i.guardian_id),
-                    ...students,
-                    ...tutorsOf(studentIds),
-                  ]
-                    .join(' ')
-                    .toLowerCase(),
-                };
-              })
-              .filter((x) => !q || x.haystack.includes(q));
-            const isVoid = (i: Row) => i.status === 'void';
-            const due = items.filter(
-              (x) => !isVoid(x.i) && (x.i.status === 'draft' || x.b.outstanding > 0),
-            );
-            const done = items.filter((x) => !isVoid(x.i) && !due.includes(x));
-            const voided = items.filter((x) => isVoid(x.i));
-            const rowsOf = (list: typeof items) =>
-              list.map(({ i, b, students }) => [
-                <span key="n" className="guardian-cell">
-                  <strong>{String(i.number)}</strong>
-                  {/^sessions:.+:\d+$/.test(String(i.idempotency_key ?? '')) && (
-                    <small>Invois tambahan</small>
-                  )}
-                </span>,
-                <span key="g" className="guardian-cell">
-                  {lookup('guardians', i.guardian_id)}
-                  {students.length > 0 && <small>{students.join(', ')}</small>}
-                </span>,
-                <span key="j" className="guardian-cell">
-                  {formatMoney(b.invoiced)}
-                  {b.paid > 0 && b.outstanding > 0 && <small>Dibayar {formatMoney(b.paid)}</small>}
-                </span>,
-                formatMoney(b.outstanding),
-                <Badge key="s" value={i.status} />,
-                <div key="act" className="button-row compact">
-                  {b.outstanding > 0 && !['draft', 'void'].includes(String(i.status)) && (
-                    <button
-                      className="pay-button"
-                      disabled={busy}
-                      onClick={() => markInvoicePaid(i, b.outstanding)}
-                    >
-                      <Check size={15} />
-                      Yuran telah dibayar
-                    </button>
-                  )}
-                  <a
-                    key="print"
-                    className="text-link"
-                    target="_blank"
-                    rel="noreferrer"
-                    href={`/api/document?type=invoice&id=${i.id}${demo ? '&demo=1' : ''}`}
-                    onClick={(e) => {
-                      if (isStatic()) {
-                        e.preventDefault();
-                        void import('@/lib/student-reports')
-                          .then(async ({ financialPdf }) =>
-                            downloadBlob(
-                              new Blob([await financialPdf(i, 'invoice', demo, invoiceExtra(i))], {
-                                type: 'application/pdf',
-                              }),
-                              fileName(
-                                ['Invois', i.number, lookup('guardians', i.guardian_id)],
-                                'pdf',
+              const q = invoiceQuery.trim().toLowerCase();
+              const items = all('invoices')
+                .filter((i) => matches({ ...i, guardian: lookup('guardians', i.guardian_id) }))
+                .map((i) => {
+                  const studentIds = studentsOf(i);
+                  const students = studentIds.map((id) => lookup('students', id));
+                  return {
+                    i,
+                    b: invoiceBalance(i, all('payments'), all('payment_allocations')),
+                    students,
+                    haystack: [
+                      i.number,
+                      lookup('guardians', i.guardian_id),
+                      ...students,
+                      ...tutorsOf(studentIds),
+                    ]
+                      .join(' ')
+                      .toLowerCase(),
+                  };
+                })
+                .filter((x) => !q || x.haystack.includes(q));
+              const isVoid = (i: Row) => i.status === 'void';
+              const due = items.filter(
+                (x) => !isVoid(x.i) && (x.i.status === 'draft' || x.b.outstanding > 0),
+              );
+              const done = items.filter((x) => !isVoid(x.i) && !due.includes(x));
+              const voided = items.filter((x) => isVoid(x.i));
+              const rowsOf = (list: typeof items) =>
+                list.map(({ i, b, students }) => [
+                  <span key="n" className="guardian-cell">
+                    <strong>{String(i.number)}</strong>
+                    {/^sessions:.+:\d+$/.test(String(i.idempotency_key ?? '')) && (
+                      <small>Invois tambahan</small>
+                    )}
+                  </span>,
+                  <span key="g" className="guardian-cell">
+                    {lookup('guardians', i.guardian_id)}
+                    {students.length > 0 && <small>{students.join(', ')}</small>}
+                  </span>,
+                  <span key="j" className="guardian-cell">
+                    {formatMoney(b.invoiced)}
+                    {b.paid > 0 && b.outstanding > 0 && (
+                      <small>Dibayar {formatMoney(b.paid)}</small>
+                    )}
+                  </span>,
+                  formatMoney(b.outstanding),
+                  <Badge key="s" value={i.status} />,
+                  <div key="act" className="button-row compact">
+                    {b.outstanding > 0 && !['draft', 'void'].includes(String(i.status)) && (
+                      <button
+                        className="pay-button"
+                        disabled={busy}
+                        onClick={() => markInvoicePaid(i, b.outstanding)}
+                      >
+                        <Check size={15} />
+                        Yuran telah dibayar
+                      </button>
+                    )}
+                    <a
+                      key="print"
+                      className="text-link"
+                      target="_blank"
+                      rel="noreferrer"
+                      href={`/api/document?type=invoice&id=${i.id}${demo ? '&demo=1' : ''}`}
+                      onClick={(e) => {
+                        if (isStatic()) {
+                          e.preventDefault();
+                          void import('@/lib/student-reports')
+                            .then(async ({ financialPdf }) =>
+                              downloadBlob(
+                                new Blob(
+                                  [await financialPdf(i, 'invoice', demo, invoiceExtra(i))],
+                                  {
+                                    type: 'application/pdf',
+                                  },
+                                ),
+                                fileName(
+                                  ['Invois', i.number, lookup('guardians', i.guardian_id)],
+                                  'pdf',
+                                ),
                               ),
-                            ),
-                          )
-                          .catch(() => setNotice('Dokumen gagal dijana.'));
-                      }
-                    }}
-                  >
-                    Cetak / PDF
-                  </a>
-                </div>,
-              ]);
-            const headers = ['Invois', 'Ibu bapa · murid', 'Jumlah', 'Baki', 'Status', ''];
-            return (
-              <>
-                <div className="delivery-tools">
-                  <label className="delivery-search">
-                    <Search size={16} aria-hidden="true" />
+                            )
+                            .catch(() => setNotice('Dokumen gagal dijana.'));
+                        }
+                      }}
+                    >
+                      Cetak / PDF
+                    </a>
+                  </div>,
+                ]);
+              const headers = ['Invois', 'Ibu bapa · murid', 'Jumlah', 'Baki', 'Status', ''];
+              return (
+                <>
+                  <div className="delivery-tools">
+                    <label className="delivery-search">
+                      <Search size={16} aria-hidden="true" />
+                      <input
+                        type="search"
+                        aria-label="Cari invois"
+                        placeholder="Cari ibu bapa, murid, tutor atau no. invois…"
+                        value={invoiceQuery}
+                        onChange={(e) => setInvoiceQuery(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="pay-columns invoice-columns">
+                    <PayColumn
+                      title="Belum bayar"
+                      tone="due"
+                      summary={`${due.length} invois · baki ${formatMoney(due.reduce((n, x) => n + x.b.outstanding, 0))}`}
+                    >
+                      {due.length ? (
+                        <Table headers={headers} rows={rowsOf(due)} />
+                      ) : (
+                        <Empty text={q ? 'Tiada padanan.' : 'Tiada invois belum bayar.'} />
+                      )}
+                    </PayColumn>
+                    <PayColumn
+                      title="Sudah bayar"
+                      tone="done"
+                      summary={`${done.length} invois · ${formatMoney(done.reduce((n, x) => n + x.b.paid, 0))}`}
+                    >
+                      {done.length ? (
+                        <Table headers={headers} rows={rowsOf(done)} />
+                      ) : (
+                        <Empty text={q ? 'Tiada padanan.' : 'Belum ada invois dibayar.'} />
+                      )}
+                    </PayColumn>
+                  </div>
+                  {voided.length > 0 && (
+                    <details className="more-tools">
+                      <summary>Invois dibatalkan ({voided.length})</summary>
+                      <Table headers={headers} rows={rowsOf(voided)} />
+                    </details>
+                  )}
+                </>
+              );
+            })()}
+          </Card>
+          {/* Muat naik bukti memerlukan fungsi pelayan; binaan statik (Pages) tidak memaparkannya. */}
+          {!isStatic() && (
+            <Card title="Bukti bayaran (admin)">
+              {all('payments')
+                .filter((p) => p.status === 'pending_verification')
+                .map((p) => (
+                  <label className="file-label" key={p.id}>
+                    {String(p.reference || p.id)} · Pilih JPG / PNG / PDF
                     <input
-                      type="search"
-                      aria-label="Cari invois"
-                      placeholder="Cari ibu bapa, murid, tutor atau no. invois…"
-                      value={invoiceQuery}
-                      onChange={(e) => setInvoiceQuery(e.target.value)}
+                      type="file"
+                      accept="image/jpeg,image/png,application/pdf"
+                      disabled={demo || busy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void uploadProof(p.id, file);
+                      }}
                     />
                   </label>
-                </div>
-                <div className="pay-columns invoice-columns">
-                  <PayColumn
-                    title="Belum bayar"
-                    tone="due"
-                    summary={`${due.length} invois · baki ${formatMoney(due.reduce((n, x) => n + x.b.outstanding, 0))}`}
-                  >
-                    {due.length ? (
-                      <Table headers={headers} rows={rowsOf(due)} />
-                    ) : (
-                      <Empty text={q ? 'Tiada padanan.' : 'Tiada invois belum bayar.'} />
-                    )}
-                  </PayColumn>
-                  <PayColumn
-                    title="Sudah bayar"
-                    tone="done"
-                    summary={`${done.length} invois · ${formatMoney(done.reduce((n, x) => n + x.b.paid, 0))}`}
-                  >
-                    {done.length ? (
-                      <Table headers={headers} rows={rowsOf(done)} />
-                    ) : (
-                      <Empty text={q ? 'Tiada padanan.' : 'Belum ada invois dibayar.'} />
-                    )}
-                  </PayColumn>
-                </div>
-                {voided.length > 0 && (
-                  <details className="more-tools">
-                    <summary>Invois dibatalkan ({voided.length})</summary>
-                    <Table headers={headers} rows={rowsOf(voided)} />
-                  </details>
-                )}
-              </>
-            );
-          })()}
-        </Card>
-        {/* Muat naik bukti memerlukan fungsi pelayan; binaan statik (Pages) tidak memaparkannya. */}
-        {!isStatic() && (
-          <Card title="Bukti bayaran (admin)">
-            {all('payments')
-              .filter((p) => p.status === 'pending_verification')
-              .map((p) => (
-                <label className="file-label" key={p.id}>
-                  {String(p.reference || p.id)} · Pilih JPG / PNG / PDF
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,application/pdf"
-                    disabled={demo || busy}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void uploadProof(p.id, file);
-                    }}
-                  />
-                </label>
-              ))}
-          </Card>
-        )}
-        <Card
-          title="Bayaran & pengesahan"
-          subtitle="Bayaran dikira selepas disahkan admin"
-          action={
-            <button onClick={paymentForm}>
-              <Plus size={16} />
-              Rekod bayaran
-            </button>
-          }
-        >
-          <Table
-            headers={['Tarikh', 'Penjaga', 'Amaun', 'Kaedah', 'Rujukan', 'Status', 'Tindakan']}
-            rows={all('payments')
-              .filter((p) => matches({ ...p, guardian: lookup('guardians', p.guardian_id) }))
-              .map((p) => [
-                p.paid_on ? dateLabel(String(p.paid_on)) : '—',
-                lookup('guardians', p.guardian_id),
-                formatMoney(Number(p.amount_sen)),
-                paymentMethods.find(([v]) => v === p.method)?.[1] ?? String(p.method),
-                String(p.reference || 'Tiada rujukan'),
-                <Badge key="s" value={p.status} />,
-                p.status === 'pending_verification' ? (
-                  <button
-                    key="v"
-                    onClick={() =>
-                      setDialog({
-                        title: 'Sahkan dan peruntukkan bayaran',
-                        operation: 'verify',
-                        fields: [
-                          {
-                            name: 'inv',
-                            label: 'Invois',
-                            options: all('invoices')
-                              .filter(
-                                (i) =>
-                                  i.guardian_id === p.guardian_id &&
-                                  !['draft', 'void', 'paid'].includes(String(i.status)),
-                              )
-                              .map((i) => [i.id, String(i.number)]),
-                          },
-                          { name: 'allocation', label: 'Amaun peruntukan MYR' },
-                        ],
-                        transform: (v) => ({
-                          pid: p.id,
-                          inv: v.inv,
-                          allocation: integerSen(v.allocation),
-                        }),
-                      })
-                    }
-                  >
-                    Semak bayaran
-                  </button>
-                ) : p.status === 'verified' ? (
-                  <button
-                    key="r"
-                    onClick={() =>
-                      setDialog({
-                        title: 'Balikkan bayaran · sejarah kekal',
-                        operation: 'reverse',
-                        fields: [{ name: 'reason', label: 'Sebab pembalikan (min. 5 aksara)' }],
-                        transform: (v) => ({ ...v, pid: p.id }),
-                      })
-                    }
-                  >
-                    Pembalikan
-                  </button>
-                ) : (
-                  '—'
-                ),
-              ])}
-          />
-        </Card>
-        <Card
-          title="Pelan yuran"
-          subtitle="Yuran ditetapkan oleh pentadbir"
-          action={
-            <button
-              onClick={() =>
-                setDialog({
-                  title: 'Pelan yuran baharu',
-                  operation: 'fee_plan',
-                  fields: [
-                    { name: 'name', label: 'Nama pelan' },
-                    {
-                      name: 'basis',
-                      label: 'Asas',
-                      options: [
-                        ['monthly', 'Bulanan'],
-                        ['per_session', 'Setiap sesi'],
-                        ['package', 'Pakej'],
-                      ],
-                    },
-                    { name: 'amount_sen', label: 'Amaun MYR' },
-                    {
-                      name: 'due_day',
-                      label: 'Hari akhir bayaran (1–28)',
-                      type: 'number',
-                      value: '7',
-                    },
-                  ],
-                  transform: (v) => ({
-                    ...v,
-                    amount_sen: integerSen(v.amount_sen),
-                    due_day: Number(v.due_day),
-                  }),
-                })
-              }
-            >
-              Tambah pelan
-            </button>
-          }
-        >
-          <Table
-            headers={['Pelan', 'Asas', 'Amaun']}
-            rows={all('fee_plans').map((p) => [
-              String(p.name),
-              String(p.basis),
-              formatMoney(Number(p.amount_sen)),
-            ])}
-          />
-        </Card>
-        <Card title="Resit disahkan">
-          <Table
-            headers={['Resit', 'Status', '']}
-            rows={all('receipts').map((r) => [
-              String(r.number),
-              <Badge key="s" value={r.status} />,
-              <a
-                key="p"
-                className="text-link"
-                target="_blank"
-                rel="noreferrer"
-                href={`/api/document?type=receipt&id=${r.id}${demo ? '&demo=1' : ''}`}
-                onClick={(e) => {
-                  if (isStatic()) {
-                    e.preventDefault();
-                    void import('@/lib/student-reports')
-                      .then(async ({ financialPdf }) =>
-                        downloadBlob(
-                          new Blob([await financialPdf(r, 'receipt', demo, receiptExtra(r))], {
-                            type: 'application/pdf',
+                ))}
+            </Card>
+          )}
+          <Card
+            title="Bayaran & pengesahan"
+            subtitle="Bayaran dikira selepas disahkan admin"
+            action={
+              <button onClick={paymentForm}>
+                <Plus size={16} />
+                Rekod bayaran
+              </button>
+            }
+          >
+            <Table
+              headers={['Tarikh', 'Penjaga', 'Amaun', 'Kaedah', 'Rujukan', 'Status', 'Tindakan']}
+              rows={all('payments')
+                .filter((p) => matches({ ...p, guardian: lookup('guardians', p.guardian_id) }))
+                .map((p) => [
+                  p.paid_on ? dateLabel(String(p.paid_on)) : '—',
+                  lookup('guardians', p.guardian_id),
+                  formatMoney(Number(p.amount_sen)),
+                  paymentMethods.find(([v]) => v === p.method)?.[1] ?? String(p.method),
+                  String(p.reference || 'Tiada rujukan'),
+                  <Badge key="s" value={p.status} />,
+                  p.status === 'pending_verification' ? (
+                    <button
+                      key="v"
+                      onClick={() =>
+                        setDialog({
+                          title: 'Sahkan dan peruntukkan bayaran',
+                          operation: 'verify',
+                          fields: [
+                            {
+                              name: 'inv',
+                              label: 'Invois',
+                              options: all('invoices')
+                                .filter(
+                                  (i) =>
+                                    i.guardian_id === p.guardian_id &&
+                                    !['draft', 'void', 'paid'].includes(String(i.status)),
+                                )
+                                .map((i) => [i.id, String(i.number)]),
+                            },
+                            { name: 'allocation', label: 'Amaun peruntukan MYR' },
+                          ],
+                          transform: (v) => ({
+                            pid: p.id,
+                            inv: v.inv,
+                            allocation: integerSen(v.allocation),
                           }),
-                          fileName(
-                            [
-                              'Resit',
-                              r.number ||
-                                dateLabel(String(r.created_at || new Date().toISOString())),
-                            ],
-                            'pdf',
-                          ),
-                        ),
-                      )
-                      .catch(() => setNotice('Dokumen gagal dijana.'));
-                  }
-                }}
+                        })
+                      }
+                    >
+                      Semak bayaran
+                    </button>
+                  ) : p.status === 'verified' ? (
+                    <button
+                      key="r"
+                      onClick={() =>
+                        setDialog({
+                          title: 'Balikkan bayaran · sejarah kekal',
+                          operation: 'reverse',
+                          fields: [{ name: 'reason', label: 'Sebab pembalikan (min. 5 aksara)' }],
+                          transform: (v) => ({ ...v, pid: p.id }),
+                        })
+                      }
+                    >
+                      Pembalikan
+                    </button>
+                  ) : (
+                    '—'
+                  ),
+                ])}
+            />
+          </Card>
+          <Card
+            title="Pelan yuran"
+            subtitle="Yuran ditetapkan oleh pentadbir"
+            action={
+              <button
+                onClick={() =>
+                  setDialog({
+                    title: 'Pelan yuran baharu',
+                    operation: 'fee_plan',
+                    fields: [
+                      { name: 'name', label: 'Nama pelan' },
+                      {
+                        name: 'basis',
+                        label: 'Asas',
+                        options: [
+                          ['monthly', 'Bulanan'],
+                          ['per_session', 'Setiap sesi'],
+                          ['package', 'Pakej'],
+                        ],
+                      },
+                      { name: 'amount_sen', label: 'Amaun MYR' },
+                      {
+                        name: 'due_day',
+                        label: 'Hari akhir bayaran (1–28)',
+                        type: 'number',
+                        value: '7',
+                      },
+                    ],
+                    transform: (v) => ({
+                      ...v,
+                      amount_sen: integerSen(v.amount_sen),
+                      due_day: Number(v.due_day),
+                    }),
+                  })
+                }
               >
-                Cetak / PDF
-              </a>,
-            ])}
-          />
-        </Card>
+                Tambah pelan
+              </button>
+            }
+          >
+            <Table
+              headers={['Pelan', 'Asas', 'Amaun']}
+              rows={all('fee_plans').map((p) => [
+                String(p.name),
+                String(p.basis),
+                formatMoney(Number(p.amount_sen)),
+              ])}
+            />
+          </Card>
+          <Card title="Resit disahkan">
+            <Table
+              headers={['Resit', 'Status', '']}
+              rows={all('receipts').map((r) => [
+                String(r.number),
+                <Badge key="s" value={r.status} />,
+                <a
+                  key="p"
+                  className="text-link"
+                  target="_blank"
+                  rel="noreferrer"
+                  href={`/api/document?type=receipt&id=${r.id}${demo ? '&demo=1' : ''}`}
+                  onClick={(e) => {
+                    if (isStatic()) {
+                      e.preventDefault();
+                      void import('@/lib/student-reports')
+                        .then(async ({ financialPdf }) =>
+                          downloadBlob(
+                            new Blob([await financialPdf(r, 'receipt', demo, receiptExtra(r))], {
+                              type: 'application/pdf',
+                            }),
+                            fileName(
+                              [
+                                'Resit',
+                                r.number ||
+                                  dateLabel(String(r.created_at || new Date().toISOString())),
+                              ],
+                              'pdf',
+                            ),
+                          ),
+                        )
+                        .catch(() => setNotice('Dokumen gagal dijana.'));
+                    }
+                  }}
+                >
+                  Cetak / PDF
+                </a>,
+              ])}
+            />
+          </Card>
+        </details>
       </>
     );
   }
@@ -4067,6 +4191,7 @@ export function App({
     ['other', 'Lain-lain'],
   ];
   // Satu langkah: baki invois ditanda dibayar; rujukan pilihan; resit dijana.
+  // Satu langkah: baki invois ditanda dibayar; rujukan pilihan; resit dijana (invois manual).
   const markInvoicePaid = (i: Row, due: number) =>
     setDialog({
       title: `Yuran telah dibayar · ${String(i.number)} · ${formatMoney(due)}`,
@@ -4098,6 +4223,51 @@ export function App({
         payment_ref: v.payment_ref || '',
       }),
     });
+  // Baki anak bulan ini: baki invois, atau sesi belum dibayar × harga sesi jika invois belum dijana.
+  const childDue = (sid: unknown) => {
+    const fee = classFee(visible, primaryClass(visible, sid), `${month}-01`);
+    return Math.max(
+      childOwed(visible, sid, month),
+      sessionPayStats(visible, sid, month).unpaid * (fee || 0),
+    );
+  };
+  // Anak bil seorang penjaga (tidak diarkibkan).
+  const billingKids = (gid: unknown) =>
+    all('student_guardians')
+      .filter((l) => l.guardian_id === gid && l.is_billing_contact)
+      .map((l) => all('students').find((x) => x.id === l.student_id && x.status !== 'archived'))
+      .filter((x): x is Row => !!x)
+      .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name)));
+  // "Sudah bayar": satu amaun keluarga (kosong = baki penuh); tarikh lalai hari ini. Sistem melunaskan
+  // baki invois dahulu; lebihan menjadi kredit sesi; sesi dibayar yang belum dilaksanakan menjadi sesi
+  // ganti tutor (migrasi 52).
+  const familyPaymentForm = (gid: unknown) => {
+    const owed = billingKids(gid).reduce((n, k) => n + childDue(k.id), 0);
+    setDialog({
+      title: `Sudah bayar · ${lookup('guardians', gid)}${owed ? ` · baki ${formatMoney(owed)}` : ''}`,
+      operation: 'family_payment',
+      fields: [
+        {
+          name: 'amount',
+          label: 'Amaun diterima (RM)',
+          optional: true,
+          placeholder: owed ? `Kosong = ${formatMoney(owed)} (baki penuh)` : 'cth. 40.00',
+        },
+        {
+          name: 'paid_on',
+          label: 'Tarikh bayaran',
+          type: 'date',
+          value: klDate(new Date().toISOString()),
+        },
+      ],
+      transform: (v) => ({
+        billing_period: month,
+        guardian: gid,
+        paid_on: v.paid_on,
+        amount_sen: String(v.amount ?? '').trim() ? integerSen(String(v.amount).trim()) : null,
+      }),
+    });
+  };
   const invoiceExtra = (i: Row) => ({
     guardian: lookup('guardians', i.guardian_id),
     items: all('invoice_items')
@@ -4768,6 +4938,12 @@ export function App({
           studentId={selected.id}
           onData={setData}
         />
+        <Card
+          title={`Sesi dibayar · ${String(selected.full_name)} · ${monthLabel(month)}`}
+          subtitle="Kiraan sesi yang direkod tutor dan yang sudah dibayar bulan ini."
+        >
+          <PayBox stats={sessionPayStats(visible, selected.id, month)} />
+        </Card>
         <Card title="Invois keluarga">
           <Table
             headers={['Invois', 'Jumlah', 'Baki', 'Status']}
@@ -5928,7 +6104,7 @@ function SessionEditor({
     /* Explicit choices required. */
   }
   // Kuota sebulan: rekod baharu melebihi kuota hanya disimpan selepas disahkan sebagai sesi tambahan.
-  const monthQuota = classQuota(data, session.class_id);
+  const monthQuota = classQuota(data, session.class_id, classDate.slice(0, 7));
   const monthUsed = quotaUsed(data, session.class_id, classDate.slice(0, 7), session.id);
   const overQuota =
     !session.extra &&

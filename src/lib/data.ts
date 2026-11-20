@@ -13,6 +13,11 @@ export const projections: Record<string, string> = {
     'id,staff_id,period,amount_sen,sessions,paid_on,reference,status,void_reason,created_at',
   // Selesai bulan oleh tutor (migrasi 50).
   tutor_month_closures: 'id,staff_id,period,sessions,closed_at',
+  // Bayaran ikut sesi (migrasi 52): kredit sesi, penggunaannya dan sesi + amaun bagi setiap bayaran.
+  session_credits:
+    'id,guardian_id,student_id,period,sessions,unit_price_sen,payment_id,class_id,created_at',
+  session_credit_uses: 'id,guardian_id,student_id,period,sessions,updated_at',
+  payment_sessions: 'id,payment_id,invoice_id,student_id,sessions,amount_sen',
   tutor_applications: 'id,display_name,status,created_at',
   student_guardians: 'id,student_id,guardian_id,portal_allowed,is_billing_contact',
   organizations: 'id,name,phone,address,logo_path',
@@ -23,7 +28,8 @@ export const projections: Record<string, string> = {
   subjects: 'id,slug,name',
   programs: 'id,subject_id,code,name,curriculum_version',
   curriculum_units: 'id,program_id,code,name,outcome,sort_order',
-  classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible,sessions_per_month',
+  classes:
+    'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible,sessions_per_month,created_at',
   class_tutors: 'id,class_id,staff_id,starts_on,ends_on',
   class_schedules:
     'id,class_id,day_of_week,start_time,duration_minutes,effective_from,effective_to',
@@ -58,7 +64,14 @@ export const projections: Record<string, string> = {
     'id,reported_name,note,program_code,duration_minutes,reported_date,planned_quota,status,student_id,session_id',
   private_import_batches: 'id,period,reported_count,planned_count,indicative_sen,status',
 };
-const OPTIONAL_TABLES = ['class_rate_overrides', 'tutor_rate_overrides', 'tutor_month_closures'];
+const OPTIONAL_TABLES = [
+  'class_rate_overrides',
+  'tutor_rate_overrides',
+  'tutor_month_closures',
+  'session_credits',
+  'session_credit_uses',
+  'payment_sessions',
+];
 // Lajur baharu yang belum wujud sebelum migrasinya dipasang: baca semula tanpa lajur itu.
 const FALLBACK_FIELDS: Record<string, string> = {
   classes: 'id,program_id,name,mode,delivery,max_capacity,venue,active,flexible',

@@ -73,6 +73,9 @@ delete from public.tutor_allowance_entries where session_id in (select id from r
 delete from public.tutor_payouts where tutor_id in (select staff_id from rm_staff);
 delete from public.receipts where payment_id in (select id from rm_payments);
 delete from public.payment_evidence where payment_id in (select id from rm_payments);
+delete from public.payment_sessions where payment_id in (select id from rm_payments) or invoice_id in (select id from rm_invoices) or student_id in (select student_id from rm_students);
+delete from public.session_credit_uses where student_id in (select student_id from rm_students) or guardian_id in (select guardian_id from rm_guardians);
+delete from public.session_credits where payment_id in (select id from rm_payments) or student_id in (select student_id from rm_students) or guardian_id in (select guardian_id from rm_guardians);
 delete from public.payment_allocations where payment_id in (select id from rm_payments) or invoice_id in (select id from rm_invoices);
 delete from public.payments where id in (select id from rm_payments);
 delete from public.invoice_items where invoice_id in (select id from rm_invoices) or student_id in (select student_id from rm_students);

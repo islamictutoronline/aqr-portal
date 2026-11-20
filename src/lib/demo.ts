@@ -146,7 +146,10 @@ export function demoData(): Dataset {
     ),
   );
   return {
-    organizations: [row('demo', { name: 'Akademi Al-Quran Ar-Riyadh (AQR)' })],
+    // Demo: sesi ganti dikira mulai September 2026 supaya contoh ganti kelihatan pada Oktober.
+    organizations: [
+      row('demo', { name: 'Akademi Al-Quran Ar-Riyadh (AQR)', quota_carry_from: '2026-09' }),
+    ],
     branches: [row('branch-demo', { name: 'Pusat contoh', timezone: 'Asia/Kuala_Lumpur' })],
     students,
     guardians,
@@ -160,7 +163,8 @@ export function demoData(): Dataset {
     class_tutors: classes.map((c, i) =>
       row(`assignment-${i}`, {
         class_id: c.id,
-        staff_id: `tutor-${i % 3}`,
+        // Kelas individu (class-5) dipegang Tutor Contoh 1 supaya pratonton tutor memaparkan sesi ganti.
+        staff_id: i === 5 ? 'tutor-0' : `tutor-${i % 3}`,
         starts_on: '2026-01-01',
       }),
     ),
@@ -323,6 +327,21 @@ export function demoData(): Dataset {
     tutor_month_payments: [],
     // Selesai bulan (migrasi 50/51): belum ada tutor menekan Selesai; rekod bulan itu dikunci selepas ditekan.
     tutor_month_closures: [],
+    // Murid Contoh 12 (kelas individu): ibu bapa membayar RM20 lebih pada September (2 sesi kredit)
+    // yang belum dilaksanakan — menjadi 2 sesi ganti tutor pada Oktober.
+    session_credits: [
+      row('credit-demo', {
+        guardian_id: 'guardian-1',
+        student_id: 'student-11',
+        period: '2026-09',
+        sessions: 2,
+        unit_price_sen: 1000,
+        payment_id: null,
+        class_id: 'class-5',
+      }),
+    ],
+    session_credit_uses: [],
+    payment_sessions: [],
     monthly_tutor_remarks: [],
     class_rate_overrides: [],
     tutor_rate_overrides: [],

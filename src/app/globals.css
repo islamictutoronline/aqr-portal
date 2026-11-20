@@ -2938,6 +2938,141 @@ label {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* Kotak sesi dibayar: direkod / dibayar / belum dibayar / kredit prabayar. */
+.pay-box {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.pay-cell {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid #e3e8e1;
+  border-radius: 12px;
+  background: #f7faf6;
+  text-align: center;
+}
+.pay-cell strong {
+  font-size: 22px;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.pay-cell small {
+  font-size: 12px;
+  color: var(--slate);
+}
+.pay-cell.ok {
+  background: #e9f3ee;
+  border-color: #c9e0d3;
+}
+.pay-cell.due {
+  background: #fdf1ef;
+  border-color: #f3c9c2;
+}
+.pay-cell.due strong {
+  color: #b42318;
+}
+.pay-cell.credit {
+  background: #fbefd5;
+  border-color: #eed39b;
+}
+.pay-box.compact {
+  gap: 4px;
+  min-width: 260px;
+}
+.pay-box.compact .pay-cell {
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.pay-box.compact .pay-cell strong {
+  font-size: 15px;
+}
+.pay-box.compact .pay-cell small {
+  font-size: 10px;
+}
+@media (max-width: 520px) {
+  .pay-box {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* Dua bar: sesi bulan semasa dan sesi ganti (amber). */
+.quota-bars {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  max-width: 360px;
+}
+.quota-bars > .quota-bar {
+  margin-top: 0;
+}
+.quota-bar.ganti .quota-text > span:first-child {
+  color: #8a5a0b;
+  font-weight: 700;
+}
+.quota-bar.ganti .progress-track {
+  background: #f6dfae;
+}
+.quota-bar.ganti .progress-track i,
+.quota-bar.ganti.full .progress-track i {
+  background: linear-gradient(90deg, #d39a2b, #b07415);
+}
+.pill.ganti {
+  background: #fbefd5;
+  color: #8a5a0b;
+  border-color: #eed39b;
+}
+/* Yuran keluarga: satu baris setiap penjaga, kotak sesi setiap anak, satu butang Sudah bayar. */
+.family-pay-list {
+  display: grid;
+  gap: 10px;
+}
+.family-pay {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e3e8e1;
+  border-radius: 14px;
+  background: var(--surface);
+}
+.family-pay header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.family-pay header strong {
+  color: var(--navy);
+  margin-right: auto;
+}
+.family-owed {
+  font-size: 13px;
+  color: var(--slate);
+}
+.family-owed.due {
+  color: #b42318;
+  font-weight: 700;
+}
+.family-pay-kid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e3e8e1;
+}
+.family-pay-kid > span {
+  display: grid;
+  font-weight: 600;
+}
+.family-pay-kid small {
+  color: var(--slate);
+  font-weight: 500;
+}
+.finance-more > summary {
+  font-weight: 600;
+}
 .quota-bar.full .progress-track i {
   background: linear-gradient(90deg, #b8892f, #8a6418);
 }

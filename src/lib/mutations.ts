@@ -276,6 +276,18 @@ const schemas = {
     payment_method: z.enum(['cash', 'bank_transfer', 'duitnow_qr', 'other']),
     payment_ref: z.string().max(120).default(''),
   }),
+  // "Sudah bayar" keluarga: satu amaun (sen); null = baki penuh bulan ini (migrasi 52).
+  family_payment: z.object({
+    billing_period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    guardian: uuid,
+    paid_on: z.iso.date(),
+    amount_sen: z.number().int().positive().max(10000000).nullable().default(null),
+  }),
+  // Jana / kemas kini invois seorang penjaga sahaja.
+  guardian_invoice: z.object({
+    billing_period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    guardian: uuid,
+  }),
   tutor_paid: z.object({
     staff_id: uuid,
     period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -430,9 +442,15 @@ export async function executeMutation(
     }
   } else {
     if (
-      ['transfer_class', 'class_rates', 'tutor_rate', 'reopen_report', 'reopen_month'].includes(
-        operation,
-      )
+      [
+        'transfer_class',
+        'class_rates',
+        'tutor_rate',
+        'reopen_report',
+        'reopen_month',
+        'family_payment',
+        'guardian_invoice',
+      ].includes(operation)
     )
       requireRoles(ctx, ['owner', 'admin']);
     const rpc: Record<string, string> = {
@@ -448,6 +466,8 @@ export async function executeMutation(
       remove_program: 'remove_student_program',
       save_guardian: 'save_student_guardian',
       invoice_paid: 'mark_invoice_paid',
+      family_payment: 'record_family_payment',
+      guardian_invoice: 'generate_guardian_invoice',
       tutor_paid: 'mark_tutor_paid',
       void_tutor_paid: 'void_tutor_payment',
       remove_student: 'remove_student',

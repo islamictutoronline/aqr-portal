@@ -1,13 +1,14 @@
 import { Dataset, Row, klDay } from './core';
 import { CHARGEABLE_ATTENDANCE } from './reporting';
+import { primaryClass, studentCarry } from './billing';
 // Sesi dikira ikut bulan (migrasi 50, sama seperti private.class_quota / quota_used dalam DB):
 // kuota sesi sebulan setiap kelas; Hadir, Lewat, Ganti dan Tidak hadir dikira, Cuti bermaklum tidak.
 // Sesi tambahan (class_sessions.extra) yang disahkan tutor dibenarkan melebihi kuota (cth. 5/4).
 export const countsTowardQuota = (status: unknown) =>
   CHARGEABLE_ATTENDANCE.includes(String(status));
 
-// Kuota kelas. Tanpa nilai tersimpan: 4 × slot mingguan yang masih aktif.
-export function classQuota(
+// Kuota asas kelas. Tanpa nilai tersimpan: 4 × slot mingguan yang masih aktif.
+export function baseQuota(
   data: Dataset,
   classId: unknown,
   today = klDay(new Date().toISOString()),
@@ -19,6 +20,23 @@ export function classQuota(
     (r) => r.class_id === classId && (!r.effective_to || String(r.effective_to) >= today),
   ).length;
   return 4 * Math.min(7, Math.max(1, slots));
+}
+// Sesi ganti (migrasi 52): sesi yang sudah dibayar bulan lepas tetapi belum dilaksanakan. Hanya kelas
+// individu yang menjadi kelas utama murid (sama seperti private.quota_carry).
+export function prevMonth(month: string) {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+}
+export function quotaCarry(data: Dataset, classId: unknown, month: string): number {
+  const cls = (data.classes ?? []).find((c) => c.id === classId);
+  if (cls?.mode !== 'one_to_one') return 0;
+  const student = (data.enrollments ?? []).find((e) => e.class_id === classId)?.student_id;
+  if (!student || primaryClass(data, student) !== classId) return 0;
+  return studentCarry(data, student, month);
+}
+// Kuota bulan = kuota asas + sesi ganti.
+export function classQuota(data: Dataset, classId: unknown, month: string) {
+  return baseQuota(data, classId) + quotaCarry(data, classId, month);
 }
 // Sesi kelas dalam bulan (YYYY-MM, tarikh KL) yang sudah dikira dalam kuota, kecuali sesi `skip`.
 export function quotaUsed(data: Dataset, classId: unknown, month: string, skip?: unknown) {
@@ -42,7 +60,7 @@ export function quotaProblem(data: Dataset, sessionId: unknown, status: string) 
   const s = (data.class_sessions ?? []).find((x) => x.id === sessionId);
   if (!s || s.extra) return null;
   const month = klDay(String(s.starts_at)).slice(0, 7);
-  const quota = classQuota(data, s.class_id);
+  const quota = classQuota(data, s.class_id, month);
   if (quotaUsed(data, s.class_id, month, s.id) < quota) return null;
   const [y, m] = month.split('-');
   return `Kuota ${quota} sesi sebulan bagi bulan ${m}/${y} sudah penuh. Tandakan Cuti bermaklum, atau rekod sebagai sesi tambahan.`;
