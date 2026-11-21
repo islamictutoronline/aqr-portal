@@ -1476,7 +1476,10 @@ test('Sudah bayar per family: one amount; balance first, extra becomes credit sh
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('input, select')).toHaveCount(2);
   // Baki RM 40 (2 anak × 2 sesi × RM 10); ibu bapa bayar RM 60 → RM 20 lebihan = 1 sesi kredit setiap anak.
-  await page.getByLabel('Amaun diterima (RM)').fill('60.00');
+  // Tulisan pudar = baki sebagai nombor sahaja (tanpa RM).
+  await expect(page.getByLabel(/Amaun diterima \(RM\)/)).toHaveAttribute('placeholder', '40');
+  await page.getByLabel(/Amaun diterima \(RM\)/).fill('60');
+  await expect(page.getByLabel(/Amaun diterima \(RM\)/)).toHaveAttribute('inputmode', 'decimal');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
   for (const name of ['Murid Contoh 03', 'Murid Contoh 08']) {
@@ -1493,7 +1496,7 @@ test('Sudah bayar per family: one amount; balance first, extra becomes credit sh
   // Lebihan yang tidak cukup untuk satu sesi ditolak.
   const third = page.getByRole('region', { name: 'Penjaga Contoh 4' });
   await third.getByRole('button', { name: 'Sudah bayar' }).click();
-  await page.getByLabel('Amaun diterima (RM)').fill('50.00');
+  await page.getByLabel(/Amaun diterima \(RM\)/).fill('50.00');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByText(/tidak cukup untuk satu sesi/).first()).toBeVisible();
 });

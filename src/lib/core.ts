@@ -121,10 +121,18 @@ export function monthBounds(month: string) {
     end: new Date(Date.UTC(y, m, 1, -8)).toISOString(),
   };
 }
+// Amaun ringgit ditaip bebas: "72", "72.00", "RM72.00", "RM 72" atau "1,200.50" (koma ribu dibuang).
 export function integerSen(value: string) {
-  if (!/^\d+(\.\d{1,2})?$/.test(value))
-    throw new Error('Amaun mesti mempunyai maksimum dua tempat perpuluhan');
-  const [ringgit, decimal = ''] = value.split('.');
+  const clean = value
+    .trim()
+    .replace(/^RM\s*/i, '')
+    .replace(/,/g, '')
+    .trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(clean))
+    throw new Error(
+      'Masukkan amaun dalam ringgit, contoh 72 atau 72.00 (maksimum dua tempat perpuluhan)',
+    );
+  const [ringgit, decimal = ''] = clean.split('.');
   const result = Number(ringgit) * 100 + Number(decimal.padEnd(2, '0'));
   if (!Number.isSafeInteger(result)) throw new Error('Amaun terlalu besar');
   return result;

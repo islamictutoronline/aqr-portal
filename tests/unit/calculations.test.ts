@@ -90,6 +90,12 @@ describe('Integer-sen finance and immutable rate eligibility', () => {
   it('parses decimals without floating point rounding', () => {
     expect(integerSen('0.29')).toBe(29);
     expect(integerSen('150')).toBe(15000);
+    // Admin menaip awalan RM, jarak atau koma ribu.
+    expect(integerSen('RM72.00')).toBe(7200);
+    expect(integerSen('rm 72')).toBe(7200);
+    expect(integerSen(' RM1,200.50 ')).toBe(120050);
+    expect(() => integerSen('RM')).toThrow();
+    expect(() => integerSen('72.5.0')).toThrow();
     expect(() => integerSen('2.555')).toThrow();
     expect(() => integerSen('-1')).toThrow();
   });

@@ -4249,9 +4249,11 @@ export function App({
       fields: [
         {
           name: 'amount',
-          label: 'Amaun diterima (RM)',
+          // Tulisan pudar = baki sebagai nombor sahaja (tanpa RM); kosong = baki penuh.
+          label: owed ? 'Amaun diterima (RM) · kosong = baki penuh' : 'Amaun diterima (RM)',
+          type: 'money',
           optional: true,
-          placeholder: owed ? `Kosong = ${formatMoney(owed)} (baki penuh)` : 'cth. 40.00',
+          placeholder: owed ? String(owed % 100 ? (owed / 100).toFixed(2) : owed / 100) : '72',
         },
         {
           name: 'paid_on',
@@ -5857,7 +5859,9 @@ export function App({
                       <input
                         autoFocus={dialog.fields[0] === f}
                         name={f.name}
-                        type={f.type || 'text'}
+                        // Amaun ringgit: papan kekunci nombor; perpuluhan pilihan (72 atau 72.50).
+                        type={f.type === 'money' ? 'text' : f.type || 'text'}
+                        inputMode={f.type === 'money' ? 'decimal' : undefined}
                         required={!f.optional}
                         defaultValue={f.value}
                         min={f.type === 'number' ? 0 : undefined}
