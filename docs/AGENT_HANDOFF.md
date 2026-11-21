@@ -2,7 +2,7 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Pembetulan Sudah bayar pada telefon + nama penjaga "-" — 21 November 2026 (setempat, BELUM commit/deploy)
+## Pembetulan Sudah bayar pada telefon + nama penjaga "-" — 21 November 2026 (dideploy `7ee97b7`)
 
 Laporan pengguna: (1) "RM72.00" ditolak; (2) pada telefon "Rekod tidak dapat disimpan. Semak kelayakan…" walaupun di web berjaya; (3) borang memaparkan penjaga "-" (tutor tidak tahu nama ibu bapa); minta pastikan tidak berulang bagi tutor/murid baharu. Diagnostik SQL (rollback) membuktikan `record_family_payment` berjaya di pangkalan data untuk keluarga itu; API mengenali fungsi (anon → 42501).
 
@@ -11,7 +11,7 @@ Laporan pengguna: (1) "RM72.00" ditolak; (2) pada telefon "Rekod tidak dapat dis
 - **Migrasi 53** `202611210053_guardian_placeholder_names.sql`: `private.placeholder_name`; pencetus `student_guardians_default_name` (penjaga bil bernama "-"/kosong/"Tiada" → "Ibu/Bapa <murid>") dan `guardians_keep_name` (nama sebenar tidak ditimpa); data sedia ada dibetulkan; `record_family_payment` ditulis semula tanpa jadual sementara (jsonb), logik sama.
 - `vitest.config.ts` `hookTimeout: 60000` (mesin sibuk — Parallels — menyebabkan persediaan PGlite 53 migrasi > 10 s).
 - Bukti: `npm test` 163/163 (baharu `tests/integration/guardian-names.test.ts`: daftar/kemas kini, tutor baharu + murid baharu + adik-beradik), `test:pages` 98/98, typecheck/lint/Prettier, binaan Pages, `setup-all.sql` = 53 migrasi.
-- **Belum:** commit/push disekat oleh kebenaran mod automatik Claude Code — perlukan kelulusan pengguna; kemudian deploy Pages; pengguna pasang migrasi 53.
+- **Status:** **migrasi 53 dipasang pengguna** (21 Nov, "Success"); commit `7ee97b7`; [AQR checks #44857838149](https://github.com/islamictutoronline/aqr-portal/actions/runs/44857838149) dan [AQR GitHub Pages #44857854264](https://github.com/islamictutoronline/aqr-portal/actions/runs/44857854264) **success**; aset `index-BuDpZyJ2.js` mengandungi cuba semula token dan kod ralat. **Belum:** pengguna menguji semula Sudah bayar pada telefon (kod ralat akan dipaparkan jika masih gagal).
 
 ## Sudah bayar ikut amaun, kredit sesi, sesi ganti terus kepada tutor — 20 November 2026 (dideploy `056c4fa`)
 
