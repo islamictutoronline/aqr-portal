@@ -509,12 +509,17 @@ export async function executeMutation(
   }
   if (result.error) {
     // Mesej daripada `raise exception` dalam fungsi kita ditulis dalam Bahasa Melayu dan selamat
-    // dipaparkan; ralat sistem lain kekal umum.
+    // dipaparkan; ralat sistem lain kekal umum tetapi membawa kod ralat untuk diagnosis.
     const { code, message } = result.error as { code?: string; message?: string };
-    throw new Error(
-      code === 'P0001' && message
-        ? message
-        : 'Rekod tidak dapat disimpan. Semak kelayakan, status dan peranan penyemak.',
+    if (code !== 'P0001') console.error('Ralat simpan', operation, result.error);
+    // Kod dibawa bersama ralat supaya pemanggil boleh mencuba semula (contoh: token log masuk tamat).
+    throw Object.assign(
+      new Error(
+        code === 'P0001' && message
+          ? message
+          : `Rekod tidak dapat disimpan. Semak kelayakan, status dan peranan penyemak.${code ? ` (kod ${code})` : ''}`,
+      ),
+      { code },
     );
   }
   return { id: result.data, saved: true };

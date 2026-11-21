@@ -94,6 +94,11 @@ describe('Integer-sen finance and immutable rate eligibility', () => {
     expect(integerSen('RM72.00')).toBe(7200);
     expect(integerSen('rm 72')).toBe(7200);
     expect(integerSen(' RM1,200.50 ')).toBe(120050);
+    // Koma perpuluhan (papan kekunci telefon) — bukan RM12,800.
+    expect(integerSen('128,00')).toBe(12800);
+    expect(integerSen('72,5')).toBe(7250);
+    expect(integerSen('1,200')).toBe(120000);
+    expect(() => integerSen('12,80,0')).toThrow();
     expect(() => integerSen('RM')).toThrow();
     expect(() => integerSen('72.5.0')).toThrow();
     expect(() => integerSen('2.555')).toThrow();

@@ -93,8 +93,20 @@ export async function staticTransport(input: string, init?: RequestInit) {
     }
     const ctx = await getContext();
     if (path === '/api/data') return Response.json(await loadData(ctx));
-    if (path === '/api/mutate')
-      return Response.json(await executeMutation(ctx, JSON.parse(String(init?.body))));
+    if (path === '/api/mutate') {
+      const input = JSON.parse(String(init?.body));
+      try {
+        return Response.json(await executeMutation(ctx, input));
+      } catch (e) {
+        // Telefon: tab di latar belakang boleh menghantar token log masuk yang sudah tamat. Perbaharui
+        // token dan cuba sekali lagi (pangkalan data menolak sebelum apa-apa disimpan).
+        const code = (e as { code?: string }).code;
+        if (!['PGRST301', 'PGRST303', '42501'].includes(String(code))) throw e;
+        const { error } = await db.auth.refreshSession();
+        if (error) throw new Error('Sesi log masuk tamat. Sila log masuk semula.');
+        return Response.json(await executeMutation(await getContext(), input));
+      }
+    }
     if (path === '/api/password') {
       // Pemilik/admin dan tutor boleh menetapkan kata laluan sendiri selepas log masuk pertama dengan kod e-mel.
       if (!['owner', 'admin', 'tutor'].includes(ctx.role))

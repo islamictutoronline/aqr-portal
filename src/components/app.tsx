@@ -1786,7 +1786,10 @@ export function App({
   // Demo: tiru private.save_student_guardian (nama lalai, no. sama = penjaga sama, penjaga bil).
   function demoGuardian(next: Dataset, studentId: unknown, rawName: unknown, rawPhone: unknown) {
     const student = next.students.find((x) => x.id === studentId);
-    const typed = String(rawName || '').trim();
+    // Nama tanpa huruf/nombor ("-", ".") dianggap kosong (migrasi 53).
+    const raw = String(rawName || '').trim();
+    const typed =
+      /[\p{L}\p{N}]/u.test(raw) && !/^(tiada|tiada nama|nil|n\/a|na|none)$/i.test(raw) ? raw : '';
     const name = typed || `Ibu/Bapa ${String(student?.full_name ?? '')}`;
     const phone = normalizePhone(String(rawPhone || ''));
     let g = phone ? next.guardians.find((x) => x.phone === phone && x.active !== false) : undefined;
