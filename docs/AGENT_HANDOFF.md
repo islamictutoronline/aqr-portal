@@ -2,7 +2,7 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Senarai kelas tutor tanpa membuka rekod — 22 November 2026 (setempat, BELUM commit/deploy)
+## Senarai kelas tutor tanpa membuka rekod — 22 November 2026 (dideploy: commit 794cfc3, Pages run 45033423818, aset index-DwNjlzE_.js; tiada migrasi)
 
 Permintaan pengguna: tutor tidak boleh melihat senarai kelas yang sudah direkod kecuali selepas membuka satu rekod. Keputusan: buat kedua-dua cadangan.
 
