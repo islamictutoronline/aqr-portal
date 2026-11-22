@@ -2,7 +2,7 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Rekod kelas ikut tarikh sebenar; rekod ditutup selepas simpan — 22 November 2026 (dideploy)
+## Rekod kelas ikut tarikh sebenar; rekod ditutup selepas simpan — 22 November 2026 (dideploy: commit 2728e60, Pages run 45027440778, aset index-CX6VDDzq.js; tiada migrasi)
 
 Komen tutor: kadang-kadang perlu tekan "Tambah rekod sesi", kadang-kadang paparan luar; paparan luar kadang-kadang mengubah rekod lama. Punca: `bestSession` membuka sendiri sesi hari ini (termasuk yang sudah direkod), sesi seterusnya ikut jadual (tarikh salah jika kelas dibuat awal) atau kelas terakhir yang direkod (ditimpa). Keputusan pengguna: ikut cadangan; selepas Simpan rekod ditutup, bukan kekal terbuka.
 
