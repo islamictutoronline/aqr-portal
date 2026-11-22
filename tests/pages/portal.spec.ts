@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 // Isi borang Daftar murid (model individu dengan satu slot mingguan).
 async function enrol(page: Page, name: string, program: string) {
   await page.getByRole('button', { name: 'Daftar murid', exact: true }).click();
@@ -13,6 +13,24 @@ async function enrol(page: Page, name: string, program: string) {
 import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
+// Tekan nama murid → borang "Rekod kelas baharu" (tarikh lalai hari ini); isi tarikh/jam dan teruskan.
+async function newClassRecord(page: Page, pick: Locator, date?: string, time?: string) {
+  await pick.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: /Rekod kelas baharu/ })).toBeVisible();
+  if (date) await dialog.getByLabel('Tarikh kelas').fill(date);
+  if (time) await dialog.getByLabel('Jam').fill(time);
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+}
+// Rekod sedia ada hanya dibuka melalui amaran "Sudah ada rekod" → Ubah rekod itu (atau Edit).
+async function openRecorded(page: Page, pick: Locator, date: string) {
+  await pick.click();
+  await page.getByRole('dialog').getByLabel('Tarikh kelas').fill(date);
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.getByText(/Sudah ada rekod kelas pada/)).toBeVisible();
+  await page.getByRole('button', { name: 'Ubah rekod itu' }).click();
+}
+
 test('static entrance is locked and does not default to an admin demo', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Selamat kembali ke AQR' })).toBeVisible();
@@ -181,11 +199,10 @@ test('individual model: tutor registers by program, adds a program and schedules
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
-  await page
-    .locator('.student-picker button')
-    .filter({ hasText: 'Murid Individu' })
-    .first()
-    .click();
+  await newClassRecord(
+    page,
+    page.locator('.student-picker button').filter({ hasText: 'Murid Individu' }).first(),
+  );
   await expect(page.getByLabel('Tarikh kelas')).not.toHaveValue('');
   await page.getByLabel('Jam', { exact: true }).fill('21:30');
   await page.getByRole('button', { name: 'Simpan tarikh & jam' }).click();
@@ -285,7 +302,8 @@ test('tutor edits a recorded attendance, sees remaining sessions and voids a cla
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
   await expect(page.locator('.student-picker button').first()).toContainText(/\d+\/\d+ sesi/);
-  await page.locator('.student-picker button').first().click();
+  await openRecorded(page, page.locator('.student-picker button').first(), '2026-10-09');
+  await expect(page.locator('.editing-banner')).toContainText('Anda sedang mengubah rekod kelas');
   const history = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
@@ -298,6 +316,7 @@ test('tutor edits a recorded attendance, sees remaining sessions and voids a cla
   await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan perubahan' }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
+  // Kelas berkumpulan: editor beralih ke murid seterusnya (rekod ditutup selepas murid terakhir).
   const rows = await history.getByRole('button', { name: 'Padam' }).count();
   await history.getByRole('button', { name: 'Padam' }).first().click();
   await expect(page.getByText(/tidak dikira elaun/)).toBeVisible();
@@ -312,11 +331,10 @@ test('tutor backdates a recorded class and saves attendance without assessment t
   if ((page.viewportSize()?.width || 0) <= 700)
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await page.locator('.student-picker button').first().click();
+  await openRecorded(page, page.locator('.student-picker button').first(), '2026-10-09');
   const history = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
-  // Kelas terakhir yang direkod dibuka terus (slot lepas yang tidak direkod tidak dibuka).
   await expect(history.getByText('Sedang dibuka di atas')).toBeVisible();
   const date = page.getByLabel('Tarikh kelas');
   await expect(date).toBeEnabled();
@@ -334,7 +352,7 @@ test('tutor backdates a recorded class and saves attendance without assessment t
   await save.click();
   await expect(page.getByRole('status')).toContainText('memori tab');
   // Kelas baharu: hanya kehadiran, tiada tap penilaian.
-  await page.getByRole('button', { name: 'Tambah rekod sesi' }).first().click();
+  await page.getByRole('button', { name: 'Rekod kelas baharu' }).first().click();
   await expect(page.getByLabel('Tarikh kelas').last()).not.toHaveValue('');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Simpan kehadiran' })).toBeDisabled();
@@ -351,7 +369,6 @@ test('voiding the open class returns to the list; a voided class is locked', asy
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
   await page.locator('.student-picker button').first().click();
-  await page.getByRole('button', { name: 'Tambah rekod sesi' }).first().click();
   await expect(page.getByLabel('Tarikh kelas').last()).not.toHaveValue('');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
@@ -367,7 +384,7 @@ test('voiding the open class returns to the list; a voided class is locked', asy
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
 });
-test('Tambah rekod sesi sits at the top of the session screen and supports a past date', async ({
+test('pressing a student always starts a NEW class record on the real date; a date with a record warns', async ({
   page,
 }) => {
   await page.goto('/?demo=1#/dashboard');
@@ -375,10 +392,23 @@ test('Tambah rekod sesi sits at the top of the session screen and supports a pas
   if ((page.viewportSize()?.width || 0) <= 700)
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await page.locator('.student-picker button').first().click();
-  const top = page.locator('.card').first();
-  await top.getByRole('button', { name: 'Tambah rekod sesi' }).click();
-  const dialog = page.getByRole('dialog');
+  const pick = page.locator('.student-picker button').first();
+  // Tarikh yang sudah ada rekod: amaran, rekod lama tidak ditimpa; Tukar tarikh menutup amaran.
+  await pick.click();
+  let dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Tarikh kelas')).toHaveValue(
+    new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10),
+  );
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-08');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(dialog.getByText(/Sudah ada rekod kelas pada 08\/10\/2026/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Simpan dalam demo', exact: true })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Tukar tarikh' }).click();
+  await expect(dialog.getByText(/Sudah ada rekod kelas/)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Tutup borang' }).click();
+  // Tarikh lain (kelas dibuat awal): rekod baharu pada tarikh itu.
+  await pick.click();
+  dialog = page.getByRole('dialog');
   await dialog.getByLabel('Tarikh kelas').fill('2026-10-02');
   await dialog.getByLabel('Jam').fill('20:00');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
@@ -963,14 +993,15 @@ test('admin registers a flexible student for a tutor; the tutor records a class 
   await expect(pick).toContainText('0/4 sesi');
   await pick.click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Tambah rekod sesi' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /Rekod kelas baharu/ })).toBeVisible();
   await expect(dialog.getByLabel('Jam')).toHaveValue('18:15');
   await dialog.getByLabel('Tarikh kelas').fill('2026-10-07');
   await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
   await expect(page.getByLabel('Tarikh kelas')).toHaveValue('2026-10-07');
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
-  await expect(page.getByText(/1 daripada 4 sesi sebulan · jadual fleksibel/)).toBeVisible();
+  // Rekod ditutup selepas simpan: kembali ke senarai murid dengan 1/4 sesi.
+  await expect(pick).toContainText('1/4 sesi');
 });
 test('admin transfers a class to another tutor and sets special fee and tutor allowance rates', async ({
   page,
@@ -1061,11 +1092,8 @@ test('tutor records a class held on another day with one save; reading record li
   if ((page.viewportSize()?.width || 0) <= 700)
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
-  await page.locator('.student-picker button').first().click();
-  // Kelas sebenar berlaku pada hari lain dan jam lain: ubah tarikh/jam, terus simpan kehadiran.
-  await page.getByLabel('Tarikh kelas').first().fill('2026-10-07');
-  await page.getByLabel('Jam').first().fill('21:00');
-  await expect(page.getByText('Tarikh/jam baharu akan disimpan bersama kehadiran')).toBeVisible();
+  // Kelas sebenar berlaku pada hari lain dan jam lain: tarikh/jam dipilih semasa rekod dibuka.
+  await newClassRecord(page, page.locator('.student-picker button').first(), '2026-10-07', '21:00');
   const first = page.locator('.student-tabs button').first();
   await first.click();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
@@ -1081,11 +1109,10 @@ test('tutor records a class held on another day with one save; reading record li
 });
 test('theory programme (KAFA) asks for a written topic instead of skill taps', async ({ page }) => {
   await page.goto('/?demo=1&role=tutor#/calendar');
-  await page
-    .locator('.student-picker button')
-    .filter({ hasText: 'Fardhu Ain KAFA' })
-    .first()
-    .click();
+  await newClassRecord(
+    page,
+    page.locator('.student-picker button').filter({ hasText: 'Fardhu Ain KAFA' }).first(),
+  );
   await expect(page.getByText('2. Kemahiran dinilai')).toHaveCount(0);
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
   const save = page.getByRole('button', { name: /Simpan (kehadiran|perubahan)/ });
@@ -1311,9 +1338,7 @@ test('assessment sections allow several choices and the parent comment follows e
 });
 test('attendance list and reading record show the selected month only', async ({ page }) => {
   await page.goto('/?demo=1&role=tutor#/calendar');
-  await page.locator('.student-picker button').first().click();
-  await page.getByLabel('Tarikh kelas').first().fill('2026-10-07');
-  await page.getByLabel('Jam').first().fill('21:00');
+  await newClassRecord(page, page.locator('.student-picker button').first(), '2026-10-07', '21:00');
   const first = page.locator('.student-tabs button').first();
   await first.click();
   await page.getByRole('button', { name: 'Hadir', exact: true }).click();
@@ -1397,7 +1422,7 @@ test('sessions per month: tutor sees a quota bar per student and presses Selesai
   await expect(card).toContainText('Dikunci · Selesai');
   await expect(card.getByRole('button', { name: 'Selesai Oktober 2026' })).toHaveCount(0);
   // Rekod bulan itu kini dikunci: editor sesi baca sahaja.
-  await first.click();
+  await openRecorded(page, first, '2026-10-09');
   await expect(
     page.getByText('Rekod bulan ini dikunci kerana Selesai sudah ditekan.'),
   ).toBeVisible();
@@ -1439,13 +1464,19 @@ test('extra session: beyond the monthly quota the tutor confirms a sesi tambahan
     await page.getByRole('button', { name: 'Buka menu' }).click();
   await page.getByRole('button', { name: 'Sesi & kehadiran', exact: true }).click();
   await expect(page.locator('.student-picker button').first()).toContainText('2/4 sesi');
-  await page.locator('.student-picker button').first().click();
   const history = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
   });
   const save = page.getByRole('button', { name: 'Simpan kehadiran' });
   for (const day of ['2026-10-20', '2026-10-21', '2026-10-22']) {
-    await page.locator('.card').first().getByRole('button', { name: 'Tambah rekod sesi' }).click();
+    // Kelas berkumpulan: selepas simpan, editor beralih ke murid seterusnya; rekod baharu dari butang atas.
+    if (day === '2026-10-20') await page.locator('.student-picker button').first().click();
+    else
+      await page
+        .locator('.card')
+        .first()
+        .getByRole('button', { name: 'Rekod kelas baharu' })
+        .click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Tarikh kelas').fill(day);
     await dialog.getByLabel('Jam').fill('20:00');
@@ -1520,4 +1551,23 @@ test('sesi ganti: sessions paid last month but not held show as a second amber b
   // Murid lain (bayar ikut invois) hanya ada satu bar.
   const other = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 01' });
   await expect(other.locator('.quota-bar')).toHaveCount(1);
+});
+test('individual class: after Simpan the record closes and the tutor is back on the student list', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  const pick = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 12' });
+  await expect(pick).toContainText('2/4 sesi');
+  await newClassRecord(page, pick, '2026-10-15', '20:00');
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  // Rekod ditutup: kembali ke senarai murid, bukan kekal terbuka.
+  await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
+  await expect(page.locator('#session-editor')).toHaveCount(0);
+  await expect(pick).toContainText('3/4 sesi');
+  // Tekan nama murid sekali lagi = rekod baharu, bukan rekod tadi.
+  await pick.click();
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: /Rekod kelas baharu/ }),
+  ).toBeVisible();
 });

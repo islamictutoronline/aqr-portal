@@ -139,6 +139,10 @@ export type Dialog = {
   transform?: (values: Record<string, string>) => Record<string, unknown>;
   extra?: React.ReactNode;
   after?: (payload: Record<string, unknown>) => void;
+  // Semakan sebelum simpan: pulangkan amaran (dengan tindakan alternatif) untuk menghentikan simpanan.
+  check?: (
+    values: Record<string, string>,
+  ) => { message: string; actionLabel: string; action: () => void } | null;
 };
 const weekDays: [string, string][] = [
   ['1', 'Isnin'],
@@ -289,7 +293,7 @@ function FlexibleField({ initial = false }: { initial?: boolean }) {
       </label>
       <p className="schedule-note">
         Masa kelas tetap diisi sebagai masa pilihan; sesi tidak dijana automatik — rekod setiap
-        kelas dengan Tambah rekod sesi pada tarikh sebenar.
+        kelas dengan Rekod kelas baharu pada tarikh sebenar.
       </p>
     </div>
   );
@@ -651,8 +655,14 @@ export function App({
   // Borang baharu bermula tanpa mesej lama.
   const setDialog = (d: Dialog | null) => {
     if (d) setNotice('');
+    setDialogWarning(null);
     setDialogState(d);
   };
+  const [dialogWarning, setDialogWarning] = useState<{
+    message: string;
+    actionLabel: string;
+    action: () => void;
+  } | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -2388,46 +2398,9 @@ export function App({
     }
   }
   const klDate = (iso: string) => klDay(iso);
-  // Sesi paling sesuai untuk direkod: hari ini, kemudian sesi seterusnya. Slot lepas yang tidak
-  // direkod tidak dibuka (jadual kerap berubah); kelas lepas direkod dengan menukar tarikh/jam
-  // atau Tambah rekod sesi.
-  const bestSession = (cid: unknown) => {
-    const now = Date.now();
-    const today = klDate(new Date().toISOString());
-    const list = all('class_sessions')
-      .filter((s) => s.class_id === cid && !['cancelled', 'rescheduled'].includes(String(s.status)))
-      .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
-    const todays = list.filter((s) => klDate(String(s.starts_at)) === today);
-    // Keutamaan: sesi hari ini yang belum direkod, sesi hari ini yang sudah direkod, sesi
-    // seterusnya, kemudian kelas terakhir yang direkod (tanpa mencipta kelas baharu).
-    return (
-      todays.find((s) => s.status !== 'completed') ||
-      todays[0] ||
-      list.find((s) => new Date(String(s.starts_at)).getTime() >= now) ||
-      [...list].reverse().find((s) => s.status === 'completed') ||
-      list[list.length - 1]
-    );
-  };
-  const openStudentSession = async (cid: unknown) => {
-    const found = bestSession(cid);
-    if (found) return go(`sessions/${found.id}`);
-    // Jadual fleksibel: tiada sesi dijana — tutor memilih tarikh sebenar kelas.
-    if (byId('classes').get(cid)?.flexible) return addSessionFor(cid);
-    const start = new Date(Math.floor(Date.now() / 300000) * 300000).toISOString();
-    const minutes = Number(
-      all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes || 30,
-    );
-    if (
-      await mutate('session', {
-        cid,
-        tid: activeTutor,
-        start_time: start,
-        minutes,
-        lesson_topic: '',
-      })
-    )
-      setPendingMove({ cid, start });
-  };
+  // Tekan nama murid = sentiasa rekod kelas BAHARU pada tarikh sebenar (lalai hari ini). Rekod lama
+  // tidak dibuka secara automatik — ubah rekod hanya melalui Edit dalam senarai kelas.
+  const openStudentSession = (cid: unknown) => addSessionFor(cid);
   // Ringkasan sesi bagi satu murid (kelas individu): selesai dan berbaki bulan dipilih.
   // Kemajuan kuota bulan dipilih: sesi yang dikira (Cuti bermaklum tidak) berbanding sesi sebulan.
   // Sesi ganti: baki bulan lepas yang tidak dihabiskan ditambah pada kuota (warna lain).
@@ -2461,7 +2434,7 @@ export function App({
         30,
     );
     setDialog({
-      title: 'Tambah rekod sesi',
+      title: `Rekod kelas baharu · ${lookup('classes', cid, 'name')}`,
       operation: 'session',
       fields: [
         { name: 'date', label: 'Tarikh kelas', type: 'date', value: date },
@@ -2483,6 +2456,23 @@ export function App({
         minutes: Number(v.minutes),
         lesson_topic: '',
       }),
+      // Tarikh itu sudah ada rekod: jangan tambah tanpa sedar — tawar ubah rekod itu atau tukar tarikh.
+      check: (v) => {
+        const existing = all('class_sessions').find(
+          (x) =>
+            x.class_id === cid &&
+            !['cancelled', 'rescheduled'].includes(String(x.status)) &&
+            klDate(String(x.starts_at)) === v.date &&
+            all('attendance').some((a) => a.session_id === x.id),
+        );
+        return existing
+          ? {
+              message: `Sudah ada rekod kelas pada ${dateLabel(String(existing.starts_at))} (${timeLabel(String(existing.starts_at))}). Ubah rekod itu, atau tukar tarikh kelas.`,
+              actionLabel: 'Ubah rekod itu',
+              action: () => go(`sessions/${existing.id}`),
+            }
+          : null;
+      },
       after: (payload) => setPendingMove({ cid, start: String(payload.start_time) }),
     });
   };
@@ -5733,6 +5723,7 @@ export function App({
               month={month}
               notice={notice}
               onAdd={role === 'tutor' ? () => addSessionFor(currentSession.class_id) : undefined}
+              onSaved={role === 'tutor' ? () => go('calendar') : undefined}
             />
           ) : (
             <Empty text="Sesi tidak ditemui atau akses tidak dibenarkan." />
@@ -5802,6 +5793,11 @@ export function App({
                   new FormData(e.currentTarget).entries(),
                 ) as Record<string, string>;
                 try {
+                  const warning = dialog.check?.(values);
+                  if (warning) {
+                    setDialogWarning(warning);
+                    return;
+                  }
                   const payload = dialog.transform
                     ? dialog.transform(values)
                     : Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''));
@@ -5894,7 +5890,28 @@ export function App({
                   {notice}
                 </p>
               )}
-              <button className="primary wide" type="submit" disabled={busy}>
+              {dialogWarning && (
+                <div role="alert" className="dialog-warning">
+                  <p>{dialogWarning.message}</p>
+                  <div className="button-row compact">
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => {
+                        const go = dialogWarning.action;
+                        setDialog(null);
+                        go();
+                      }}
+                    >
+                      {dialogWarning.actionLabel}
+                    </button>
+                    <button type="button" onClick={() => setDialogWarning(null)}>
+                      Tukar tarikh
+                    </button>
+                  </div>
+                </div>
+              )}
+              <button className="primary wide" type="submit" disabled={busy || !!dialogWarning}>
                 {busy ? 'Menyimpan…' : demo ? 'Simpan dalam demo' : 'Simpan rekod'}
                 <Check size={16} />
               </button>
@@ -5915,6 +5932,7 @@ function SessionEditor({
   month,
   notice,
   onAdd,
+  onSaved,
 }: {
   session: Row;
   data: Dataset;
@@ -5925,6 +5943,8 @@ function SessionEditor({
   month: string;
   notice?: string;
   onAdd?: () => void;
+  // Selepas rekod disimpan (murid terakhir), rekod ditutup — tutor kembali ke senarai murid.
+  onSaved?: () => void;
 }) {
   const startIso = String(session.starts_at);
   const initialDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(
@@ -6217,7 +6237,8 @@ function SessionEditor({
       publish,
     });
     if (success && sid !== String(session.id)) {
-      onOpen(sid);
+      if (onSaved) onSaved();
+      else onOpen(sid);
       return;
     }
     if (success) {
@@ -6229,7 +6250,7 @@ function SessionEditor({
         setTopic(savedTopic(next.id));
         setReading(savedReading(next.id));
         setPageText(formatPages(savedReading(next.id)));
-      }
+      } else onSaved?.();
     }
   }
   return (
@@ -6242,11 +6263,21 @@ function SessionEditor({
           onAdd && (
             <button className="primary" onClick={onAdd}>
               <Plus size={16} />
-              Tambah rekod sesi
+              Rekod kelas baharu
             </button>
           )
         }
       >
+        {/* Rekod yang sudah disimpan dibuka melalui Edit: jelaskan bahawa ini mengubah rekod lama. */}
+        {students.some((s) => savedAttendance(s.id)) && !locked && (
+          <div className="editing-banner" role="note">
+            <strong>
+              Anda sedang mengubah rekod kelas {dateLabel(String(session.starts_at))}.
+            </strong>{' '}
+            Simpan hanya jika mahu membetulkan rekod ini. Untuk kelas lain, tekan{' '}
+            <em>Rekod kelas baharu</em>.
+          </div>
+        )}
         <div className="session-when">
           <label>
             Tarikh kelas

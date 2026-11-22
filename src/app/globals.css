@@ -3113,6 +3113,32 @@ label {
 .portal-theme .month-close .alert-button:hover:not(:disabled) {
   background: #9a2416;
 }
+/* Mengubah rekod kelas lama: jalur amber supaya tutor tidak menyangka ia rekod baharu. */
+.editing-banner {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #eed39b;
+  border-left: 4px solid #c98a12;
+  border-radius: 10px;
+  background: #fbefd5;
+  color: #6f4d08;
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Amaran dalam borang (contoh: tarikh sudah ada rekod) dengan tindakan alternatif. */
+.dialog-warning {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #eed39b;
+  border-radius: 12px;
+  background: #fbefd5;
+  color: #6f4d08;
+}
+.dialog-warning p {
+  margin: 0;
+  font-weight: 600;
+}
 .schedule-note.alert {
   background: #fdf1ef;
   border-color: #f3c9c2;

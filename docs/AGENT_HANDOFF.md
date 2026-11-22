@@ -2,6 +2,16 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Rekod kelas ikut tarikh sebenar; rekod ditutup selepas simpan — 22 November 2026 (dideploy)
+
+Komen tutor: kadang-kadang perlu tekan "Tambah rekod sesi", kadang-kadang paparan luar; paparan luar kadang-kadang mengubah rekod lama. Punca: `bestSession` membuka sendiri sesi hari ini (termasuk yang sudah direkod), sesi seterusnya ikut jadual (tarikh salah jika kelas dibuat awal) atau kelas terakhir yang direkod (ditimpa). Keputusan pengguna: ikut cadangan; selepas Simpan rekod ditutup, bukan kekal terbuka.
+
+- `bestSession` dibuang. Tekan nama murid = borang **Rekod kelas baharu** (`addSessionFor`: tarikh lalai hari ini, jam ikut jadual). Butang dalam editor dinamakan **Rekod kelas baharu**.
+- `Dialog.check`: jika tarikh dipilih sudah ada rekod (sesi berkehadiran), panel amaran "Sudah ada rekod kelas pada … Ubah rekod itu, atau tukar tarikh kelas." dengan butang **Ubah rekod itu** / **Tukar tarikh**; Simpan tidak aktif selagi amaran dipaparkan.
+- Editor: jalur amber `.editing-banner` apabila mengubah rekod yang sudah disimpan (tidak dipaparkan jika dikunci). `onSaved`: selepas murid terakhir disimpan, tutor kembali ke senarai murid (kelas individu = terus ditutup; kelas berkumpulan beralih ke murid seterusnya dahulu).
+- Bukti: `test:pages` 100/100 (pembantu ujian `newClassRecord`/`openRecorded`; baharu: amaran tarikh berekod + Tukar tarikh; kelas individu ditutup selepas simpan dan tekan semula = rekod baharu), `npm test` 163/163, typecheck/lint/Prettier, binaan Pages. Tiada migrasi.
+- **Belum:** commit/push/deploy (pratonton dahulu).
+
 ## Pembetulan Sudah bayar pada telefon + nama penjaga "-" — 21 November 2026 (dideploy `7ee97b7`)
 
 Laporan pengguna: (1) "RM72.00" ditolak; (2) pada telefon "Rekod tidak dapat disimpan. Semak kelayakan…" walaupun di web berjaya; (3) borang memaparkan penjaga "-" (tutor tidak tahu nama ibu bapa); minta pastikan tidak berulang bagi tutor/murid baharu. Diagnostik SQL (rollback) membuktikan `record_family_payment` berjaya di pangkalan data untuk keluarga itu; API mengenali fungsi (anon → 42501).
