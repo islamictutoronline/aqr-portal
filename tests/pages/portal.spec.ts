@@ -314,6 +314,7 @@ test('tutor edits a recorded attendance, sees remaining sessions and voids a cla
   // Slot lepas yang tidak direkod tidak dipaparkan lagi.
   await expect(page.getByRole('heading', { name: 'Belum direkod' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan perubahan' }).click();
   await expect(page.getByRole('status')).toContainText('memori tab');
   // Kelas berkumpulan: editor beralih ke murid seterusnya (rekod ditutup selepas murid terakhir).
@@ -1570,4 +1571,47 @@ test('individual class: after Simpan the record closes and the tutor is back on 
   await expect(
     page.getByRole('dialog').getByRole('heading', { name: /Rekod kelas baharu/ }),
   ).toBeVisible();
+});
+test('tutor: Senarai shows recorded classes without opening a record; Edit then Simpan returns to the list', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  await page.getByRole('button', { name: /^Senarai kelas Murid Contoh 12 \(2\)/ }).click();
+  await expect(page).toHaveURL(/#\/calendar\/[^/]+$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('#session-editor')).toHaveCount(0);
+  const history = page.locator('section.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await expect(history.locator('.quota-bar').first()).toContainText('2/4 sesi');
+  await expect(history.locator('tbody tr')).toHaveCount(2);
+  // Ubah rekod hanya secara sengaja (Edit); selepas Simpan kembali ke senarai ini.
+  await history.getByRole('button', { name: 'Edit' }).first().click();
+  await expect(page.locator('.editing-banner')).toBeVisible();
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan perubahan' }).click();
+  await expect(page.getByRole('heading', { name: 'Kelas telah dilaksanakan' })).toBeVisible();
+  await expect(page.locator('#session-editor')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/calendar\/[^/]+$/);
+  // Rekod baharu boleh dibuat terus dari senarai.
+  await history.getByRole('button', { name: 'Rekod kelas baharu' }).click();
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: /Rekod kelas baharu/ }),
+  ).toBeVisible();
+});
+test('tutor: Semua kelas bulan ini lists every recorded class of the month', async ({ page }) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  await page.getByRole('tab', { name: /Semua kelas bulan ini/ }).click();
+  await expect(page).toHaveURL(/#\/calendar\/semua$/);
+  const all = page.locator('section.card').filter({
+    has: page.getByRole('heading', { name: 'Semua kelas bulan ini' }),
+  });
+  await expect(all.locator('tbody tr').first()).toBeVisible();
+  await expect(all).toContainText('Murid Contoh 12');
+  await all
+    .getByRole('button', { name: /Lihat \/ Edit/ })
+    .first()
+    .click();
+  await expect(page.locator('#session-editor')).toHaveCount(1);
+  await page.getByRole('tab', { name: 'Rekod kehadiran' }).waitFor({ state: 'detached' });
 });

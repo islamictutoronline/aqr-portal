@@ -1737,6 +1737,66 @@ label {
   color: var(--slate);
   font-weight: 500;
 }
+/* Kad murid: kawasan utama = rekod kelas baharu; butang bawah = rekod atau senarai kelas. */
+.student-picker .student-card {
+  border: 1px solid #ebe8e0;
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.student-picker .student-card:hover {
+  border-color: var(--teal);
+}
+.student-picker .student-card > .student-main {
+  border: 0;
+  border-radius: 0;
+  padding-bottom: 6px;
+}
+.student-picker .student-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px 64px;
+}
+.student-picker .student-actions button {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.student-picker .student-actions .student-record {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+@media (max-width: 520px) {
+  .student-picker .student-actions {
+    padding-left: 16px;
+  }
+  .student-picker .student-actions button {
+    justify-content: center;
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .student-picker .student-actions button {
+    flex: 1 1 auto;
+  }
+}
+.class-log-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.class-log-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.class-log-head .text-link {
+  justify-self: start;
+}
 .session-when {
   display: flex;
   flex-wrap: wrap;
@@ -4135,4 +4195,14 @@ textarea {
 /* Senarai cadangan surah tidak dipotong oleh kad. */
 .card:has(.surah-picker) {
   overflow: visible;
+}
+.cell-stack {
+  display: grid;
+  gap: 2px;
+}
+.cell-stack small {
+  color: var(--slate);
+}
+.class-log-head small {
+  color: var(--slate);
 }

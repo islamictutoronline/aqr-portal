@@ -25,6 +25,8 @@ import {
   Plus,
   Search,
   ChevronRight,
+  ChevronLeft,
+  List,
   Check,
   X,
   Menu,
@@ -722,6 +724,7 @@ export function App({
   }, [selectedSession]);
   const [child, setChild] = useState('');
   const [sessionTab, setSessionTab] = useState('today');
+  const [tutorBack, setTutorBack] = useState('calendar');
   const [reviewClass, setReviewClass] = useState('');
   const [allowanceTab, setAllowanceTab] = useState('all');
   const [invoiceQuery, setInvoiceQuery] = useState('');
@@ -792,6 +795,9 @@ export function App({
       .filter((r) => table !== 'staff_profiles' || r.role === 'tutor')
       .map((r) => [r.id, String(r[field])]);
   const go = (p: string) => {
+    // Selepas Simpan, tutor kembali ke halaman asal (senarai murid, senarai kelas atau Semua kelas).
+    if (p.startsWith('sessions/') && !page.startsWith('sessions/'))
+      setTutorBack(page.startsWith('calendar') ? page : 'calendar');
     setPage(p);
     setDrawer(false);
     setSearch('');
@@ -814,7 +820,7 @@ export function App({
   // Kotak "Cari rekod" hanya dipaparkan pada senarai yang benar-benar ditapis olehnya (laporan,
   // invois dan penghantaran mempunyai carian sendiri).
   const searchable =
-    !page.split('/')[1] &&
+    (!page.split('/')[1] || page === 'calendar/semua') &&
     ['students', 'guardians', 'tutors', 'classes', 'calendar', 'finance', 'allowance'].includes(
       section,
     );
@@ -2476,11 +2482,11 @@ export function App({
       after: (payload) => setPendingMove({ cid, start: String(payload.start_time) }),
     });
   };
-  function sessionHistory(current: Row) {
-    const counts = classCounts(current.class_id);
+  function sessionHistory(cid: unknown, currentId?: unknown, action?: React.ReactNode) {
+    const counts = classCounts(cid);
     // Bulan dipilih sahaja (lalai bulan semasa); bulan lain dilihat melalui penapis bulan.
     const done = monthlySessions
-      .filter((s) => s.class_id === current.class_id && s.status === 'completed')
+      .filter((s) => s.class_id === cid && s.status === 'completed')
       .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)));
     const markOf = (sid: unknown) =>
       statusLabels[String(all('attendance').find((a) => a.session_id === sid)?.status)] || '—';
@@ -2502,8 +2508,9 @@ export function App({
       <>
         <Card
           title="Kelas telah dilaksanakan"
+          action={action}
           subtitle={`${monthLabel(month)}: ${counts.done} daripada ${counts.quota} sesi sebulan${
-            byId('classes').get(current.class_id)?.flexible ? ' · jadual fleksibel' : ''
+            byId('classes').get(cid)?.flexible ? ' · jadual fleksibel' : ''
           }`}
         >
           <QuotaBar
@@ -2530,7 +2537,7 @@ export function App({
                 markOf(s.id)
               ),
               <div key="a" className="button-row">
-                {s.id === current.id ? (
+                {s.id === currentId ? (
                   <span className="pill">Sedang dibuka di atas</span>
                 ) : (
                   <button className="text-link" onClick={() => go(`sessions/${s.id}`)}>
@@ -3381,9 +3388,120 @@ export function App({
       const rows = all('enrollments').filter(
         (e) => e.status === 'active' && mine.includes(e.class_id),
       );
+      const sub = page.split('/')[1] || '';
+      // Kelas yang sudah direkod bulan dipilih (sama seperti senarai "Kelas telah dilaksanakan").
+      const recorded = monthlySessions
+        .filter((s) => mine.includes(s.class_id) && s.status === 'completed')
+        .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)));
+      // Nama murid kelas itu (kelas kumpulan: dua nama pertama + bilangan selebihnya).
+      const who = (cid: unknown) => {
+        const names = rows
+          .filter((e) => e.class_id === cid)
+          .map((e) => lookup('students', e.student_id))
+          .sort((x, y) => x.localeCompare(y));
+        return names.length > 2
+          ? `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+          : names.join(', ') || '—';
+      };
+      const tabs = (
+        <div className="subtabs session-tabs" role="tablist" aria-label="Paparan kehadiran">
+          {[
+            ['', 'Rekod kehadiran'],
+            ['semua', `Semua kelas bulan ini (${recorded.length})`],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={sub === id}
+              className={sub === id ? 'active' : ''}
+              onClick={() => go(id ? `calendar/${id}` : 'calendar')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      );
+      // Senarai kelas seorang murid: lihat sahaja; ubah rekod hanya melalui Edit.
+      if (sub && sub !== 'semua') {
+        if (!mine.includes(sub)) return <Empty text="Kelas tidak ditemui atau bukan kelas anda." />;
+        return (
+          <>
+            <div className="class-log-head">
+              <button className="text-link" onClick={() => go('calendar')}>
+                <ChevronLeft size={16} /> Kembali ke rekod kehadiran
+              </button>
+              <h3>{who(sub)}</h3>
+              <small>{lookup('classes', sub, 'name')}</small>
+            </div>
+            {sessionHistory(
+              sub,
+              undefined,
+              <button className="primary" onClick={() => addSessionFor(sub)}>
+                <Plus size={16} />
+                Rekod kelas baharu
+              </button>,
+            )}
+          </>
+        );
+      }
+      if (sub === 'semua') {
+        const marks = (sid: unknown) => {
+          const own = all('attendance').filter((a) => a.session_id === sid);
+          if (own.length <= 1) return statusLabels[String(own[0]?.status)] || '—';
+          const n = new Map<string, number>();
+          for (const a of own) {
+            const l = statusLabels[String(a.status)] || String(a.status);
+            n.set(l, (n.get(l) || 0) + 1);
+          }
+          return [...n].map(([l, c]) => `${l} ${c}`).join(' · ');
+        };
+        const shown = recorded.filter((s) =>
+          matches({
+            id: '',
+            name: `${who(s.class_id)} ${lookup('classes', s.class_id, 'name')}`,
+            attendance: marks(s.id),
+          }),
+        );
+        return (
+          <>
+            {monthCloseCard()}
+            {tabs}
+            <Card
+              title="Semua kelas bulan ini"
+              subtitle={`${recorded.length} kelas direkod pada ${monthLabel(month)} · semak sebelum tekan Selesai`}
+            >
+              {!shown.length && (
+                <Empty text={`Belum ada kelas direkod pada ${monthLabel(month)}.`} />
+              )}
+              <Table
+                headers={['Tarikh', 'Masa', 'Murid · Program', 'Kehadiran', '']}
+                rows={shown.map((s) => [
+                  dateLabel(String(s.starts_at)),
+                  timeLabel(String(s.starts_at)),
+                  <span key="w" className="cell-stack">
+                    <strong>{who(s.class_id)}</strong>
+                    <small>{lookup('classes', s.class_id, 'name')}</small>
+                  </span>,
+                  s.extra ? (
+                    <span key="m">
+                      {marks(s.id)} <span className="pill">Tambahan</span>
+                    </span>
+                  ) : (
+                    marks(s.id)
+                  ),
+                  <button key="o" className="text-link" onClick={() => go(`sessions/${s.id}`)}>
+                    Lihat / Edit <ChevronRight size={16} />
+                  </button>,
+                ])}
+              />
+            </Card>
+          </>
+        );
+      }
       return (
         <>
           {monthCloseCard()}
+          {tabs}
           <Card title="Rekod kehadiran" subtitle="Tekan nama murid untuk merekod kelas">
             <div className="student-picker">
               {rows
@@ -3397,24 +3515,46 @@ export function App({
                 .map((e) => {
                   const c = byId('classes').get(e.class_id);
                   const counts = classCounts(e.class_id);
+                  const name = lookup('students', e.student_id);
+                  const listed = recorded.filter((s) => s.class_id === e.class_id).length;
                   return (
-                    <button key={e.id} onClick={() => void openStudentSession(e.class_id)}>
-                      <span className="avatar">{lookup('students', e.student_id).slice(0, 1)}</span>
-                      <span>
-                        <strong>{lookup('students', e.student_id)}</strong>
-                        <small>
-                          {lookup('programs', c?.program_id, 'name')}
-                          {c?.flexible ? ' · Jadual fleksibel' : ''}
-                        </small>
-                        <QuotaBar
-                          done={counts.done}
-                          quota={counts.quota}
-                          carry={counts.carry}
-                          label={monthLabel(month)}
-                        />
-                      </span>
-                      <ChevronRight size={18} />
-                    </button>
+                    <div key={e.id} className="student-card">
+                      <button
+                        className="student-main"
+                        onClick={() => void openStudentSession(e.class_id)}
+                      >
+                        <span className="avatar">{name.slice(0, 1)}</span>
+                        <span>
+                          <strong>{name}</strong>
+                          <small>
+                            {lookup('programs', c?.program_id, 'name')}
+                            {c?.flexible ? ' · Jadual fleksibel' : ''}
+                          </small>
+                          <QuotaBar
+                            done={counts.done}
+                            quota={counts.quota}
+                            carry={counts.carry}
+                            label={monthLabel(month)}
+                          />
+                        </span>
+                      </button>
+                      <div className="student-actions">
+                        <button
+                          className="student-record"
+                          aria-label={`Rekod kelas baharu untuk ${name}`}
+                          onClick={() => void openStudentSession(e.class_id)}
+                        >
+                          <Plus size={16} /> Rekod kelas baharu
+                        </button>
+                        <button
+                          className="student-list"
+                          aria-label={`Senarai kelas ${name} (${listed})`}
+                          onClick={() => go(`calendar/${e.class_id}`)}
+                        >
+                          <List size={16} /> Senarai ({listed})
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
             </div>
@@ -5723,12 +5863,14 @@ export function App({
               month={month}
               notice={notice}
               onAdd={role === 'tutor' ? () => addSessionFor(currentSession.class_id) : undefined}
-              onSaved={role === 'tutor' ? () => go('calendar') : undefined}
+              onSaved={role === 'tutor' ? () => go(tutorBack) : undefined}
             />
           ) : (
             <Empty text="Sesi tidak ditemui atau akses tidak dibenarkan." />
           )}
-          {section === 'sessions' && currentSession && sessionHistory(currentSession)}
+          {section === 'sessions' &&
+            currentSession &&
+            sessionHistory(currentSession.class_id, currentSession.id)}
           {section === 'parent' && <ContactAdmin data={visible} />}{' '}
           {section === 'parent' && (
             <PublishedMilestones data={visible} student={child || all('students')[0]?.id || ''} />

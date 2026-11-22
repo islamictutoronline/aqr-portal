@@ -2,6 +2,16 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Senarai kelas tutor tanpa membuka rekod — 22 November 2026 (setempat, BELUM commit/deploy)
+
+Permintaan pengguna: tutor tidak boleh melihat senarai kelas yang sudah direkod kecuali selepas membuka satu rekod. Keputusan: buat kedua-dua cadangan.
+
+- Kad murid (`.student-card`): kawasan utama dan butang **+ Rekod kelas baharu** = borang rekod baharu; butang **Senarai (n)** (n = sesi `completed` bulan dipilih) membuka `#/calendar/<class_id>`.
+- Halaman senarai `calendar/<class_id>`: tajuk nama murid + nama kelas, `sessionHistory(cid, currentId?, action?)` (dahulu menerima baris sesi) dengan butang Rekod kelas baharu; lihat sahaja, ubah melalui Edit.
+- Tab tutor **Rekod kehadiran | Semua kelas bulan ini (n)** (`calendar/semua`): semua kelas direkod bulan itu (Tarikh, Masa, nama murid + kelas, kehadiran; kelas kumpulan "Hadir 2 · Tidak hadir 1"), Lihat / Edit; carian aktif.
+- `tutorBack`: `go()` mengingati halaman `calendar…` sebelum membuka sesi; `onSaved` kembali ke situ (senarai murid, senarai kelas atau Semua kelas).
+- Bukti: `test:pages` 104/104 (baharu: Senarai tanpa dialog/editor, Edit → Simpan kembali ke senarai; tab Semua kelas), `npm test` 163/163, typecheck/lint/Prettier, binaan Pages. Tiada migrasi.
+
 ## Rekod kelas ikut tarikh sebenar; rekod ditutup selepas simpan — 22 November 2026 (dideploy: commit 2728e60, Pages run 45027440778, aset index-CX6VDDzq.js; tiada migrasi)
 
 Komen tutor: kadang-kadang perlu tekan "Tambah rekod sesi", kadang-kadang paparan luar; paparan luar kadang-kadang mengubah rekod lama. Punca: `bestSession` membuka sendiri sesi hari ini (termasuk yang sudah direkod), sesi seterusnya ikut jadual (tarikh salah jika kelas dibuat awal) atau kelas terakhir yang direkod (ditimpa). Keputusan pengguna: ikut cadangan; selepas Simpan rekod ditutup, bukan kekal terbuka.
