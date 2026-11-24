@@ -2,7 +2,7 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
-## Log masuk iPad dan 2–3 sesi sehari — 24 November 2026 (setempat, BELUM commit/deploy)
+## Log masuk iPad dan 2–3 sesi sehari — 24 November 2026 (dideploy: commit 7a000c5, Pages run 45316121158, aset index-wcMP9ENQ.js; tiada migrasi)
 
 Aduan pengguna (pemilik): log masuk iPad ~10 minit, kadang-kadang OTP, kemudian borang "Nama penuh" seperti pendaftaran tutor. Punca dalam kod: (1) `getContext` mengabaikan ralat pertanyaan `staff_profiles`/`staff_memberships` → dianggap bukan staf → borang pendaftaran tutor; (2) selepas OTP, `signed` = true semasa data masih dimuat → borang pendaftaran tutor dipaparkan sepanjang pemuatan; (3) "Kekalkan log masuk" tidak ditanda secara lalai → sessionStorage → OTP semula setiap kali tab Safari ditutup. Log Supabase sebenar tidak disemak.
 
