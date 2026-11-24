@@ -4206,3 +4206,34 @@ textarea {
 .class-log-head small {
   color: var(--slate);
 }
+/* Log masuk: skrin muat dengan Cuba semula apabila perlahan; pemuatan gagal ≠ pendaftaran tutor. */
+.auth-loading {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  max-width: 420px;
+  text-align: center;
+}
+.auth-slow {
+  color: var(--slate);
+  font-size: 14px;
+}
+.auth-retry {
+  display: grid;
+  gap: 12px;
+}
+.auth-retry h2 {
+  margin: 0;
+}
+/* Blok sesi berturut-turut: satu rekod untuk 2–3 sesi. */
+.block-banner {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #bfe0d2;
+  border-left: 4px solid var(--teal);
+  border-radius: 10px;
+  background: #eaf6f0;
+  color: #134e3a;
+  font-size: 14px;
+  line-height: 1.5;
+}

@@ -2,6 +2,20 @@
 
 Kemas kini: 20 November 2026 (Asia/Kuala_Lumpur). Fail ini ialah rekod keadaan kerja, bukan bukti sistem sudah sedia produksi. Semak keadaan fail dan perkhidmatan semasa sebelum menyambung.
 
+## Log masuk iPad dan 2–3 sesi sehari — 24 November 2026 (setempat, BELUM commit/deploy)
+
+Aduan pengguna (pemilik): log masuk iPad ~10 minit, kadang-kadang OTP, kemudian borang "Nama penuh" seperti pendaftaran tutor. Punca dalam kod: (1) `getContext` mengabaikan ralat pertanyaan `staff_profiles`/`staff_memberships` → dianggap bukan staf → borang pendaftaran tutor; (2) selepas OTP, `signed` = true semasa data masih dimuat → borang pendaftaran tutor dipaparkan sepanjang pemuatan; (3) "Kekalkan log masuk" tidak ditanda secara lalai → sessionStorage → OTP semula setiap kali tab Safari ditutup. Log Supabase sebenar tidak disemak.
+
+- `portal/client.ts`: ralat pertanyaan profil/keahlian/penjaga dilempar sebagai ralat sambungan; `AccessPending` hanya apabila benar-benar tiada staf aktif dan tiada penjaga.
+- `portal/main.tsx`: skrin muat "Memuatkan akaun dan data akademi…" semasa memuat (bukan borang); cubaan semula automatik sekali selepas `refreshSession`; skrin **Akaun belum dapat dimuatkan** (Cuba semula / Log keluar) untuk ralat sambungan; mesej "Sambungan agak perlahan" + Cuba semula selepas 15 s; "Kekalkan log masuk" ditanda secara lalai (`aqr.trusted !== 'no'`).
+- Disahkan dengan pelayan Vite + Supabase palsu (laluan Playwright): ralat 503 → skrin Cuba semula (tiada borang pendaftaran, refresh dicuba sekali); 20 s lambat → skrin muat + mesej perlahan; pengguna tanpa staf/penjaga → borang pendaftaran tutor kekal. Belum diuji pada Supabase/iPad sebenar.
+
+2–3 sesi sehari (permintaan pelajar/ibu bapa):
+- Borang **Rekod kelas baharu**: medan **Bilangan sesi** (1 / 2 / 3 berturut-turut). `after` mencipta sesi seterusnya (mula + k × tempoh); `sessionBlock` menyimpan masa mula blok; editor sesi pertama menerima `linked` dan memaparkan `.block-banner`; Simpan merekod kehadiran/penilaian yang sama untuk setiap sesi blok; sesi melebihi kuota ditanda `extra_session` selepas pengesahan ("Blok N sesi ini menjadikan …").
+- `Dialog.check` kini ikut tarikh **dan** masa: masa bertindih = amaran keras (Ubah rekod itu / Tukar tarikh/jam); hari sama masa lain = amaran lembut "Ini kelas ke-N hari ini?" dengan butang **Ya, rekod kelas ke-N** (`DialogWarning.proceedLabel`, `submitDialog`).
+- Pangkalan data sudah membenarkan beberapa sesi sehari; tiada migrasi.
+- Bukti: `test:pages` 110/110 (baharu: kelas ke-2 hari sama / masa bertindih; blok 3 sesi dalam kuota ganti; blok melebihi kuota → Tambahan), `npm test` 163/163, typecheck/lint/Prettier, binaan Pages.
+
 ## Senarai kelas tutor tanpa membuka rekod — 22 November 2026 (dideploy: commit 794cfc3, Pages run 45033423818, aset index-DwNjlzE_.js; tiada migrasi)
 
 Permintaan pengguna: tutor tidak boleh melihat senarai kelas yang sudah direkod kecuali selepas membuka satu rekod. Keputusan: buat kedua-dua cadangan.

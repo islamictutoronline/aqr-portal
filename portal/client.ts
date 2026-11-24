@@ -28,20 +28,25 @@ export const db = createClient(url || 'https://unconfigured.supabase.co', key ||
     flowType: 'pkce',
   },
 });
+// Akaun benar-benar belum diluluskan / belum dipautkan (bukan ralat sambungan): papar borang permohonan.
+export class AccessPending extends Error {}
 export async function getContext() {
   const {
     data: { user },
     error,
   } = await db.auth.getUser();
   if (error || !user) throw new Error('Sila log masuk.');
-  const { data: profile } = await db
+  // Ralat pertanyaan (sambungan perlahan, token tamat) TIDAK boleh dianggap "bukan staf" — dahulu ia
+  // memaparkan borang pendaftaran tutor kepada pemilik/admin.
+  const { data: profile, error: profileError } = await db
     .from('staff_profiles')
     .select('id,display_name')
     .eq('auth_user_id', user.id)
     .eq('active', true)
     .maybeSingle();
+  if (profileError) throw new Error('Profil akaun tidak dapat dimuatkan.');
   if (profile) {
-    const { data: m } = await db
+    const { data: m, error: memberError } = await db
       .from('staff_memberships')
       .select('organization_id,role')
       .eq('staff_id', profile.id)
@@ -49,6 +54,7 @@ export async function getContext() {
       .order('created_at')
       .limit(1)
       .maybeSingle();
+    if (memberError) throw new Error('Keahlian akaun tidak dapat dimuatkan.');
     if (m)
       return {
         db,
@@ -63,7 +69,7 @@ export async function getContext() {
   }
   const claimed = await db.rpc('claim_guardian_access');
   if (claimed.error) throw new Error('Akses portal belum dapat disahkan.');
-  const { data: g } = await db
+  const { data: g, error: guardianError } = await db
     .from('guardians')
     .select('id,organization_id,full_name')
     .eq('auth_user_id', user.id)
@@ -71,7 +77,8 @@ export async function getContext() {
     .order('created_at')
     .limit(1)
     .maybeSingle();
-  if (!g) throw new Error('Akaun belum diluluskan atau anak belum dipautkan.');
+  if (guardianError) throw new Error('Akaun ibu bapa tidak dapat dimuatkan.');
+  if (!g) throw new AccessPending('Akaun belum diluluskan atau anak belum dipautkan.');
   return {
     db,
     org: g.organization_id,

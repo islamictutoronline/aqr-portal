@@ -1615,3 +1615,80 @@ test('tutor: Semua kelas bulan ini lists every recorded class of the month', asy
   await expect(page.locator('#session-editor')).toHaveCount(1);
   await page.getByRole('tab', { name: 'Rekod kehadiran' }).waitFor({ state: 'detached' });
 });
+test('second class on the same day: different time asks to confirm; same time is a clash', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  const pick = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 12' });
+  await expect(pick).toContainText('2/4 sesi');
+  const dialog = page.getByRole('dialog');
+  // Masa sama dengan rekod 09/10 (1:00 PTG): amaran keras, tiada pilihan teruskan.
+  await pick.click();
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-09');
+  await dialog.getByLabel('Jam').fill('13:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(dialog.getByText(/Sudah ada rekod kelas pada 09\/10\/2026/)).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Ya, rekod kelas/ })).toHaveCount(0);
+  // Masa lain pada hari yang sama: kelas ke-2 hari ini boleh diteruskan.
+  await dialog.getByRole('button', { name: 'Tukar tarikh/jam' }).click();
+  await dialog.getByLabel('Jam').fill('20:00');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(dialog.getByText(/Ini kelas ke-2 hari ini\?/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Ya, rekod kelas ke-2' }).click();
+  await expect(page.locator('#session-editor')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  await expect(pick).toContainText('3/4 sesi');
+});
+test('consecutive sessions: one record fills a block of 3 sessions', async ({ page }) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  const pick = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 12' });
+  await expect(pick).toContainText('2/4 sesi');
+  await pick.click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-20');
+  await dialog.getByLabel('Jam').fill('20:00');
+  await dialog.getByLabel('Bilangan sesi').selectOption('3');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  const banner = page.locator('.block-banner');
+  await expect(banner).toContainText('3 sesi berturut-turut');
+  await expect(banner).toContainText('08:00 PTG, 08:30 PTG, 09:00 PTG');
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  // Kuota 4 + 2 sesi ganti = 6: blok ini (2 + 3 = 5) tidak perlu sesi tambahan.
+  await expect(page.locator('.extra-confirm')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  await expect(page.getByRole('heading', { name: 'Rekod kehadiran' })).toBeVisible();
+  await page.getByRole('button', { name: /^Senarai kelas Murid Contoh 12/ }).click();
+  const history = page.locator('section.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await expect(history.locator('tbody tr')).toHaveCount(5);
+  await expect(history.getByText('Tidak hadir')).toHaveCount(3);
+});
+test('consecutive sessions beyond the monthly quota must be confirmed as extra', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1&role=tutor#/calendar');
+  const pick = page.locator('.student-picker button').filter({ hasText: 'Murid Contoh 01' });
+  await expect(pick).toContainText('2/4 sesi');
+  await pick.click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Tarikh kelas').fill('2026-10-21');
+  await dialog.getByLabel('Jam').fill('20:00');
+  await dialog.getByLabel('Bilangan sesi').selectOption('3');
+  await page.getByRole('button', { name: 'Simpan dalam demo', exact: true }).click();
+  await expect(page.locator('.block-banner')).toContainText('3 sesi berturut-turut');
+  await page.getByRole('button', { name: 'Tidak hadir', exact: true }).click();
+  // 2 + 3 = 5 > 4: sesi berlebihan perlu disahkan sebagai sesi tambahan.
+  await expect(page.locator('.extra-confirm')).toContainText('Blok 3 sesi');
+  await expect(page.getByRole('button', { name: 'Simpan kehadiran' })).toBeDisabled();
+  await page.locator('.extra-confirm input').check();
+  await page.getByRole('button', { name: 'Simpan kehadiran' }).click();
+  // Kelas kumpulan: editor beralih ke murid seterusnya; senarai di bawah menunjukkan blok itu.
+  const history = page.locator('section.card').filter({
+    has: page.getByRole('heading', { name: 'Kelas telah dilaksanakan' }),
+  });
+  await expect(history.locator('tbody tr')).toHaveCount(5);
+  await expect(history.locator('.pill', { hasText: 'Tambahan' })).toHaveCount(1);
+  await expect(history.locator('.quota-bar').first()).toContainText('4/4 sesi · +1 tambahan');
+});

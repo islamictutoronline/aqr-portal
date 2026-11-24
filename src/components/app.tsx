@@ -142,9 +142,14 @@ export type Dialog = {
   extra?: React.ReactNode;
   after?: (payload: Record<string, unknown>) => void;
   // Semakan sebelum simpan: pulangkan amaran (dengan tindakan alternatif) untuk menghentikan simpanan.
-  check?: (
-    values: Record<string, string>,
-  ) => { message: string; actionLabel: string; action: () => void } | null;
+  // proceedLabel: amaran lembut — pengguna boleh meneruskan simpanan (contoh: kelas ke-2 hari ini).
+  check?: (values: Record<string, string>) => DialogWarning | null;
+};
+type DialogWarning = {
+  message: string;
+  actionLabel: string;
+  action: () => void;
+  proceedLabel?: string;
 };
 const weekDays: [string, string][] = [
   ['1', 'Isnin'],
@@ -660,13 +665,25 @@ export function App({
     setDialogWarning(null);
     setDialogState(d);
   };
-  const [dialogWarning, setDialogWarning] = useState<{
-    message: string;
-    actionLabel: string;
-    action: () => void;
-  } | null>(null);
+  const [dialogWarning, setDialogWarning] = useState<
+    (DialogWarning & { values: Record<string, string> }) | null
+  >(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  // Simpan borang dialog (selepas semakan, atau selepas pengguna meneruskan amaran lembut).
+  const submitDialog = (d: Dialog, values: Record<string, string>) => {
+    try {
+      const payload = d.transform
+        ? d.transform(values)
+        : Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''));
+      const after = d.after;
+      void mutate(d.operation, payload).then((ok) => {
+        if (ok) after?.(payload);
+      });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Input tidak sah');
+    }
+  };
   const [drawer, setDrawer] = useState(false);
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -733,6 +750,8 @@ export function App({
   );
   // Selepas sesi dicipta atau dijadual semula, buka sesi baharu itu sebaik data dimuat semula.
   const [pendingMove, setPendingMove] = useState<{ cid: unknown; start: string } | null>(null);
+  // Sesi berturut-turut (2–3 sesi satu blok): kehadiran sesi pertama disalin ke sesi lain dalam blok.
+  const [sessionBlock, setSessionBlock] = useState<{ cid: unknown; starts: string[] } | null>(null);
   useEffect(() => {
     if (!pendingMove) return;
     const target = (data.class_sessions || []).find(
@@ -2439,6 +2458,7 @@ export function App({
         all('class_schedules').find((r) => r.class_id === cid)?.duration_minutes ||
         30,
     );
+    let count = 1;
     setDialog({
       title: `Rekod kelas baharu · ${lookup('classes', cid, 'name')}`,
       operation: 'session',
@@ -2454,32 +2474,78 @@ export function App({
             ['20', '20 minit'],
           ],
         },
+        {
+          name: 'count',
+          label: 'Bilangan sesi',
+          value: '1',
+          options: [
+            ['1', '1 sesi'],
+            ['2', '2 sesi berturut-turut'],
+            ['3', '3 sesi berturut-turut'],
+          ],
+        },
       ],
-      transform: (v) => ({
-        cid,
-        tid: activeTutor,
-        start_time: new Date(`${v.date}T${v.time}:00+08:00`).toISOString(),
-        minutes: Number(v.minutes),
-        lesson_topic: '',
-      }),
-      // Tarikh itu sudah ada rekod: jangan tambah tanpa sedar — tawar ubah rekod itu atau tukar tarikh.
-      check: (v) => {
-        const existing = all('class_sessions').find(
-          (x) =>
-            x.class_id === cid &&
-            !['cancelled', 'rescheduled'].includes(String(x.status)) &&
-            klDate(String(x.starts_at)) === v.date &&
-            all('attendance').some((a) => a.session_id === x.id),
-        );
-        return existing
-          ? {
-              message: `Sudah ada rekod kelas pada ${dateLabel(String(existing.starts_at))} (${timeLabel(String(existing.starts_at))}). Ubah rekod itu, atau tukar tarikh kelas.`,
-              actionLabel: 'Ubah rekod itu',
-              action: () => go(`sessions/${existing.id}`),
-            }
-          : null;
+      transform: (v) => {
+        count = Math.min(3, Math.max(1, Number(v.count) || 1));
+        return {
+          cid,
+          tid: activeTutor,
+          start_time: new Date(`${v.date}T${v.time}:00+08:00`).toISOString(),
+          minutes: Number(v.minutes),
+          lesson_topic: '',
+        };
       },
-      after: (payload) => setPendingMove({ cid, start: String(payload.start_time) }),
+      // Kelas yang sudah direkod pada hari itu. Masa bertindih = rekod yang sama (amaran keras: ubah
+      // rekod itu atau tukar masa); masa berlainan = kelas ke-2/ke-3 hari ini (boleh diteruskan).
+      check: (v) => {
+        const n = Math.min(3, Math.max(1, Number(v.count) || 1));
+        const start = Date.parse(`${v.date}T${v.time}:00+08:00`);
+        const end = start + n * Number(v.minutes || 30) * 60000;
+        const sameDay = all('class_sessions')
+          .filter(
+            (x) =>
+              x.class_id === cid &&
+              !['cancelled', 'rescheduled'].includes(String(x.status)) &&
+              klDate(String(x.starts_at)) === v.date &&
+              all('attendance').some((a) => a.session_id === x.id),
+          )
+          .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
+        if (!sameDay.length) return null;
+        const clash = sameDay.find((x) => {
+          const s0 = Date.parse(String(x.starts_at));
+          const s1 = x.ends_at ? Date.parse(String(x.ends_at)) : s0 + 30 * 60000;
+          return s0 < end && s1 > start;
+        });
+        const target = clash || sameDay[sameDay.length - 1];
+        const times = sameDay.map((x) => timeLabel(String(x.starts_at))).join(', ');
+        return clash
+          ? {
+              message: `Sudah ada rekod kelas pada ${dateLabel(String(clash.starts_at))} (${timeLabel(String(clash.starts_at))}). Ubah rekod itu, atau tukar tarikh/jam kelas.`,
+              actionLabel: 'Ubah rekod itu',
+              action: () => go(`sessions/${clash.id}`),
+            }
+          : {
+              message: `Sudah ada rekod kelas pada ${dateLabel(String(target.starts_at))} (${times}). Ini kelas ke-${sameDay.length + 1} hari ini?`,
+              proceedLabel: `Ya, rekod kelas ke-${sameDay.length + 1}`,
+              actionLabel: 'Ubah rekod itu',
+              action: () => go(`sessions/${target.id}`),
+            };
+      },
+      // Blok 2–3 sesi: sesi seterusnya dicipta berturut-turut; kehadiran diisi sekali sahaja.
+      after: (payload) => {
+        const first = String(payload.start_time);
+        const step = Number(payload.minutes) * 60000;
+        void (async () => {
+          const starts = [first];
+          for (let k = 1; k < count; k++) {
+            const start = new Date(Date.parse(first) + k * step).toISOString();
+            if (!(await mutate('session', { ...payload, start_time: start }))) break;
+            starts.push(start);
+          }
+          setSessionBlock(starts.length > 1 ? { cid, starts } : null);
+          setPendingMove({ cid, start: first });
+        })();
+      },
     });
   };
   function sessionHistory(cid: unknown, currentId?: unknown, action?: React.ReactNode) {
@@ -2567,6 +2633,22 @@ export function App({
       </>
     );
   }
+  // Sesi lain dalam blok berturut-turut bagi sesi pertama yang sedang dibuka (jika ada).
+  const blockLinked = (current: Row) => {
+    if (!sessionBlock || current.class_id !== sessionBlock.cid) return undefined;
+    const ms = (x: unknown) => new Date(String(x)).getTime();
+    if (ms(current.starts_at) !== ms(sessionBlock.starts[0])) return undefined;
+    const ids = sessionBlock.starts.slice(1).flatMap((st) => {
+      const hit = all('class_sessions').find(
+        (x) =>
+          x.class_id === sessionBlock.cid &&
+          !['cancelled', 'rescheduled'].includes(String(x.status)) &&
+          ms(x.starts_at) === ms(st),
+      );
+      return hit ? [hit] : [];
+    });
+    return ids.length ? ids : undefined;
+  };
   // Alih sesi di tempatnya: kehadiran kekal dan halaman kekal pada sesi yang sama.
   const rescheduleSession = (session: Row, start: string) =>
     mutate('move_session', { sid: session.id, new_start: start });
@@ -5863,7 +5945,15 @@ export function App({
               month={month}
               notice={notice}
               onAdd={role === 'tutor' ? () => addSessionFor(currentSession.class_id) : undefined}
-              onSaved={role === 'tutor' ? () => go(tutorBack) : undefined}
+              linked={blockLinked(currentSession)}
+              onSaved={
+                role === 'tutor'
+                  ? () => {
+                      setSessionBlock(null);
+                      go(tutorBack);
+                    }
+                  : undefined
+              }
             />
           ) : (
             <Empty text="Sesi tidak ditemui atau akses tidak dibenarkan." />
@@ -5934,22 +6024,12 @@ export function App({
                 const values = Object.fromEntries(
                   new FormData(e.currentTarget).entries(),
                 ) as Record<string, string>;
-                try {
-                  const warning = dialog.check?.(values);
-                  if (warning) {
-                    setDialogWarning(warning);
-                    return;
-                  }
-                  const payload = dialog.transform
-                    ? dialog.transform(values)
-                    : Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''));
-                  const after = dialog.after;
-                  void mutate(dialog.operation, payload).then((ok) => {
-                    if (ok) after?.(payload);
-                  });
-                } catch (error) {
-                  setNotice(error instanceof Error ? error.message : 'Input tidak sah');
+                const warning = dialog.check?.(values);
+                if (warning) {
+                  setDialogWarning({ ...warning, values });
+                  return;
                 }
+                submitDialog(dialog, values);
               }}
             >
               {dialog.fields.map((f) =>
@@ -6036,9 +6116,23 @@ export function App({
                 <div role="alert" className="dialog-warning">
                   <p>{dialogWarning.message}</p>
                   <div className="button-row compact">
+                    {dialogWarning.proceedLabel && (
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={busy}
+                        onClick={() => {
+                          const values = dialogWarning.values;
+                          setDialogWarning(null);
+                          submitDialog(dialog, values);
+                        }}
+                      >
+                        {dialogWarning.proceedLabel}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="primary"
+                      className={dialogWarning.proceedLabel ? '' : 'primary'}
                       onClick={() => {
                         const go = dialogWarning.action;
                         setDialog(null);
@@ -6048,7 +6142,7 @@ export function App({
                       {dialogWarning.actionLabel}
                     </button>
                     <button type="button" onClick={() => setDialogWarning(null)}>
-                      Tukar tarikh
+                      Tukar tarikh/jam
                     </button>
                   </div>
                 </div>
@@ -6075,6 +6169,7 @@ function SessionEditor({
   notice,
   onAdd,
   onSaved,
+  linked,
 }: {
   session: Row;
   data: Dataset;
@@ -6087,6 +6182,8 @@ function SessionEditor({
   onAdd?: () => void;
   // Selepas rekod disimpan (murid terakhir), rekod ditutup — tutor kembali ke senarai murid.
   onSaved?: () => void;
+  // Sesi lain dalam blok berturut-turut: kehadiran dan penilaian yang sama disimpan untuk semuanya.
+  linked?: Row[];
 }) {
   const startIso = String(session.starts_at);
   const initialDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(
@@ -6275,11 +6372,12 @@ function SessionEditor({
   // Kuota sebulan: rekod baharu melebihi kuota hanya disimpan selepas disahkan sebagai sesi tambahan.
   const monthQuota = classQuota(data, session.class_id, classDate.slice(0, 7));
   const monthUsed = quotaUsed(data, session.class_id, classDate.slice(0, 7), session.id);
+  const blockSize = 1 + (linked?.length || 0);
   const overQuota =
     !session.extra &&
     countsTowardQuota(attendance) &&
     !data.attendance.some((a) => a.session_id === session.id && countsTowardQuota(a.status)) &&
-    monthUsed >= monthQuota;
+    monthUsed + blockSize > monthQuota;
   if (overQuota && !extraOk) valid = false;
   // Pilihan berbilang: medan jamak menyimpan semua pilihan; medan tunggal = pilihan pertama.
   const plural = {
@@ -6370,14 +6468,21 @@ function SessionEditor({
       if (other) sid = String(other.id);
       else if (!(await reschedule(session, newStart))) return;
     }
-    if (overQuota && extraOk && !(await mutate('extra_session', { sid }))) return;
-    const success = await mutate('assessment', {
-      sid,
+    // Blok berturut-turut (tarikh/jam tidak diubah): rekod yang sama untuk setiap sesi dalam blok.
+    const block = [sid, ...(dateChanged ? [] : (linked || []).map((x) => String(x.id)))];
+    for (let i = 0; i < block.length; i++)
+      if (overQuota && extraOk && monthUsed + i + 1 > monthQuota)
+        if (!(await mutate('extra_session', { sid: block[i] }))) return;
+    const record = {
       student: studentId,
       attendance_status: attendance,
       selected: assessmentInput(),
       publish,
-    });
+    };
+    const success = await mutate('assessment', { sid, ...record });
+    if (success)
+      for (const other of block.slice(1))
+        if (!(await mutate('assessment', { sid: other, ...record }))) return;
     if (success && sid !== String(session.id)) {
       if (onSaved) onSaved();
       else onOpen(sid);
@@ -6418,6 +6523,15 @@ function SessionEditor({
             </strong>{' '}
             Simpan hanya jika mahu membetulkan rekod ini. Untuk kelas lain, tekan{' '}
             <em>Rekod kelas baharu</em>.
+          </div>
+        )}
+        {linked && (
+          <div className="block-banner" role="note">
+            <strong>
+              {blockSize} sesi berturut-turut:{' '}
+              {[session, ...linked].map((x) => timeLabel(String(x.starts_at))).join(', ')}.
+            </strong>{' '}
+            Kehadiran dan penilaian yang sama disimpan untuk setiap sesi ini.
           </div>
         )}
         <div className="session-when">
@@ -6739,7 +6853,9 @@ function SessionEditor({
                     onChange={(e) => setExtraOk(e.target.checked)}
                   />
                   <span>
-                    Ini sesi ke-{monthUsed + 1}, melebihi {monthQuota} sesi sebulan. Rekod sebagai{' '}
+                    {blockSize > 1
+                      ? `Blok ${blockSize} sesi ini menjadikan ${monthUsed + blockSize} sesi, melebihi ${monthQuota} sesi sebulan. Sesi yang berlebihan direkod sebagai `
+                      : `Ini sesi ke-${monthUsed + 1}, melebihi ${monthQuota} sesi sebulan. Rekod sebagai `}
                     <strong>sesi tambahan</strong> (dikira dalam elaun dan yuran).
                   </span>
                 </label>

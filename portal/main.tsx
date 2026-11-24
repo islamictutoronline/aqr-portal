@@ -5,7 +5,7 @@ import { Dataset } from '../src/lib/core';
 import { demoData } from '../src/lib/demo';
 import { loadData } from '../src/lib/data';
 import { installTransport } from '../src/lib/transport';
-import { db, configured, getContext, staticTransport } from './client';
+import { db, configured, getContext, staticTransport, AccessPending } from './client';
 import '@fontsource/plus-jakarta-sans/400.css';
 import '@fontsource/plus-jakarta-sans/500.css';
 import '@fontsource/plus-jakarta-sans/600.css';
@@ -32,11 +32,23 @@ function Root() {
     [token, setToken] = useState(''),
     [sent, setSent] = useState(false),
     [busy, setBusy] = useState(false),
-    [trusted, setTrusted] = useState(localStorage.getItem('aqr.trusted') === 'yes'),
+    // Lalai: kekal log masuk (iPad/telefon sendiri); peranti kongsi boleh membuang tanda.
+    [trusted, setTrusted] = useState(localStorage.getItem('aqr.trusted') !== 'no'),
     [register, setRegister] = useState(false),
     [usePassword, setUsePassword] = useState(prefersPassword),
     [password, setPassword] = useState(''),
-    [signed, setSigned] = useState(false);
+    [signed, setSigned] = useState(false),
+    // Pemuatan akaun gagal kerana sambungan/sesi (bukan akaun baharu): tawarkan Cuba semula.
+    [failed, setFailed] = useState(''),
+    [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setSlow(true), 15000);
+    return () => {
+      clearTimeout(t);
+      setSlow(false);
+    };
+  }, [loading]);
   const pickMethod = (pw: boolean) => {
     setUsePassword(pw);
     setSent(false);
@@ -93,19 +105,37 @@ function Root() {
           return;
         }
         pendingUser = session.user.id;
-        const ctx = await getContext();
-        const data = await loadData(ctx);
+        // Sedang memuatkan akaun: papar skrin muat, bukan borang pendaftaran tutor.
+        if (!background) setLoading(true);
+        const attempt = async () => {
+          const ctx = await getContext();
+          return { ctx, data: await loadData(ctx) };
+        };
+        let got: Loaded;
+        try {
+          got = await attempt();
+        } catch (e) {
+          // Cuba sekali lagi selepas memperbaharui token (iPad/telefon: token lama atau talian goyah).
+          if (e instanceof AccessPending) throw e;
+          await db.auth.refreshSession().catch(() => undefined);
+          got = await attempt();
+        }
         if (alive && gen === generation) {
           lastLoad = Date.now();
           lastUser = session.user.id;
-          setLoaded({ ctx, data });
+          setLoaded(got);
+          setFailed('');
           setMessage('');
         }
       } catch (e) {
         // Muat semula latar yang gagal (contoh: rangkaian terputus seketika) mengekalkan data sedia ada.
         if (alive && !background && gen === generation) {
           setLoaded(null);
-          setMessage(e instanceof Error ? e.message : 'Akses gagal');
+          const text = e instanceof Error ? e.message : 'Akses gagal';
+          if (e instanceof AccessPending) {
+            setFailed('');
+            setMessage(text);
+          } else setFailed(text);
         }
       } finally {
         if (alive) setLoading(false);
@@ -120,6 +150,7 @@ function Root() {
         lastUser = '';
         setLoaded(null);
         setSigned(false);
+        setFailed('');
       } else if (
         event === 'SIGNED_IN' &&
         session?.user.id !== lastUser &&
@@ -193,7 +224,19 @@ function Root() {
   if (loading)
     return (
       <main className="auth-shell">
-        <p>Memeriksa sesi selamat…</p>
+        <div className="auth-loading" role="status">
+          <p>{signed ? 'Memuatkan akaun dan data akademi…' : 'Memeriksa sesi selamat…'}</p>
+          {slow && (
+            <>
+              <p className="auth-slow">
+                Sambungan agak perlahan. Tunggu sebentar lagi, atau cuba semula.
+              </p>
+              <button className="primary" onClick={() => location.reload()}>
+                Cuba semula
+              </button>
+            </>
+          )}
+        </div>
       </main>
     );
   if (loaded)
@@ -238,6 +281,21 @@ function Root() {
             <p role="status">
               Portal belum dikonfigurasi. Pentadbir perlu menyediakan sambungan Supabase.
             </p>
+          ) : signed && failed ? (
+            <div className="auth-retry" role="alert">
+              <h2>Akaun belum dapat dimuatkan</h2>
+              <p>
+                Biasanya kerana sambungan internet perlahan atau sesi log masuk lama telah tamat.
+                Anda tidak perlu mendaftar semula.
+              </p>
+              <p className="auth-slow">{failed}</p>
+              <button className="primary" onClick={() => location.reload()}>
+                Cuba semula
+              </button>
+              <button type="button" onClick={() => void db.auth.signOut({ scope: 'local' })}>
+                Log keluar dan log masuk semula
+              </button>
+            </div>
           ) : signed ? (
             <form
               onSubmit={async (e) => {
